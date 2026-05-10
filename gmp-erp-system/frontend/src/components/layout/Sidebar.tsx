@@ -12,10 +12,12 @@ const iconBySection = {
 }
 
 interface SidebarProps {
+  activeRoute: string
+  onRouteChange: (route: string) => void
   user: CurrentUser
 }
 
-export function Sidebar({ user }: SidebarProps) {
+export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
   const navItems = getVisibleNavItems(user)
 
   return (
@@ -31,14 +33,15 @@ export function Sidebar({ user }: SidebarProps) {
       </div>
 
       <nav className="space-y-1">
-        {navItems.map((item, index) => {
+        {navItems.map((item) => {
           const Icon = iconBySection[item.section as keyof typeof iconBySection] ?? ClipboardList
           return (
             <button
               className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm ${
-                index === 0 ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-900'
+                activeRoute === item.route ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-900'
               }`}
               key={item.label}
+              onClick={() => onRouteChange(item.route)}
               type="button"
             >
               <Icon className="h-4 w-4" />

@@ -92,6 +92,7 @@ Potential sections:
 - Lots / Series;
 - Inventory Balances;
 - Movements;
+- Finished Goods Traceability;
 - QC;
 - QA;
 - Production;
@@ -105,6 +106,7 @@ Potential sections:
 Example visibility:
 
 - Warehouse users: Warehouse dashboard, Receipt Documents, Lots / Series, Balances, Movements, Adjustments, Rejected / Expired, Issue to Production.
+- FG warehouse users: finished goods lots, FG stock, shipment documents, shipment history, customer/recipient traceability, returns.
 - QC users: QC Dashboard, Sampling Tasks, QC Reports, OOS/OOT, Specifications, QC history.
 - QA users: QA Dashboard, QA Decisions, Deviations, Release Review, Audit Trail, effective documents.
 - Production users: Production Orders, Material Issue, BMR / ZPS Execution, Finished Goods Receipt.
@@ -157,6 +159,52 @@ Every lot or product series must support:
 - warehouse movements;
 - audit events;
 - signature events.
+
+## Finished Goods Traceability
+
+The FG warehouse must provide full downstream traceability for every finished product series.
+
+Core workflow:
+
+1. Finished goods receipt creates or increases an FG lot.
+2. QA release makes the FG lot eligible for sale or shipment.
+3. Shipment document records recipient/customer, shipment date, transport details, responsible employee, document number, and shipped quantities.
+4. Each shipment line links one FG lot or series to a recipient.
+5. Return or recall records link back to the original shipment line.
+
+Required data:
+
+- FG product code and name;
+- internal FG series;
+- manufacturing date;
+- expiry date;
+- QA release status;
+- stock quantity before and after shipment;
+- shipment document number;
+- shipment date;
+- recipient/customer/distributor;
+- destination;
+- shipped quantity and unit;
+- transport or vehicle reference;
+- responsible warehouse employee;
+- approved by, if configured;
+- return quantity and reason, if applicable;
+- recall flag, if applicable;
+- audit events and signature events.
+
+Required filters:
+
+- product;
+- internal series;
+- expiry date range;
+- shipment date range;
+- recipient/customer;
+- shipment document number;
+- QA status;
+- returned or recalled;
+- "show all recipients for this series".
+
+The system must answer quickly: which recipients received a given finished goods series, when, in what quantity, and under which shipment document.
 
 ## Statuses
 
@@ -286,6 +334,8 @@ Movement types:
 - reject;
 - destruction;
 - finished_goods_receipt.
+
+Finished goods shipment and returns are also represented as inventory movements, but the customer-facing traceability comes from shipment documents and shipment lines, not from movements alone.
 
 Rules:
 
@@ -432,3 +482,5 @@ Phase 1 implements:
 - first warehouse dashboard.
 
 QC, QA, production, BMR/ZPS, document control, reports, QR/barcodes, and mobile warehouse are designed now but implemented in later phases.
+
+Finished goods shipment traceability is designed now and must be implemented as a dedicated module after the first warehouse foundation screens. It should not be reduced to a generic stock movement table because recipient-level traceability is required.

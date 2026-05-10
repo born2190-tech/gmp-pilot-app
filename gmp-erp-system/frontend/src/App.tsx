@@ -2,8 +2,12 @@ import { useEffect, useState } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { LoginPage } from './features/auth/LoginPage'
 import { WarehouseDashboard } from './features/dashboard/WarehouseDashboard'
+import { LotsBoardPage } from './features/inventory/LotsBoardPage'
+import { MovementsPage } from './features/inventory/MovementsPage'
+import { ReceiptDocumentPage } from './features/inventory/ReceiptDocumentPage'
 import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
 import { login, logout, me } from './lib/api'
+import { getVisibleNavItems } from './lib/permissions'
 import type { CurrentUser, LoginRequest } from './types/auth'
 
 export function App() {
@@ -11,6 +15,7 @@ export function App() {
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [activeRoute, setActiveRoute] = useState('warehouse-dashboard')
 
   useEffect(() => {
     let ignore = false
@@ -68,9 +73,22 @@ export function App() {
     return <LoginPage error={error} isLoading={isLoading} onLogin={handleLogin} />
   }
 
-  return (
-    <AppShell onLogout={handleLogout} user={user}>
+  const visibleNav = getVisibleNavItems(user)
+  const route = visibleNav.some((item) => item.route === activeRoute) ? activeRoute : visibleNav[0]?.route
+  const content =
+    route === 'lots' ? (
+      <LotsBoardPage token={token} />
+    ) : route === 'movements' ? (
+      <MovementsPage token={token} />
+    ) : route === 'receipt-documents' ? (
+      <ReceiptDocumentPage token={token} username={user.username} />
+    ) : (
       <WarehouseDashboard user={user} />
+    )
+
+  return (
+    <AppShell activeRoute={route ?? 'warehouse-dashboard'} onLogout={handleLogout} onRouteChange={setActiveRoute} user={user}>
+      {content}
     </AppShell>
   )
 }

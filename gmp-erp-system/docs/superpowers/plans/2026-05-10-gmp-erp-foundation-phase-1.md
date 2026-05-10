@@ -65,6 +65,13 @@ Create frontend files:
 - `frontend/src/features/audit/AuditTimeline.tsx`: audit display.
 - `frontend/src/features/signature/ESignatureModal.tsx`: signature modal.
 
+Future finished goods traceability files:
+
+- `backend/app/models/shipments.py`: shipment documents, shipment lines, recipients/customers, returns.
+- `backend/app/api/routes/shipments.py`: finished goods shipment and traceability endpoints.
+- `frontend/src/features/fg/FGShipmentsPage.tsx`: shipment register.
+- `frontend/src/features/fg/FGTraceabilityPage.tsx`: "show all recipients for this series" view.
+
 ---
 
 ### Task 1: Scaffold New Project
@@ -735,6 +742,26 @@ npm run build
 ```
 
 Expected: TypeScript and Vite build pass.
+
+---
+
+### Task 8: Finished Goods Traceability Design Checkpoint
+
+**Files:**
+- Modify: `docs/superpowers/specs/2026-05-10-gmp-erp-foundation-design.md`
+- Modify: `docs/superpowers/plans/2026-05-10-gmp-erp-foundation-phase-1.md`
+
+- [ ] **Step 1: Preserve FG traceability as a dedicated module**
+
+Ensure the product design explicitly requires shipment documents and shipment lines for FG warehouse traceability.
+
+- [ ] **Step 2: Capture required filters**
+
+The future `FGTraceabilityPage` must support filters by product, internal series, expiry range, shipment date range, recipient/customer, document number, QA status, returned/recalled state, and a direct "show all recipients for this series" workflow.
+
+- [ ] **Step 3: Keep Phase 1 focused**
+
+Do not implement FG shipment documents in Phase 1. Phase 1 builds the generic platform foundation and table infrastructure needed by that module.
 
 ---
 
