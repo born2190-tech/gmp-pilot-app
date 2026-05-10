@@ -10,8 +10,10 @@ import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
 import { login, logout, me } from './lib/api'
 import { getVisibleNavItems } from './lib/permissions'
 import type { CurrentUser, LoginRequest } from './types/auth'
+import { useI18n } from './i18n/I18nProvider'
 
 export function App() {
+  const { t } = useI18n()
   const [token, setToken] = useState<string | null>(getStoredToken)
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -51,7 +53,7 @@ export function App() {
       storeToken(response.access_token)
       setToken(response.access_token)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : t('auth.loginFailed'))
     } finally {
       setIsLoading(false)
     }

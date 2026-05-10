@@ -1,9 +1,11 @@
 import { Boxes, ClipboardList, Factory, FileClock, FlaskConical, ShieldCheck, Warehouse } from 'lucide-react'
 import type { CurrentUser } from '../../types/auth'
 import { getVisibleNavItems } from '../../lib/permissions'
+import { useI18n } from '../../i18n/I18nProvider'
 
 const iconBySection = {
   warehouse: Warehouse,
+  reference: ClipboardList,
   qc: FlaskConical,
   qa: ShieldCheck,
   production: Factory,
@@ -19,6 +21,7 @@ interface SidebarProps {
 
 export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
   const navItems = getVisibleNavItems(user)
+  const { t } = useI18n()
 
   return (
     <aside className="min-h-screen w-72 border-r border-slate-800 bg-slate-950 px-4 py-5 text-slate-100">
@@ -28,7 +31,7 @@ export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
         </div>
         <div>
           <p className="text-xs uppercase text-slate-400">GMP ERP</p>
-          <p className="text-sm font-semibold">Operations Console</p>
+          <p className="text-sm font-semibold">{t('app.console')}</p>
         </div>
       </div>
 
@@ -40,12 +43,12 @@ export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
               className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm ${
                 activeRoute === item.route ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-900'
               }`}
-              key={item.label}
+              key={item.route}
               onClick={() => onRouteChange(item.route)}
               type="button"
             >
               <Icon className="h-4 w-4" />
-              {item.label}
+              {t(item.labelKey)}
             </button>
           )
         })}

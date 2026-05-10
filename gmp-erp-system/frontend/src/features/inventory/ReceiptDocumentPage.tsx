@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { createReceipt, listLocations, listManufacturers, listMaterials, listSuppliers, listWarehouses, postReceipt } from '../../lib/api'
 import type { LocationItem, ManufacturerItem, MaterialItem, ReceiptCreate, SupplierItem, WarehouseItem } from '../../types/inventory'
 import { Button } from '../../components/ui/button'
+import { useI18n } from '../../i18n/I18nProvider'
 
 interface ReceiptDocumentPageProps {
   token: string
@@ -29,6 +30,7 @@ interface ReceiptForm {
 }
 
 export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProps) {
+  const { t } = useI18n()
   const [warehouses, setWarehouses] = useState<WarehouseItem[]>([])
   const [locations, setLocations] = useState<LocationItem[]>([])
   const [suppliers, setSuppliers] = useState<SupplierItem[]>([])
@@ -45,7 +47,7 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
       production_year: new Date().getFullYear(),
       quantity: 0,
       unit: 'kg',
-      reason: 'Supplier delivery accepted',
+      reason: t('receipt.defaultReason'),
     },
   })
 
@@ -66,7 +68,7 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
         setManufacturers(manufacturerResponse.manufacturers)
         setMaterials(materialResponse.materials)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load master data')
+        setError(err instanceof Error ? err.message : t('receipt.loadFailed'))
       } finally {
         setIsLoading(false)
       }
@@ -106,12 +108,12 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
       const posted = await postReceipt(token, receipt.id, {
         username,
         password: values.signature_password,
-        meaning: 'Post receipt',
+        meaning: t('receipt.postMeaning'),
         reason: values.reason,
       })
-      setSuccess(`Receipt ${posted.document_no} posted. Lots created: ${posted.lots_created}.`)
+      setSuccess(t('receipt.posted', { documentNo: posted.document_no, count: posted.lots_created }))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Receipt posting failed')
+      setError(err instanceof Error ? err.message : t('receipt.postFailed'))
     } finally {
       setIsLoading(false)
     }
@@ -120,61 +122,61 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
   return (
     <section>
       <div className="mb-4">
-        <p className="text-xs uppercase text-slate-500">Warehouse document</p>
-        <h1 className="text-2xl font-semibold text-slate-950">Receipt Document</h1>
+        <p className="text-xs uppercase text-slate-500">{t('receipt.document')}</p>
+        <h1 className="text-2xl font-semibold text-slate-950">{t('receipt.title')}</h1>
       </div>
 
       {!masterDataReady && (
         <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Master data is incomplete. Add suppliers, manufacturers, and materials before operational receipt posting.
+          {t('receipt.masterDataIncomplete')}
         </p>
       )}
       {error && <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {success && <p className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p>}
 
       <form className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 xl:grid-cols-3" onSubmit={form.handleSubmit(submit)}>
-        <Field label="Document no"><input {...form.register('document_no', { required: true })} className="input" /></Field>
-        <Field label="Received date"><input type="date" {...form.register('received_date', { required: true })} className="input" /></Field>
-        <Field label="Warehouse">
+        <Field label={t('receipt.documentNo')}><input {...form.register('document_no', { required: true })} className="input" /></Field>
+        <Field label={t('receipt.receivedDate')}><input type="date" {...form.register('received_date', { required: true })} className="input" /></Field>
+        <Field label={t('receipt.warehouse')}>
           <select {...form.register('warehouse_id', { required: true })} className="input">
-            <option value="">Select warehouse</option>
+            <option value="">{t('receipt.selectWarehouse')}</option>
             {warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </Field>
-        <Field label="Supplier">
+        <Field label={t('receipt.supplier')}>
           <select {...form.register('supplier_id', { required: true })} className="input">
-            <option value="">Select supplier</option>
+            <option value="">{t('receipt.selectSupplier')}</option>
             {suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </Field>
-        <Field label="Manufacturer">
+        <Field label={t('receipt.manufacturer')}>
           <select {...form.register('manufacturer_id', { required: true })} className="input">
-            <option value="">Select manufacturer</option>
+            <option value="">{t('receipt.selectManufacturer')}</option>
             {manufacturers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </Field>
-        <Field label="Material">
+        <Field label={t('receipt.material')}>
           <select {...form.register('material_id', { required: true })} className="input">
-            <option value="">Select material</option>
+            <option value="">{t('receipt.selectMaterial')}</option>
             {materials.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
           </select>
         </Field>
-        <Field label="Supplier lot"><input {...form.register('supplier_lot', { required: true })} className="input" /></Field>
-        <Field label="Production date"><input type="date" {...form.register('production_date')} className="input" /></Field>
-        <Field label="Production year"><input type="number" {...form.register('production_year', { required: true, valueAsNumber: true })} className="input" /></Field>
-        <Field label="Expiry date"><input type="date" {...form.register('expiry_date', { required: true })} className="input" /></Field>
-        <Field label="Quantity"><input step="0.001" type="number" {...form.register('quantity', { required: true, valueAsNumber: true })} className="input" /></Field>
-        <Field label="Unit"><input {...form.register('unit', { required: true })} className="input" /></Field>
-        <Field label="Location">
+        <Field label={t('receipt.supplierLot')}><input {...form.register('supplier_lot', { required: true })} className="input" /></Field>
+        <Field label={t('receipt.productionDate')}><input type="date" {...form.register('production_date')} className="input" /></Field>
+        <Field label={t('receipt.productionYear')}><input type="number" {...form.register('production_year', { required: true, valueAsNumber: true })} className="input" /></Field>
+        <Field label={t('receipt.expiryDate')}><input type="date" {...form.register('expiry_date', { required: true })} className="input" /></Field>
+        <Field label={t('receipt.quantity')}><input step="0.001" type="number" {...form.register('quantity', { required: true, valueAsNumber: true })} className="input" /></Field>
+        <Field label={t('common.unit')}><input {...form.register('unit', { required: true })} className="input" /></Field>
+        <Field label={t('receipt.location')}>
           <select {...form.register('location_id', { required: true })} className="input">
-            <option value="">Select location</option>
+            <option value="">{t('receipt.selectLocation')}</option>
             {allowedLocations.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
           </select>
         </Field>
-        <Field label="Signature password"><input type="password" {...form.register('signature_password', { required: true })} className="input" /></Field>
-        <Field label="Reason"><input {...form.register('reason', { required: true })} className="input" /></Field>
+        <Field label={t('receipt.signaturePassword')}><input type="password" {...form.register('signature_password', { required: true })} className="input" /></Field>
+        <Field label={t('common.reason')}><input {...form.register('reason', { required: true })} className="input" /></Field>
         <div className="flex items-end">
-          <Button disabled={isLoading || !masterDataReady} type="submit">Post receipt</Button>
+          <Button disabled={isLoading || !masterDataReady} type="submit">{t('receipt.post')}</Button>
         </div>
       </form>
     </section>

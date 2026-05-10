@@ -1,24 +1,25 @@
 import type { CurrentUser } from '../types/auth'
+import type { TranslationKey } from '../i18n/translations'
 
 export interface NavItem {
-  label: string
+  labelKey: TranslationKey
   section: string
   permission: string
   route: string
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Warehouse Dashboard', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'warehouse-dashboard' },
-  { label: 'Receipt Documents', section: 'warehouse', permission: 'CREATE_RECEIPT', route: 'receipt-documents' },
-  { label: 'Lots / Series', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'lots' },
-  { label: 'Inventory Movements', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'movements' },
-  { label: 'Master Data', section: 'reference', permission: 'VIEW_MASTER_DATA', route: 'master-data' },
-  { label: 'QC Tasks', section: 'qc', permission: 'VIEW_QC', route: 'qc-tasks' },
-  { label: 'QA Decisions', section: 'qa', permission: 'VIEW_QA', route: 'qa-decisions' },
-  { label: 'Production Orders', section: 'production', permission: 'VIEW_PRODUCTION', route: 'production-orders' },
-  { label: 'BMR / ZPS', section: 'production', permission: 'EXECUTE_BMR', route: 'bmr' },
-  { label: 'Audit Trail', section: 'quality', permission: 'VIEW_AUDIT', route: 'audit' },
-  { label: 'Administration', section: 'admin', permission: 'MANAGE_USERS', route: 'admin' },
+  { labelKey: 'nav.warehouseDashboard', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'warehouse-dashboard' },
+  { labelKey: 'nav.receiptDocuments', section: 'warehouse', permission: 'CREATE_RECEIPT', route: 'receipt-documents' },
+  { labelKey: 'nav.lots', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'lots' },
+  { labelKey: 'nav.movements', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'movements' },
+  { labelKey: 'nav.masterData', section: 'reference', permission: 'VIEW_MASTER_DATA', route: 'master-data' },
+  { labelKey: 'nav.qcTasks', section: 'qc', permission: 'VIEW_QC', route: 'qc-tasks' },
+  { labelKey: 'nav.qaDecisions', section: 'qa', permission: 'VIEW_QA', route: 'qa-decisions' },
+  { labelKey: 'nav.productionOrders', section: 'production', permission: 'VIEW_PRODUCTION', route: 'production-orders' },
+  { labelKey: 'nav.bmr', section: 'production', permission: 'EXECUTE_BMR', route: 'bmr' },
+  { labelKey: 'nav.audit', section: 'quality', permission: 'VIEW_AUDIT', route: 'audit' },
+  { labelKey: 'nav.admin', section: 'admin', permission: 'MANAGE_USERS', route: 'admin' },
 ]
 
 export function getVisibleNavItems(user: CurrentUser): NavItem[] {

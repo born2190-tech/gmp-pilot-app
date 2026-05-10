@@ -8,6 +8,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { useMemo, useState } from 'react'
+import { useI18n } from '../../i18n/I18nProvider'
 
 interface DataTableProps<T> {
   columns: ColumnDef<T, unknown>[]
@@ -19,6 +20,7 @@ interface DataTableProps<T> {
 
 export function DataTable<T>({ columns, data, emptyLabel, globalFilter = '', isLoading = false }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
+  const { t } = useI18n()
   const stableData = useMemo(() => data, [data])
 
   const table = useReactTable({
@@ -65,7 +67,7 @@ export function DataTable<T>({ columns, data, emptyLabel, globalFilter = '', isL
         </table>
       </div>
       {!isLoading && table.getRowModel().rows.length === 0 && <p className="px-4 py-10 text-center text-sm text-slate-500">{emptyLabel}</p>}
-      {isLoading && <p className="px-4 py-10 text-center text-sm text-slate-500">Loading records...</p>}
+      {isLoading && <p className="px-4 py-10 text-center text-sm text-slate-500">{t('common.loadingRecords')}</p>}
     </div>
   )
 }
