@@ -416,3 +416,113 @@ UX описывает autosave для QC/приёмки каждые 10 секу
 - audit completeness;
 - целостности складских количеств;
 - совместимости данных (SQLite dev / PostgreSQL target).
+
+---
+
+## Product strategy v1.0 — универсальная система для любого завода
+
+Цель: строить не «проект под один завод», а продуктовый GMP-core, который внедряется у разных площадок через конфигурацию и шаблоны, без форка кода.
+
+### 1) Product model: Core / Config / Extension
+
+#### 1.1 Непеременное Product Core (один код для всех)
+
+- audit trail и e-sign framework;
+- RBAC + SoD engine;
+- workflow/FSM engine;
+- master data framework (materials, lots, locations, equipment, users, suppliers);
+- validation & compliance engine (rules, checks, deviations/CAPA hooks);
+- integration layer (API/webhooks/events).
+
+Требование: core не адаптируется под клиента через code patch, только через configuration contract.
+
+#### 1.2 Заводская конфигурация (Plant Profile)
+
+Каждый завод описывается набором параметров:
+
+- структура складов/зон/локаций;
+- номенклатурные типы, единицы, справочники;
+- матрица ролей/допусков и e-sign policies;
+- FSM-переходы и условия блокировок;
+- FEFO/FIFO policy по складам/материалам;
+- правила уведомлений и пороги;
+- форматы документов/номеров серий/печатных форм.
+
+Требование: весь Plant Profile хранится как versioned config с аудитом изменений.
+
+#### 1.3 Расширения (Extension Pack)
+
+Для отраслевых/площадочных отличий:
+
+- дополнительные шаги workflow;
+- локальные интеграции (ERP/WMS/LIMS);
+- локальные отчёты и печатные формы;
+- barcode/QR специфические сценарии.
+
+Требование: расширения подключаются как модульные пакеты, не ломая product core.
+
+### 2) Быстрое внедрение для нового завода (Fast-track onboarding)
+
+Стандартный путь подключения клиента:
+
+1. Intake и импорт SOP-реестра (document register + process map);
+2. Auto-mapping SOP -> capability matrix (core/config/extension);
+3. Заполнение Plant Profile шаблона;
+4. Генерация baseline workflows/forms/roles;
+5. UAT на реальных сценариях завода;
+6. Go-live с controlled hypercare.
+
+Целевой SLA адаптации MVP для новой площадки: 2–4 недели при наличии полного SOP-пакета.
+
+### 3) Что должно быть параметризуемым в v1 продукта
+
+Обязательная параметризация без кода:
+
+- справочники материалов/серий/локаций;
+- маршруты статусов lot/batch;
+- обязательные поля форм по операциям;
+- e-sign точки и уровни подписи;
+- правила QA блокировок (deviation, training, equipment status);
+- шаблоны уведомлений и каналы доставки;
+- шаблоны отчётов/экспорта (Excel/PDF);
+- API mapping profiles для ERP.
+
+### 4) Границы кастомизации (чтобы не уйти в хаос)
+
+Разрешено конфигурировать:
+
+- роли, правила, формы, справочники, отчёты, интеграционные маппинги.
+
+Запрещено изменять per-client:
+
+- audit model;
+- e-sign semantics;
+- базовые GMP-контроли целостности данных;
+- ядро жизненного цикла записей (append-only/correction policy).
+
+### 5) Product KPI для масштаба
+
+Метрики «универсальности» продукта:
+
+- % требований нового завода, закрываемых конфигом (target >= 80%);
+- время до pilot go-live (target <= 4 недели);
+- доля релизов без client-specific forks (target 100%);
+- количество повторно используемых Extension Pack между заводами;
+- число P0 compliance-отклонений на go-live (target 0).
+
+### 6) Изменение текущего roadmap под продуктовый подход
+
+Дополнение к существующим фазам:
+
+- в Phase 0-1 добавить Platform tasks: configuration schema, plant profile storage, rules engine hardening;
+- в Phase 2-3 добавить Reusable template packs: warehouse template, production template, QC/QA template;
+- в Phase 4-5 добавить ISV readiness: tenant isolation, versioned rollout, integration marketplace approach.
+
+### 7) Definition of Done для универсального релиза
+
+Релиз считается product-ready только если:
+
+- новая площадка подключается без форка кода;
+- SOP-to-system mapping выполняется по стандартному шаблону;
+- все GMP-критичные контроли остаются неизменными между клиентами;
+- клиентские отличия реализуются через Plant Profile и Extension Pack.
