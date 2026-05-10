@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.db import SessionLocal, get_database_url, get_sqlite_db_path
-from app.models import Deviation, InventoryMovement, Lot, Material, SamplingTask
+from app.models import AuditEvent, AuthSession, Deviation, InventoryMovement, Lot, Material, SamplingTask, User
 
 app = FastAPI(title="GMP Pilot App", version="0.1.0")
 
@@ -594,6 +594,13 @@ def revoke_expired_sessions(db: sqlite3.Connection) -> None:
     db.execute("UPDATE auth_sessions SET revoked = 1 WHERE revoked = 0 AND expires_at < ?", (now,))
 
 
+def revoke_expired_sessions_orm(db_session: Any) -> None:
+    now = now_utc()
+    db_session.query(AuthSession).filter(AuthSession.revoked == False, AuthSession.expires_at < now).update(
+        {AuthSession.revoked: True}, synchronize_session=False
+    )
+
+
 def get_current_user(authorization: Optional[str] = Header(default=None, alias="Authorization")) -> AuthUser:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization Bearer token is required")
@@ -602,29 +609,32 @@ def get_current_user(authorization: Optional[str] = Header(default=None, alias="
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bearer token")
 
-    db = get_db()
+    db_session = SessionLocal()
     try:
-        revoke_expired_sessions(db)
-        session = db.execute(
-            """
-            SELECT s.id, s.expires_at, s.workstation_id, u.username, u.role, u.warehouse_scope
-            FROM auth_sessions s
-            JOIN users u ON u.id = s.user_id
-            WHERE s.token = ? AND s.revoked = 0
-            LIMIT 1
-            """,
-            (token,),
-        ).fetchone()
+        revoke_expired_sessions_orm(db_session)
+        session = (
+            db_session.query(
+                AuthSession.id,
+                AuthSession.expires_at,
+                AuthSession.workstation_id,
+                User.username,
+                User.role,
+                User.warehouse_scope,
+            )
+            .join(User, User.id == AuthSession.user_id)
+            .filter(AuthSession.token == token, AuthSession.revoked == False)
+            .first()
+        )
         if not session:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
         return AuthUser(
-            username=session["username"],
-            role=session["role"],
-            warehouse_scope=session["warehouse_scope"],
-            workstation_id=session["workstation_id"],
+            username=session.username,
+            role=session.role,
+            warehouse_scope=session.warehouse_scope,
+            workstation_id=session.workstation_id,
         )
     finally:
-        db.close()
+        db_session.close()
 
 
 def require_permission(user: AuthUser, action: str) -> None:
@@ -2009,40 +2019,50 @@ def complete_ebr_step(
 
 
 @app.get("/audit-events")
-def list_audit_events(limit: int = 100, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
+def list_audit_events(
+    limit: int = 100,
+    user: AuthUser = Depends(get_current_user),
+    db_session: Any = Depends(get_session),
+) -> dict[str, Any]:
     require_permission(user, "READ_AUDIT_EVENTS")
     capped_limit = min(max(limit, 1), 500)
-    db = get_db()
-    try:
-        rows = db.execute(
-            """
-            SELECT id, timestamp_utc, user_id, role_at_time, object_type, object_id, action_type, old_value, new_value, reason, source, correlation_id
-            FROM audit_events
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (capped_limit,),
-        ).fetchall()
+    rows = (
+        db_session.query(
+            AuditEvent.id,
+            AuditEvent.timestamp_utc,
+            AuditEvent.user_id,
+            AuditEvent.role_at_time,
+            AuditEvent.object_type,
+            AuditEvent.object_id,
+            AuditEvent.action_type,
+            AuditEvent.old_value,
+            AuditEvent.new_value,
+            AuditEvent.reason,
+            AuditEvent.source,
+            AuditEvent.correlation_id,
+        )
+        .order_by(AuditEvent.id.desc())
+        .limit(capped_limit)
+        .all()
+    )
 
-        events: list[dict[str, Any]] = []
-        for row in rows:
-            events.append(
-                {
-                    "id": row["id"],
-                    "timestamp_utc": row["timestamp_utc"],
-                    "user_id": row["user_id"],
-                    "role_at_time": row["role_at_time"],
-                    "object_type": row["object_type"],
-                    "object_id": row["object_id"],
-                    "action_type": row["action_type"],
-                    "old_value": json.loads(row["old_value"]) if row["old_value"] else None,
-                    "new_value": json.loads(row["new_value"]) if row["new_value"] else None,
-                    "reason": row["reason"],
-                    "source": row["source"],
-                    "correlation_id": row["correlation_id"],
-                }
-            )
+    events: list[dict[str, Any]] = []
+    for row in rows:
+        events.append(
+            {
+                "id": row.id,
+                "timestamp_utc": row.timestamp_utc,
+                "user_id": row.user_id,
+                "role_at_time": row.role_at_time,
+                "object_type": row.object_type,
+                "object_id": row.object_id,
+                "action_type": row.action_type,
+                "old_value": json.loads(row.old_value) if row.old_value else None,
+                "new_value": json.loads(row.new_value) if row.new_value else None,
+                "reason": row.reason,
+                "source": row.source,
+                "correlation_id": row.correlation_id,
+            }
+        )
 
-        return {"count": len(events), "events": events}
-    finally:
-        db.close()
+    return {"count": len(events), "events": events}
