@@ -72,6 +72,24 @@ class LotsResponse(BaseModel):
     lots: list[LotItem]
 
 
+class LotOperationResponse(LotItem):
+    pass
+
+
+class TransferLotRequest(BaseModel):
+    to_location_id: UUID
+    reason: str = Field(min_length=1)
+
+
+class AdjustLotRequest(SignatureRequest):
+    new_quantity: float = Field(ge=0)
+
+
+class IssueProductionRequest(SignatureRequest):
+    quantity: float = Field(gt=0)
+    production_order_no: str = Field(min_length=1, max_length=128)
+
+
 class MovementItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

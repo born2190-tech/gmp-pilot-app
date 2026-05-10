@@ -143,3 +143,118 @@ def test_warehouse_scope_blocks_receipt_for_other_warehouse() -> None:
 
     assert response.status_code == 403
     assert "Warehouse scope" in response.json()["detail"]
+
+
+def create_posted_lot(client: TestClient) -> tuple[str, dict[str, str], str]:
+    ref = create_reference_item()
+    token = login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    draft = client.post("/api/inventory/receipts", headers=headers, json=receipt_payload(ref))
+    assert draft.status_code == 200
+    posted = client.post(
+        f"/api/inventory/receipts/{draft.json()['id']}/post",
+        headers=headers,
+        json={
+            "username": "warehouse_substance",
+            "password": "whs123",
+            "meaning": "Post receipt",
+            "reason": "Supplier delivery accepted",
+        },
+    )
+    assert posted.status_code == 200
+    lots = client.get("/api/inventory/lots", headers=headers)
+    assert lots.status_code == 200
+    return lots.json()["lots"][0]["id"], ref, token
+
+
+def test_transfer_and_adjustment_create_movements_and_update_lot() -> None:
+    reset_inventory_data()
+    client = TestClient(create_app())
+    lot_id, ref, token = create_posted_lot(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    db = SessionLocal()
+    try:
+        warehouse = db.get(Warehouse, ref["warehouse_id"])
+        released_location = db.query(Location).filter(Location.warehouse_id == warehouse.id, Location.code == "RELEASED").one()
+        released_location_id = str(released_location.id)
+    finally:
+        db.close()
+
+    transfer = client.post(
+        f"/api/inventory/lots/{lot_id}/transfer",
+        headers=headers,
+        json={
+            "to_location_id": released_location_id,
+            "reason": "Move to released zone after physical relocation",
+        },
+    )
+    assert transfer.status_code == 200
+    assert transfer.json()["location_code"] == "RELEASED"
+
+    adjustment = client.post(
+        f"/api/inventory/lots/{lot_id}/adjust",
+        headers=headers,
+        json={
+            "new_quantity": 120.5,
+            "username": "warehouse_substance",
+            "password": "whs123",
+            "meaning": "Adjust stock",
+            "reason": "Inventory count correction",
+        },
+    )
+    assert adjustment.status_code == 200
+    assert adjustment.json()["quantity"] == 120.5
+
+    movements = client.get("/api/inventory/movements", headers=headers)
+    movement_types = [item["movement_type"] for item in movements.json()["movements"]]
+    assert "TRANSFER" in movement_types
+    assert "ADJUSTMENT" in movement_types
+
+
+def test_issue_to_production_requires_released_lot_and_reduces_quantity() -> None:
+    reset_inventory_data()
+    client = TestClient(create_app())
+    lot_id, _, token = create_posted_lot(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    blocked = client.post(
+        f"/api/inventory/lots/{lot_id}/issue-production",
+        headers=headers,
+        json={
+            "quantity": 10,
+            "production_order_no": "PO-2026-001",
+            "username": "warehouse_substance",
+            "password": "whs123",
+            "meaning": "Issue to production",
+            "reason": "Manufacturing request",
+        },
+    )
+    assert blocked.status_code == 409
+
+    db = SessionLocal()
+    try:
+        lot = db.get(Lot, lot_id)
+        lot.quality_status = "released"
+        db.commit()
+    finally:
+        db.close()
+
+    issued = client.post(
+        f"/api/inventory/lots/{lot_id}/issue-production",
+        headers=headers,
+        json={
+            "quantity": 25.5,
+            "production_order_no": "PO-2026-001",
+            "username": "warehouse_substance",
+            "password": "whs123",
+            "meaning": "Issue to production",
+            "reason": "Manufacturing request",
+        },
+    )
+    assert issued.status_code == 200
+    assert issued.json()["quantity"] == 100.0
+
+    movements = client.get("/api/inventory/movements", headers=headers)
+    first = movements.json()["movements"][0]
+    assert first["movement_type"] == "ISSUE_PRODUCTION"
+    assert first["quantity_delta"] == -25.5

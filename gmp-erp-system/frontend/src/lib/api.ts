@@ -2,6 +2,8 @@ import type { CurrentUser, LoginRequest, LoginResponse } from '../types/auth'
 import type {
   LocationsResponse,
   LotsResponse,
+  AdjustLotRequest,
+  IssueProductionRequest,
   ManufacturerCreate,
   ManufacturerItem,
   ManufacturersResponse,
@@ -22,6 +24,7 @@ import type {
   SupplierCreate,
   SupplierItem,
   SuppliersResponse,
+  TransferLotRequest,
   WarehousesResponse,
 } from '../types/inventory'
 
@@ -108,6 +111,18 @@ export function listLots(token: string): Promise<LotsResponse> {
 
 export function listMovements(token: string): Promise<MovementsResponse> {
   return request<MovementsResponse>('/api/inventory/movements', 'GET', { token })
+}
+
+export function transferLot(token: string, lotId: string, payload: TransferLotRequest): Promise<QualityLotsResponse['lots'][number]> {
+  return request<QualityLotsResponse['lots'][number]>(`/api/inventory/lots/${lotId}/transfer`, 'POST', { token, body: payload })
+}
+
+export function adjustLot(token: string, lotId: string, payload: AdjustLotRequest): Promise<QualityLotsResponse['lots'][number]> {
+  return request<QualityLotsResponse['lots'][number]>(`/api/inventory/lots/${lotId}/adjust`, 'POST', { token, body: payload })
+}
+
+export function issueProduction(token: string, lotId: string, payload: IssueProductionRequest): Promise<QualityLotsResponse['lots'][number]> {
+  return request<QualityLotsResponse['lots'][number]>(`/api/inventory/lots/${lotId}/issue-production`, 'POST', { token, body: payload })
 }
 
 export function createReceipt(token: string, payload: ReceiptCreate): Promise<ReceiptResponse> {

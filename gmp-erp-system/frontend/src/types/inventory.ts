@@ -162,6 +162,20 @@ export interface MovementsResponse {
   movements: MovementItem[]
 }
 
+export interface TransferLotRequest {
+  to_location_id: string
+  reason: string
+}
+
+export interface AdjustLotRequest extends SignatureRequest {
+  new_quantity: number
+}
+
+export interface IssueProductionRequest extends SignatureRequest {
+  quantity: number
+  production_order_no: string
+}
+
 export interface ReceiptCreate {
   document_no: string
   supplier_id: string

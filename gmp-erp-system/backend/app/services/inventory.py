@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser
 from app.models.inventory import InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.schemas.inventory import ReceiptCreate, SignatureRequest
+from app.schemas.inventory import AdjustLotRequest, IssueProductionRequest, ReceiptCreate, SignatureRequest, TransferLotRequest
 from app.services.audit import write_audit
 from app.services.permissions import require_permission, require_warehouse_type_scope
 from app.services.signature import validate_signature
@@ -150,3 +150,139 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
     db.commit()
     db.refresh(receipt)
     return receipt, lots_created
+
+
+def get_lot_for_operation(db: Session, user: CurrentUser, lot_id: UUID) -> Lot:
+    require_permission(user, "VIEW_WAREHOUSE")
+    lot = get_required(db, Lot, lot_id, "Lot")
+    warehouse = get_required(db, Warehouse, lot.warehouse_id, "Warehouse")
+    require_warehouse_type_scope(user, warehouse.warehouse_type)
+    return lot
+
+
+def transfer_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: TransferLotRequest) -> Lot:
+    require_permission(user, "VIEW_WAREHOUSE")
+    lot = get_lot_for_operation(db, user, lot_id)
+    target_location = get_required(db, Location, payload.to_location_id, "Location")
+    if target_location.warehouse_id != lot.warehouse_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Target location must belong to the same warehouse")
+    if target_location.id == lot.location_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Lot is already in this location")
+
+    old_location_id = lot.location_id
+    lot.location_id = target_location.id
+    db.add(
+        InventoryMovement(
+            movement_type="TRANSFER",
+            document_type="warehouse_transfer",
+            document_id=lot.id,
+            lot_id=lot.id,
+            from_warehouse_id=lot.warehouse_id,
+            from_location_id=old_location_id,
+            to_warehouse_id=lot.warehouse_id,
+            to_location_id=target_location.id,
+            quantity_delta=0,
+            quantity_after=lot.quantity,
+            unit=lot.unit,
+            reason=payload.reason,
+            user_id=user.id,
+            workstation_id=user.workstation_id,
+        )
+    )
+    write_audit(
+        db,
+        user,
+        object_type="lot",
+        object_id=str(lot.id),
+        action_type="TRANSFER_LOT",
+        old_value={"location_id": str(old_location_id)},
+        new_value={"location_id": str(target_location.id)},
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(lot)
+    return lot
+
+
+def adjust_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: AdjustLotRequest) -> Lot:
+    require_permission(user, "POST_RECEIPT")
+    lot = get_lot_for_operation(db, user, lot_id)
+    validate_signature(db, user, payload, "ADJUST_STOCK", "lot", str(lot.id))
+    old_quantity = lot.quantity
+    delta = payload.new_quantity - old_quantity
+    lot.quantity = payload.new_quantity
+    db.add(
+        InventoryMovement(
+            movement_type="ADJUSTMENT",
+            document_type="stock_adjustment",
+            document_id=lot.id,
+            lot_id=lot.id,
+            from_warehouse_id=lot.warehouse_id,
+            from_location_id=lot.location_id,
+            to_warehouse_id=lot.warehouse_id,
+            to_location_id=lot.location_id,
+            quantity_delta=delta,
+            quantity_after=lot.quantity,
+            unit=lot.unit,
+            reason=payload.reason,
+            user_id=user.id,
+            workstation_id=user.workstation_id,
+        )
+    )
+    write_audit(
+        db,
+        user,
+        object_type="lot",
+        object_id=str(lot.id),
+        action_type="ADJUST_STOCK",
+        old_value={"quantity": old_quantity},
+        new_value={"quantity": lot.quantity, "delta": delta},
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(lot)
+    return lot
+
+
+def issue_to_production(db: Session, user: CurrentUser, lot_id: UUID, payload: IssueProductionRequest) -> Lot:
+    require_permission(user, "POST_RECEIPT")
+    lot = get_lot_for_operation(db, user, lot_id)
+    if lot.quality_status != "released":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only released lots can be issued to production")
+    if payload.quantity > lot.quantity:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Issue quantity exceeds available stock")
+
+    validate_signature(db, user, payload, "ISSUE_TO_PRODUCTION", "lot", str(lot.id))
+    old_quantity = lot.quantity
+    lot.quantity = lot.quantity - payload.quantity
+    db.add(
+        InventoryMovement(
+            movement_type="ISSUE_PRODUCTION",
+            document_type="production_issue",
+            document_id=lot.id,
+            lot_id=lot.id,
+            from_warehouse_id=lot.warehouse_id,
+            from_location_id=lot.location_id,
+            to_warehouse_id=None,
+            to_location_id=None,
+            quantity_delta=-payload.quantity,
+            quantity_after=lot.quantity,
+            unit=lot.unit,
+            reason=f"{payload.production_order_no}: {payload.reason or ''}".strip(),
+            user_id=user.id,
+            workstation_id=user.workstation_id,
+        )
+    )
+    write_audit(
+        db,
+        user,
+        object_type="lot",
+        object_id=str(lot.id),
+        action_type="ISSUE_TO_PRODUCTION",
+        old_value={"quantity": old_quantity},
+        new_value={"quantity": lot.quantity, "production_order_no": payload.production_order_no, "issued_quantity": payload.quantity},
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(lot)
+    return lot
