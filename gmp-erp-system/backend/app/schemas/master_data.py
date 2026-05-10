@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OrmModel(BaseModel):
@@ -36,6 +36,11 @@ class SupplierItem(OrmModel):
     name: str
 
 
+class SupplierCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+
+
 class SuppliersResponse(BaseModel):
     suppliers: list[SupplierItem]
 
@@ -44,6 +49,11 @@ class ManufacturerItem(OrmModel):
     id: UUID
     code: str
     name: str
+
+
+class ManufacturerCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
 
 
 class ManufacturersResponse(BaseModel):
@@ -56,6 +66,13 @@ class MaterialItem(OrmModel):
     name: str
     item_type: str
     default_unit: str
+
+
+class MaterialCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    item_type: str = Field(min_length=1, max_length=64)
+    default_unit: str = Field(min_length=1, max_length=32)
 
 
 class MaterialsResponse(BaseModel):

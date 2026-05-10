@@ -12,6 +12,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Receipt Documents', section: 'warehouse', permission: 'CREATE_RECEIPT', route: 'receipt-documents' },
   { label: 'Lots / Series', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'lots' },
   { label: 'Inventory Movements', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'movements' },
+  { label: 'Master Data', section: 'reference', permission: 'VIEW_MASTER_DATA', route: 'master-data' },
   { label: 'QC Tasks', section: 'qc', permission: 'VIEW_QC', route: 'qc-tasks' },
   { label: 'QA Decisions', section: 'qa', permission: 'VIEW_QA', route: 'qa-decisions' },
   { label: 'Production Orders', section: 'production', permission: 'VIEW_PRODUCTION', route: 'production-orders' },

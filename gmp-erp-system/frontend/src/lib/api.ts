@@ -2,13 +2,19 @@ import type { CurrentUser, LoginRequest, LoginResponse } from '../types/auth'
 import type {
   LocationsResponse,
   LotsResponse,
+  ManufacturerCreate,
+  ManufacturerItem,
   ManufacturersResponse,
+  MaterialCreate,
+  MaterialItem,
   MaterialsResponse,
   MovementsResponse,
   PostReceiptResponse,
   ReceiptCreate,
   ReceiptResponse,
   SignatureRequest,
+  SupplierCreate,
+  SupplierItem,
   SuppliersResponse,
   WarehousesResponse,
 } from '../types/inventory'
@@ -70,12 +76,24 @@ export function listSuppliers(token: string): Promise<SuppliersResponse> {
   return request<SuppliersResponse>('/api/master-data/suppliers', 'GET', { token })
 }
 
+export function createSupplier(token: string, payload: SupplierCreate): Promise<SupplierItem> {
+  return request<SupplierItem>('/api/master-data/suppliers', 'POST', { token, body: payload })
+}
+
 export function listManufacturers(token: string): Promise<ManufacturersResponse> {
   return request<ManufacturersResponse>('/api/master-data/manufacturers', 'GET', { token })
 }
 
+export function createManufacturer(token: string, payload: ManufacturerCreate): Promise<ManufacturerItem> {
+  return request<ManufacturerItem>('/api/master-data/manufacturers', 'POST', { token, body: payload })
+}
+
 export function listMaterials(token: string): Promise<MaterialsResponse> {
   return request<MaterialsResponse>('/api/master-data/materials', 'GET', { token })
+}
+
+export function createMaterial(token: string, payload: MaterialCreate): Promise<MaterialItem> {
+  return request<MaterialItem>('/api/master-data/materials', 'POST', { token, body: payload })
 }
 
 export function listLots(token: string): Promise<LotsResponse> {

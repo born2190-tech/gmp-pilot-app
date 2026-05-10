@@ -5,6 +5,7 @@ import { WarehouseDashboard } from './features/dashboard/WarehouseDashboard'
 import { LotsBoardPage } from './features/inventory/LotsBoardPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
 import { ReceiptDocumentPage } from './features/inventory/ReceiptDocumentPage'
+import { MasterDataPage } from './features/master-data/MasterDataPage'
 import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
 import { login, logout, me } from './lib/api'
 import { getVisibleNavItems } from './lib/permissions'
@@ -82,6 +83,8 @@ export function App() {
       <MovementsPage token={token} />
     ) : route === 'receipt-documents' ? (
       <ReceiptDocumentPage token={token} username={user.username} />
+    ) : route === 'master-data' ? (
+      <MasterDataPage token={token} user={user} />
     ) : (
       <WarehouseDashboard user={user} />
     )

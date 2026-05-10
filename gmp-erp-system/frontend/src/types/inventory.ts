@@ -27,6 +27,11 @@ export interface SupplierItem {
   name: string
 }
 
+export interface SupplierCreate {
+  code: string
+  name: string
+}
+
 export interface SuppliersResponse {
   suppliers: SupplierItem[]
 }
@@ -37,12 +42,24 @@ export interface ManufacturerItem {
   name: string
 }
 
+export interface ManufacturerCreate {
+  code: string
+  name: string
+}
+
 export interface ManufacturersResponse {
   manufacturers: ManufacturerItem[]
 }
 
 export interface MaterialItem {
   id: string
+  code: string
+  name: string
+  item_type: string
+  default_unit: string
+}
+
+export interface MaterialCreate {
   code: string
   name: string
   item_type: string

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, get_current_user
@@ -7,11 +7,18 @@ from app.models.master_data import Employee, Location, Manufacturer, Material, S
 from app.schemas.master_data import (
     EmployeesResponse,
     LocationsResponse,
+    ManufacturerCreate,
+    ManufacturerItem,
     ManufacturersResponse,
+    MaterialCreate,
+    MaterialItem,
     MaterialsResponse,
+    SupplierCreate,
+    SupplierItem,
     SuppliersResponse,
     WarehousesResponse,
 )
+from app.services.audit import write_audit
 from app.services.permissions import require_permission
 
 router = APIRouter(prefix="/api/master-data", tags=["master-data"])
@@ -50,6 +57,35 @@ def list_suppliers(
     return SuppliersResponse(suppliers=db.query(Supplier).order_by(Supplier.code).all())
 
 
+@router.post("/suppliers", response_model=SupplierItem, status_code=status.HTTP_201_CREATED)
+def create_supplier(
+    payload: SupplierCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SupplierItem:
+    require_permission(current_user, "MANAGE_MASTER_DATA")
+    code = payload.code.strip().upper()
+    name = payload.name.strip()
+    if db.query(Supplier).filter(Supplier.code == code).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Supplier code already exists")
+
+    supplier = Supplier(code=code, name=name)
+    db.add(supplier)
+    db.flush()
+    write_audit(
+        db,
+        current_user,
+        object_type="supplier",
+        object_id=str(supplier.id),
+        action_type="CREATE",
+        new_value={"code": supplier.code, "name": supplier.name},
+        reason="Master data supplier created",
+    )
+    db.commit()
+    db.refresh(supplier)
+    return SupplierItem.model_validate(supplier)
+
+
 @router.get("/manufacturers", response_model=ManufacturersResponse)
 def list_manufacturers(
     db: Session = Depends(get_db),
@@ -59,6 +95,35 @@ def list_manufacturers(
     return ManufacturersResponse(manufacturers=db.query(Manufacturer).order_by(Manufacturer.code).all())
 
 
+@router.post("/manufacturers", response_model=ManufacturerItem, status_code=status.HTTP_201_CREATED)
+def create_manufacturer(
+    payload: ManufacturerCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ManufacturerItem:
+    require_permission(current_user, "MANAGE_MASTER_DATA")
+    code = payload.code.strip().upper()
+    name = payload.name.strip()
+    if db.query(Manufacturer).filter(Manufacturer.code == code).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Manufacturer code already exists")
+
+    manufacturer = Manufacturer(code=code, name=name)
+    db.add(manufacturer)
+    db.flush()
+    write_audit(
+        db,
+        current_user,
+        object_type="manufacturer",
+        object_id=str(manufacturer.id),
+        action_type="CREATE",
+        new_value={"code": manufacturer.code, "name": manufacturer.name},
+        reason="Master data manufacturer created",
+    )
+    db.commit()
+    db.refresh(manufacturer)
+    return ManufacturerItem.model_validate(manufacturer)
+
+
 @router.get("/materials", response_model=MaterialsResponse)
 def list_materials(
     db: Session = Depends(get_db),
@@ -66,6 +131,42 @@ def list_materials(
 ) -> MaterialsResponse:
     require_permission(current_user, "VIEW_MASTER_DATA")
     return MaterialsResponse(materials=db.query(Material).order_by(Material.code).all())
+
+
+@router.post("/materials", response_model=MaterialItem, status_code=status.HTTP_201_CREATED)
+def create_material(
+    payload: MaterialCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MaterialItem:
+    require_permission(current_user, "MANAGE_MASTER_DATA")
+    code = payload.code.strip().upper()
+    name = payload.name.strip()
+    item_type = payload.item_type.strip().upper()
+    default_unit = payload.default_unit.strip()
+    if db.query(Material).filter(Material.code == code).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Material code already exists")
+
+    material = Material(code=code, name=name, item_type=item_type, default_unit=default_unit)
+    db.add(material)
+    db.flush()
+    write_audit(
+        db,
+        current_user,
+        object_type="material",
+        object_id=str(material.id),
+        action_type="CREATE",
+        new_value={
+            "code": material.code,
+            "name": material.name,
+            "item_type": material.item_type,
+            "default_unit": material.default_unit,
+        },
+        reason="Master data material created",
+    )
+    db.commit()
+    db.refresh(material)
+    return MaterialItem.model_validate(material)
 
 
 @router.get("/employees", response_model=EmployeesResponse)
