@@ -5,13 +5,14 @@ import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Generator, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app.db import get_database_url, get_sqlite_db_path
+from app.db import SessionLocal, get_database_url, get_sqlite_db_path
+from app.models import Deviation, InventoryMovement, Lot, Material
 
 app = FastAPI(title="GMP Pilot App", version="0.1.0")
 
@@ -156,6 +157,14 @@ def get_db() -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON;")
     return connection
+
+
+def get_session() -> Generator[Any, None, None]:
+    db_session = SessionLocal()
+    try:
+        yield db_session
+    finally:
+        db_session.close()
 
 
 class SignatureRequest(BaseModel):
@@ -1006,6 +1015,7 @@ def list_lots(
     min_quantity: Optional[float] = None,
     max_quantity: Optional[float] = None,
     user: AuthUser = Depends(get_current_user),
+    db_session: Any = Depends(get_session),
 ) -> dict[str, Any]:
     require_permission(user, "READ_OPERATIONAL_DATA")
     effective_warehouse_type = warehouse_type
@@ -1014,95 +1024,78 @@ def list_lots(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Warehouse access denied for requested filter")
         effective_warehouse_type = user.warehouse_scope
 
-    db = get_db()
-    try:
-        base_query = """
-            SELECT
-                l.id,
-                l.internal_lot,
-                l.supplier_lot,
-                l.warehouse_type,
-                l.production_year,
-                l.expiry_date,
-                l.quantity,
-                l.unit,
-                l.location,
-                l.quality_status,
-                l.incoming_control_notified_at,
-                l.qc_result_received_at,
-                l.created_at,
-                m.material_code,
-                m.material_name,
-                EXISTS(
-                    SELECT 1
-                    FROM deviations d
-                    WHERE d.lot_id = l.id AND d.status = 'open'
-                ) AS has_open_deviation
-            FROM lots l
-            JOIN materials m ON m.id = l.material_id
-        """
+    has_open_deviation_expr = (
+        db_session.query(Deviation.id)
+        .filter(Deviation.lot_id == Lot.id, Deviation.status == "open")
+        .exists()
+    )
 
-        params: list[Any] = []
-        where_parts: list[str] = []
-        if status_filter:
-            where_parts.append("l.quality_status = ?")
-            params.append(status_filter)
+    query = db_session.query(
+        Lot.id,
+        Lot.internal_lot,
+        Lot.supplier_lot,
+        Lot.warehouse_type,
+        Lot.production_year,
+        Lot.expiry_date,
+        Lot.quantity,
+        Lot.unit,
+        Lot.location,
+        Lot.quality_status,
+        Lot.incoming_control_notified_at,
+        Lot.qc_result_received_at,
+        Lot.created_at,
+        Material.material_code,
+        Material.material_name,
+        has_open_deviation_expr.label("has_open_deviation"),
+    ).join(Material, Material.id == Lot.material_id)
 
-        if effective_warehouse_type:
-            where_parts.append("l.warehouse_type = ?")
-            params.append(effective_warehouse_type)
+    if status_filter:
+        query = query.filter(Lot.quality_status == status_filter)
+    if effective_warehouse_type:
+        query = query.filter(Lot.warehouse_type == effective_warehouse_type)
+    if material_code:
+        query = query.filter(Material.material_code == material_code)
+    if q:
+        like_q = f"%{q}%"
+        query = query.filter(
+            (Material.material_code.like(like_q))
+            | (Material.material_name.like(like_q))
+            | (Lot.internal_lot.like(like_q))
+            | (Lot.supplier_lot.like(like_q))
+        )
+    if min_quantity is not None:
+        query = query.filter(Lot.quantity >= min_quantity)
+    if max_quantity is not None:
+        query = query.filter(Lot.quantity <= max_quantity)
 
-        if material_code:
-            where_parts.append("m.material_code = ?")
-            params.append(material_code)
+    rows = query.order_by(Lot.id.desc()).all()
 
-        if q:
-            where_parts.append("(m.material_code LIKE ? OR m.material_name LIKE ? OR l.internal_lot LIKE ? OR l.supplier_lot LIKE ?)")
-            like_q = f"%{q}%"
-            params.extend([like_q, like_q, like_q, like_q])
+    lots: list[dict[str, Any]] = []
+    for row in rows:
+        lots.append(
+            {
+                "id": row.id,
+                "internal_lot": row.internal_lot,
+                "supplier_lot": row.supplier_lot,
+                "warehouse_type": row.warehouse_type,
+                "material_code": row.material_code,
+                "material_name": row.material_name,
+                "production_year": row.production_year,
+                "expiry_date": row.expiry_date,
+                "quantity": row.quantity,
+                "unit": row.unit,
+                "location": row.location,
+                "quality_status": row.quality_status,
+                "sop_status": to_sop_status(row.quality_status),
+                "sop_labels": to_sop_labels(row.quality_status),
+                "incoming_control_notified_at": row.incoming_control_notified_at,
+                "qc_result_received_at": row.qc_result_received_at,
+                "created_at": row.created_at,
+                "has_open_deviation": bool(row.has_open_deviation),
+            }
+        )
 
-        if min_quantity is not None:
-            where_parts.append("l.quantity >= ?")
-            params.append(min_quantity)
-
-        if max_quantity is not None:
-            where_parts.append("l.quantity <= ?")
-            params.append(max_quantity)
-
-        if where_parts:
-            base_query += " WHERE " + " AND ".join(where_parts)
-
-        base_query += " ORDER BY l.id DESC "
-        rows = db.execute(base_query, tuple(params)).fetchall()
-
-        lots: list[dict[str, Any]] = []
-        for row in rows:
-            lots.append(
-                {
-                    "id": row["id"],
-                    "internal_lot": row["internal_lot"],
-                    "supplier_lot": row["supplier_lot"],
-                    "warehouse_type": row["warehouse_type"],
-                    "material_code": row["material_code"],
-                    "material_name": row["material_name"],
-                    "production_year": row["production_year"],
-                    "expiry_date": row["expiry_date"],
-                    "quantity": row["quantity"],
-                    "unit": row["unit"],
-                    "location": row["location"],
-                    "quality_status": row["quality_status"],
-                    "sop_status": to_sop_status(row["quality_status"]),
-                    "sop_labels": to_sop_labels(row["quality_status"]),
-                    "incoming_control_notified_at": row["incoming_control_notified_at"],
-                    "qc_result_received_at": row["qc_result_received_at"],
-                    "created_at": row["created_at"],
-                    "has_open_deviation": bool(row["has_open_deviation"]),
-                }
-            )
-
-        return {"count": len(lots), "lots": lots}
-    finally:
-        db.close()
+    return {"count": len(lots), "lots": lots}
 
 
 @app.get("/inventory/movements")
@@ -1113,6 +1106,7 @@ def list_inventory_movements(
     movement_type: Optional[str] = None,
     limit: int = 200,
     user: AuthUser = Depends(get_current_user),
+    db_session: Any = Depends(get_session),
 ) -> dict[str, Any]:
     require_permission(user, "READ_OPERATIONAL_DATA")
     effective_warehouse_type = warehouse_type
@@ -1122,83 +1116,64 @@ def list_inventory_movements(
         effective_warehouse_type = user.warehouse_scope
 
     capped_limit = min(max(limit, 1), 1000)
-    db = get_db()
-    try:
-        query = """
-            SELECT
-                im.id,
-                im.timestamp_utc,
-                im.movement_type,
-                im.lot_id,
-                im.material_id,
-                im.warehouse_type,
-                im.quantity_delta,
-                im.quantity_after,
-                im.unit,
-                im.reference_type,
-                im.reference_id,
-                im.user_id,
-                im.comment,
-                l.internal_lot,
-                l.supplier_lot,
-                l.production_year,
-                l.expiry_date,
-                m.material_code,
-                m.material_name
-            FROM inventory_movements im
-            JOIN lots l ON l.id = im.lot_id
-            JOIN materials m ON m.id = im.material_id
-        """
-        where_parts: list[str] = []
-        params: list[Any] = []
 
-        if effective_warehouse_type:
-            where_parts.append("im.warehouse_type = ?")
-            params.append(effective_warehouse_type)
-        if material_code:
-            where_parts.append("m.material_code = ?")
-            params.append(material_code)
-        if lot_id is not None:
-            where_parts.append("im.lot_id = ?")
-            params.append(lot_id)
-        if movement_type:
-            where_parts.append("im.movement_type = ?")
-            params.append(movement_type)
+    query = db_session.query(
+        InventoryMovement.id,
+        InventoryMovement.timestamp_utc,
+        InventoryMovement.movement_type,
+        InventoryMovement.lot_id,
+        InventoryMovement.material_id,
+        InventoryMovement.warehouse_type,
+        InventoryMovement.quantity_delta,
+        InventoryMovement.quantity_after,
+        InventoryMovement.unit,
+        InventoryMovement.reference_type,
+        InventoryMovement.reference_id,
+        InventoryMovement.user_id,
+        InventoryMovement.comment,
+        Lot.internal_lot,
+        Lot.supplier_lot,
+        Lot.production_year,
+        Lot.expiry_date,
+        Material.material_code,
+        Material.material_name,
+    ).join(Lot, Lot.id == InventoryMovement.lot_id).join(Material, Material.id == InventoryMovement.material_id)
 
-        if where_parts:
-            query += " WHERE " + " AND ".join(where_parts)
+    if effective_warehouse_type:
+        query = query.filter(InventoryMovement.warehouse_type == effective_warehouse_type)
+    if material_code:
+        query = query.filter(Material.material_code == material_code)
+    if lot_id is not None:
+        query = query.filter(InventoryMovement.lot_id == lot_id)
+    if movement_type:
+        query = query.filter(InventoryMovement.movement_type == movement_type)
 
-        query += " ORDER BY im.id DESC LIMIT ?"
-        params.append(capped_limit)
-
-        rows = db.execute(query, tuple(params)).fetchall()
-        movements = []
-        for row in rows:
-            movements.append(
-                {
-                    "id": row["id"],
-                    "timestamp_utc": row["timestamp_utc"],
-                    "movement_type": row["movement_type"],
-                    "warehouse_type": row["warehouse_type"],
-                    "lot_id": row["lot_id"],
-                    "internal_lot": row["internal_lot"],
-                    "supplier_lot": row["supplier_lot"],
-                    "production_year": row["production_year"],
-                    "expiry_date": row["expiry_date"],
-                    "material_code": row["material_code"],
-                    "material_name": row["material_name"],
-                    "quantity_delta": row["quantity_delta"],
-                    "quantity_after": row["quantity_after"],
-                    "unit": row["unit"],
-                    "reference_type": row["reference_type"],
-                    "reference_id": row["reference_id"],
-                    "user_id": row["user_id"],
-                    "comment": row["comment"],
-                }
-            )
-        return {"count": len(movements), "movements": movements}
-    finally:
-        db.close()
+    rows = query.order_by(InventoryMovement.id.desc()).limit(capped_limit).all()
+    movements = []
+    for row in rows:
+        movements.append(
+            {
+                "id": row.id,
+                "timestamp_utc": row.timestamp_utc,
+                "movement_type": row.movement_type,
+                "warehouse_type": row.warehouse_type,
+                "lot_id": row.lot_id,
+                "internal_lot": row.internal_lot,
+                "supplier_lot": row.supplier_lot,
+                "production_year": row.production_year,
+                "expiry_date": row.expiry_date,
+                "material_code": row.material_code,
+                "material_name": row.material_name,
+                "quantity_delta": row.quantity_delta,
+                "quantity_after": row.quantity_after,
+                "unit": row.unit,
+                "reference_type": row.reference_type,
+                "reference_id": row.reference_id,
+                "user_id": row.user_id,
+                "comment": row.comment,
+            }
+        )
+    return {"count": len(movements), "movements": movements}
 
 
 @app.get("/inventory/balances")
