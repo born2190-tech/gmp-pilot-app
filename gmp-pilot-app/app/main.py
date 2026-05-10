@@ -832,47 +832,54 @@ def ui() -> FileResponse:
 
 @app.post("/auth/login", response_model=LoginResponse)
 def auth_login(payload: LoginRequest) -> LoginResponse:
-    db = get_db()
+    db_session = SessionLocal()
     try:
-        revoke_expired_sessions(db)
-        user = get_user_by_username(db, payload.username)
-        if user["password"] != payload.password:
+        revoke_expired_sessions_orm(db_session)
+        user = db_session.query(User).filter(User.username == payload.username).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown user")
+        if user.password != payload.password:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
         token = secrets.token_urlsafe(32)
         created_at = now_utc()
         expires_at = (datetime.now(timezone.utc).replace(microsecond=0) + timedelta(hours=12)).isoformat()
 
-        db.execute(
-            """
-            INSERT INTO auth_sessions(user_id, token, workstation_id, created_at, expires_at, revoked)
-            VALUES (?, ?, ?, ?, ?, 0)
-            """,
-            (user["id"], token, payload.workstation_id, created_at, expires_at),
+        db_session.add(
+            AuthSession(
+                user_id=user.id,
+                token=token,
+                workstation_id=payload.workstation_id,
+                created_at=created_at,
+                expires_at=expires_at,
+                revoked=False,
+            )
         )
-        db.commit()
+        db_session.commit()
 
         return LoginResponse(
             access_token=token,
             expires_at=expires_at,
-            username=user["username"],
-            role=user["role"],
-            warehouse_scope=user["warehouse_scope"],
+            username=user.username,
+            role=user.role,
+            warehouse_scope=user.warehouse_scope,
             workstation_id=payload.workstation_id,
         )
     finally:
-        db.close()
+        db_session.close()
 
 
 @app.post("/auth/logout")
-def auth_logout(current_user: AuthUser = Depends(get_current_user), authorization: Optional[str] = Header(default=None, alias="Authorization")) -> dict[str, str]:
+def auth_logout(
+    current_user: AuthUser = Depends(get_current_user),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+    db_session: Any = Depends(get_session),
+) -> dict[str, str]:
     token = authorization.removeprefix("Bearer ").strip() if authorization else ""
-    db = get_db()
-    try:
-        db.execute("UPDATE auth_sessions SET revoked = 1 WHERE token = ?", (token,))
-        db.commit()
-    finally:
-        db.close()
+    db_session.query(AuthSession).filter(AuthSession.token == token).update(
+        {AuthSession.revoked: True}, synchronize_session=False
+    )
+    db_session.commit()
     return {"message": f"Session revoked for {current_user.username}"}
 
 
