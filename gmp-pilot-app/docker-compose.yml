@@ -1,0 +1,14 @@
+services:
+  gmp-pilot-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gmp-pilot-api
+    ports:
+      - "8001:8000"
+    volumes:
+      - gmp_pilot_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  gmp_pilot_data:

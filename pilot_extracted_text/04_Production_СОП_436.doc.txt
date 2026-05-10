@@ -1,0 +1,264 @@
+                                          
+1. PURPOSE /ЦЕЛЬ:
+  Establish the procedure and control for the technological process of manufacturing Eticox 60,90 and 120 mg the parameters of the technological process, and the control points during the production process / Установить порядок и контроль при проведении технологического процесса изготовления Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг, параметры технологического режима и контрольные точки в процессе производства.
+2. SCOPE/ОБЛАСТЬ ПРИМЕНЕНИЯ: 
+This SOP shall be applicable for Manufacturing Eticox 60,90 and 120 mg at FE LLC Novugen Pharma Uzbekistan Plant/ Эта СОП применима для производства В Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг в Novugen Pharm Uzbekistan.
+3. DEFINITIONS AND ACRONYMS/ ОПРЕДЕЛЕНИЯ И СОКРАЩЕНИЯ:
+Technological process/ Технологический процессAll operations related to the manufacture of a medicinal product, starting with the receipt of raw materials, continuing with processing and packaging, and ending with the receipt of the finished product / Все операции, связанные с изготовлением лекарственного средства, начинающиеся с получения сырья, продолжающиеся обработкой и упаковкой и завершающиеся получением готовой продукции.Raw materials/ СырьёMedicinal substances, medicinal plants, their parts or processed products, auxiliary substances, semi-products obtained, including from external suppliers, used in the production and manufacture of medicinal products (excluding packaging and labeling materials)./Лекарственные субстанции, лекарственные растения, их части или продукты переработки, вспомогательные вещества, полупродукты, получаемые, в том числе, от внешних поставщиков, используемые в производстве и изготовлении лекарственных препаратов (за исключением упаковочных и маркировочных материалов).Substance /Субстанция (лекарственная)A substance of plant, animal, microbial, or synthetic origin that has pharmacological activity and is intended for the production and manufacture of medicines./ Вещество растительного, животного, микробного или синтетического происхождения, обладающее фармакологической активностью и предназначенное для производства и изготовления лекарственных препаратов.Excipients/ Вспомогательные веществаSubstances used in the production process of a finished product, but not intended for separate use as medicines/ Вещества, используемые в процессе производства готового продукта, но не предназначенные для отдельного использования как лекарственные средства. Batch number/ Номер серииA combination of numbers and/or letters that allows you to identify a pharmaceutical product series on a label, packaging, and/or accompanying document / Комбинация цифр и/или букв, позволяющая идентифицировать серию фармацевтической продукции на этикетке, упаковке и/или сопроводительном документе.Analyze/ АнализChemical analysis is a set of operations aimed at determining the composition of an object under study (qualitative analysis) or the quantitative proportions of different substances in it (quantitative analysis)./ Химический анализ - совокупность операций, имеющих целью установить, из каких веществ состоит исследуемый объект (качественный анализ) или в каких количественных соотношениях входят в него те или иные вещества (количественный анализ).Semi-finished product/ ПолупродуктPartially processed raw materials or medicinal substances that must go through further stages of the production process before they become a medicine / Частично обработанное сырье или лекарственные вещества, которые должны пройти дальнейшие стадии производственного процесса, прежде чем они станут лекарственном средством.Capsules / КапсулыA dosage form consisting of a solid or soft gelatin capsule containing one or more active ingredients with or without excipients. The following types of capsules are available: hard, soft, microcapsules, pellets, and gastro-resistant capsules / Дозированная лекарственная форма, состоящая: из твердой или мягкой желатиновой оболочки, содержащей одно или несколько активных действующих веществ с добавлением или без вспомогательных веществ. Различают следующие типы капсул: твердые, мягкие, микрокапсулы, пеллеты, желудочно-резистентные.Environments conditions /Климатические условияClimate parameters for the technological process / Климатические параметры для проведения технологического процесса.FSP / ФСП Normative document / Фармакопейная статья предприятиеBMR/ ЗПСBatch manufacturing record/ Запись о производстве серии  
+4. LINKS/ ССЫЛКИ:
+O'zDSt 2766:2018Uzbek GMP Standard /Надлежащая производственная практика (GMP)ФСП 42 Уз-25938724-5473-2024Normative document for Eticox 60,90 and 20 mg /  "Этикокс таблетки, покрытые оболочкой 60,90 и 120 мгФС 42 Уз 0511-2022  "Вода очищенная".	СОП-406List of defects in the packing and packaging of medicines / Перечень дефектов при фасовке и упаковке лекарственных средств.СОП-407A brief description of the technological process for producing, packing, and shipping tablets/capsules / Краткое описание технологического процесса производства, фасовки и упаковки таблеток/капсулСОП-409Procedure for assigning a series number, production date, and expiration date to pharmaceutical products / Порядок присвоения номера серии, даты производства и срока годности лекарственных препаратов.СОП-410Preparation of working and disinfecting solutions and determination of the concentration of disinfecting solutions/ Приготовление рабочих и дезинфицирующих растворов и определение концентрации дезинфицирующих растворовСОП-411Preparation of the workshop's production facilities/ Подготовка производственных помещений цехаСОП-413Preparing of those. equipment, tech. tooling, and tanks, tools and lifting mechanisms of the workshop/ Подготовка тех. оборудования, тех. оснастки, и ёмкостей, инструмента и грузоподъемных механизмов цехаСОП-414Procedure for packaging medicines and procedure for delivering finished products to the warehouse/ Порядок упаковки лекарственных средств и порядок сдачи на склад готовой продукцииСОП-417Changing procedures and rules for wearing work clothes/ Порядок переодевания и правила ношения технологической одеждыСОП-442Control during drug production/ Контроль при производстве лекарственного средства СОП-533Average sample collection procedure/ Процедура отбора средней пробыСОП-537Control of microbial contamination of production facilities, equipment, work clothes, and personnel hands / Контроль микробной контаминации производственных помещений, оборудования, технологической одежды и рук персоналаСОП- 422Operation procedure for Electronic scale type BA2204N/ Инструкция по эксплуатации. Весы электронные типа "BA2204N"ДПСК-445Operation procedure for Electronic scale type BWS100K5 / Инструкция по эксплуатации. Весы электронные типа BWS100K5ДПСК-489Operation procedure for Electronic scale type TM-A21 / Инструкция по эксплуатации. Весы электронные типа TM-A21ДПСК-628Operation procedure for use and maintenance of the coater BG-200E/ Инструкция по эксплуатации и обслуживанию машины покрытия оболочкой модели BG-200EДПСК-629   Operation procedure for use and maintenance of the HLSG-1000 / Инструкция по эксплуатации и обслуживанию Гранулятор со скоростной мешалкой модели HLSG-1000ДПСК-630Operation procedure for use and maintenance of the FBD FL-300/ Инструкция по эксплуатации и обслуживанию Сушка-гранулятор с псевдосжиженым слоем модели FL-300ДПСК-653Operation procedure for use and maintenance of the YK-160 granulator/ Инструкция по эксплуатации и обслуживанию оборудования "Гранулятор измельчитель модели YK-160"ДПСК - 632Operation procedure for use and maintenance of the HTD-250 vertical hopper blender (250 L, 150 L, and 50 L)./ Инструкция по эксплуатации и обслуживанию Вертикальный бункерный блендер модели HTD-250 (250 л, 150 л и 50 л).ДПСК-634Operation procedure for use and maintenance of the DPP-400K blistering machine / Инструкция по эксплуатации и обслуживанию блистеровочной машины модели DPP-400KСОП-659Operation procedure for use and maintenance of the DPP260Ki-1 blistering machine / Инструкция по эксплуатации и обслуживанию оборудования Блистерная машина модели DPP260Ki-1СОП-662Operation procedure for use and maintenance of the compression machine EU-B/ Инструкция по эксплуатации и обслуживанию Таблеточного пресса S250-C 32 EU-BСОП-664Operation procedure for using and maintaining the INSIGHT metal detector / Инструкция по эксплуатации и обслуживанию металлодетектора INSIGHTПСК-4Inappropriate product management procedure/ Процедура управления несоответствующим продуктомПСК-9Drug waste management procedure / Процедура обращения с отходами ЛС
+5. ROLES AND RESPONSIBILITIES/ ОТВЕТСТВЕННОСТЬ:
+Role/ ДолжностьKey Responsibility/ ОтветственностьForeman/Начальник цеха- Control of the technological process at all stages of production / контроль технологического процесса на всех стадиях производства.
+- Periodic inspection of information sheets, room status labels, and equipment / периодическую проверку наличия информационных листов, этикеток статуса помещения и оборудования
+- Processing an invoice for the transfer of semi-finished products to the workshop / оформление накладной на перемещение для передачи полупродукции в цехTechnologist/ Технолог- For calculating the amounts of substances and excipients per batch / за расчёт количеств субстанций и вспомогательных веществ на серию
+- Control of the technological process at all stages of production / контроль технологического процесса на всех стадиях производства
+- For monitoring the order, sequence, and correctness of technological operations; for calculating the amounts of substances and excipients for a series of drugs / за контроль порядка, последовательности и правильности проведения технологических операций; за расчёт количеств субстанций и вспомогательных веществ на серию ЛС
+- For accounting the quantity of raw materials, semi-products, and finished products/  за учет количества сырья, полупродуктов, продукции
+- Control over the maintenance of records in the ZPS for each stage of the technical process, and for the provision of information sheets when manufacturing a batches of product in production areas / контроль за ведение записей в ЗПС по каждому этапу тех. процесса, за предоставление информационных листов при изготовлении серии ЛС на производственных участках
+- For timely registration and submission of an application for intermediate control and semi-products to the QC / за своевременное оформление и передачу заявки на проведение промежуточного контроля, полупродукции в ДККOperators / Операторы - For strict compliance with the BMR / За строгое соблюдения BMR.
+- Preparation of technological equipment, tools, containers, etc. / подготовку технологического оборудования, оснастки, емкостей и т.д
+- Preparation of the workshop and workplace for work/  подготовку помещения, рабочего места к работеChemists / Химик- For reliable and timely test results / за достоверные и своевременные результаты анализовMicrobiologist/ Микробиолог - For periodically taking swabs to check the microbiological purity of the surfaces of premises and equipment, the hands and work clothes of production personnel, conducting microbiological control of the air in production premises, and conducting analysis of the microbiological purity of products/  за периодическое взятие смывов для проверки микробиологической чистоты с поверхности помещений и оборудования, рук и технологической одежды производственного персонала, проведение микробиологического контроля воздуха производственных помещений, за проведения анализа микробиологической чистоты продукцииController/ Контролер - For monitoring the climatic conditions and corresponding entries in the "Temperature and Humidity Record Sheet" by the shop operators / за контроль климатических условий и соответствующих записей в "Листе учета температуры, влажности" операторами цеха
+- For monitoring the release of substances and excipients to the workshop and the return of leftovers after the production of a series of drugs or the change of the name of a drug / за контроль проведения выдачи субстанций и вспомогательных веществ в цех и возврата остатков после производства серии ЛС или смены наименования ЛС
+- For monitoring the cleanliness of premises, equipment, tools, and inventory / за контроль чистоты помещений, оборудования, оснастки и инвентаря
+- For identifying the rooms and equipment that are prepared for the implementation of technological processes, for labeling the status of the rooms and equipment, for monitoring the implementation of technological processes in accordance with the requirements of this SOP, and for maintaining records in the BMR./ за идентификацию, подготовленных к ведению технологических процессов помещений и оборудования, этикетками статуса помещения и оборудования, за контроль проведения технологических процессов в соответствии с требованиями данного СОП и ведение записей в ЗПС.Mechanics/ Механики- For setting up and checking the readiness of technological equipment / за настройку и проверку готовности к работе технологического оборудования.
+6. PROCEDURE/ ПРОЦЕДУРА:
+6.1. Materials and equipment /Материалы и оборудование:
+№Name of substances and excipients / 
+Наименование субстанций и вспомогательных веществНТД
+Quantity for batch/ Количество на серию60 mg 
+(120,000 tablets) 
+/60 мг 
+(120 000 таблеток)90 mg 
+(180,000 tablets) 
+/90 мг 
+(180 000 таблеток)120 mg 
+(60,000 tablets) 
+/120 мг 
+(60 000 таблеток)Composition /Состав:API / АФИ1.Etoricoxib  / ЭторикоксибEu P. BP. USP. CP7,20016,2007,200Excipients/ Вспомогательные вещества2.Dicalcium Phosphate Anhydrous / Дикальцийфосфат безводный (A-Tab)Eu P. BP. USP. CP6,48014,5806,4803.Microcrystalline cellulose / Микрокристаллическая целлюлозаEu P. BP. USP. CP8,88019,9808,8804.Sodium Crosscormelose / Кросскормелоза натрияEu P. BP. USP. CP1,2002,7001,2005.Magnesium Stearate /Магния стеаратEu P. BP. USP. CP0,2400,5400,2406.Оболочка Opadry II GreenEu P. BP. USP. CP0,720*2,430*0,720*
+№Names of Instruments / Наименование средств измеренийModel and S/N / Модель /сер. №1. 
+Balances/ Весы электронные BA2204N/10325011092. 2.Balances / Весы электронные (5 кг)FCC5001 /22179003263. Balances /Весы электронные TM-A210167401974. Balances / Весы электронные на 100 кгBWS100K5 /№300346  5. LOD Tester/ Анализатор влагиBM-50-16. Friability tester / Прибор для определения истираемостиCS-1 / №0616036027. Disintegration tester / Прибор для определения распадаемостиBJ-2 / №05160116568. Hardness tester/ Прибор для определения твёрдостиYD- 1 / №04160113839.Vernier Caliper/  ШтангенциркульШЦЦ (0-200) мм / №12111455043№
+п/пНаименование технологического оборудованияМодель /сер. №1.Bin blender / Вертикальный бункерный блендерHTD-250 / №SS06202.Roller compactor / Роллер компакторLGS120E / P0300063.Granulator/ Гранулятор-измельчительFZ-550 / №160504
+FZ-5500 / №SS01184.Granulator /Гранулятор-измельчительYK-160 №1/№221228748; 
+YK-160 №2/221228749 5.Compression machine/ Роторная таблеточная машина (РТМ)S250-C 32 EU-B6.Coater machine/Машина для покрытия оболочкойBG-200E/ № 20160420097.Blister machine / Блистеровочная машинаDPP-400K / №1190
+DPP260Ki-1
+
+8. Drip-jet marker / Каплеструйный маркиратор9018 / № CN201912539. Semi-automatic Packing Machine / Полуавтоматическая запечатывающая машинаFXJ6050B / №17F121№
+п/пName of the technological inventory  / Наименование технологического инвентаря1. Waste bin / Емкость для брака2. Steel and plastic containers with a capacity of 10 liters / Контейнера н/ж стальные и пластиковые, объемом 10л3. Sieves / Сито ручные (размер ячеек:0,16, 0,2, 0,5, 0,7, 0,8, 1,0, 1,6)
+6.2. Precautions/warnings/ меры предосторожности:
+6.2.1 The manufacturing process for Eticox 60,90 and 120 mg is carried out in Class D clean room./ Технологический процесс изготовления Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг производится в производственных помещениях класса чистоты "D".
+6.2.2. Production is carried out using specially designed rubber gloves, a respirator, safety goggles, and overalls intended for production rooms of class D cleanliness. / Производство проводят в специально предназначенных для этого резиновых перчатках, респираторе, защитных очках, спецодежде, предусмотренной для производственных помещений класса чистоты "D".
+6.2.3. The premises for the production of pharmaceuticals meet the following requirements: they are kept clean, have sufficient lighting, and the required climatic conditions (temperature and humidity), and are equipped with supply and exhaust ventilation with positive pressure inside the workrooms./ Помещения для производства ЛС соответствуют следующим требованиям: содержатся в чистоте, имеют достаточное освещение, требуемые климатические условия (температура и влажность), оборудованы приточно-вытяжной вентиляцией с избыточным давлением внутри рабочих помещений.
+6.2.4. Certified measuring instruments are used to measure temperature and humidity. Operators record the readings on the "Temperature, Humidity, and Pressure Differential Sheet"./ Для измерения температуры и влажности используют поверенные средства измерения. Операторы регистрируют показатели в "Листе учёта температуры, влажности и перепада давления". 
+6.2.5. To control the pressure difference between rooms, use certified pressure gauges. The pressure difference should be 5-10 Pa. / Для контроля перепада давления между помещениями используют поверенные манометры, перепад давления должен составлять 5-10 Па.
+6.2.6. All stages of the production process are carried out only when the supply and exhaust ventilation is turned on / Все стадии производственного процесса выполняются только при включенной приточно-вытяжной вентиляции.
+6.2.7.  All stages of preparation of premises, technological equipment, and process operations are monitored and reflected in the BMR for the manufactured batches of Eticox 60,90 and 120 mg./ Все стадии проведения подготовки помещений, технологического оборудования, операции технологического процесса контролируются и отражаются в ЗПС на выпускаемую серию Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг.
+6.2.8. The mechanic of the workshop checks the readiness of each technical unit before starting production. equipment in accordance with the requirements of the BMR./ Механик цеха перед началом производства проверяет готовность к работе каждой единицы тех. оборудования в соответствии с требованиями ЗПС.
+6.2.9. Rooms that are ready for production and meet the established requirements are identified with information sheets: The room is ready for use./ Подготовленные к производству и соответствующие установленным требованиям помещения, идентифицируют информационными листами: "Помещение готово к использованию".
+6.2.10. The QA department issues BMR for the production of Eticox 60,90 and 120 mg / Отдел ДОК выдает BMR на производство серии Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг.
+6.2.11. The procedure for assigning a batch number, production date, and expiration date to a medicinal product is in accordance with the procedure established in SOP-409/ Порядок присвоения номера серии, даты производства и срока годности ЛС производится в соответствии с порядком, установленным в СОП-409.
+6.3. Dispensing of API and excipients. / Взвешивание АФИ и вспомогательных веществ (подготовка сырья).
+6.3.1. Dispensing of API and excipients must be under LAF. / Взвешивание субстанций и вспомогательных веществ производится под ламинарным потоком.
+6.3.2. Weighing is done using scales certified by the State Standard. / Для взвешивания используют весы, поверенные Госстандартом. 
+6.3.3. Before weighing, the technologist must prepare, calibrate, or check the accuracy of the weighing scale. / Перед началом взвешивания, технологу необходимо произвести подготовку, калибровку или проверку точности взвешивания весов.
+6.3.4. The accuracy of weighing is checked using calibration weights. / Точность взвешивания проверяют при помощи калибровочных гирь.
+     Make the appropriate entries in the BMR and the calibration log (sheet) / Произвести соответствующие записи в ЗПС и журнале (лист) калибровки весов.
+6.3.5. The containers with substances and auxiliary materials prepared for weighing are wiped with a cloth soaked in 70% ethyl alcohol (in case of severe contamination of the bags, wipe them first with a damp cloth), and then carefully opened and weighed using stainless steel buckets that have been wiped with a cloth soaked in 70% ethyl alcohol/ Подготовленные для взвешивания тарные места с субстанциями и вспомогательными веществами перед вскрытием протирают тряпкой, смоченной 70% спиртом этиловым (в случае сильного загрязнения мешков, сначала протереть влажной тряпкой), аккуратно открыть и начать взвешивание, используя ковши из нержавеющей стали, предварительно протертые салфеткой, смоченной 70% этиловым спиртом.
+6.3.6. Dispense the raw materials in PE bags / Произвести взвешивание сырья в п/э пакеты.
+6.3.7. Substances and excipients are dispensed under the supervision of a technologist or DOK inspector. / Взвешивание субстанций и вспомогательных веществ производится под контролем технолога или контролера ДОК.
+6.3.8. Tie the PE bags with the weighed raw materials into a knot, seal them with tape, and hang the production card (Appendix F-2 to SOP-407). / П/э пакеты со взвешенным сырьем завязать на узел, заклеить скотчем, повесить производственную карточку (Приложение Ф-2 к СОП -407).
+6.3.9. Put PE bags with weighed raw materials and identified status label in a plastic container. Hang a status label on the container / П/э пакеты со взвешенным сырьем и идентифицированные этикеткой статуса положить в пластмассовый контейнер. На контейнер повесить этикетку статуса. 
+6.3.10. Make the necessary entries in the BMR. / Произвести соответствующие записи в ЗПС.
+6.4. Technological scheme and control during the production of Eticox 60,90 and 120 mg coated tablets./ Технологическая схема и контроль при производстве Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг. 
+
+6.5. Preparation of production facilities / Подготовка производственных помещений.
+6.5.1. The preparation of the premises before the process begins is carried out in accordance with the requirements of SOP-411, using working and disinfectant solutions prepared according to SOP-410/ Подготовка помещений перед началом процесса производится в соответствии с требованиями СОП-411, с применением рабочих и дезинфицирующих растворов, приготовленных по СОП-410.
+6.5.2.  The preparation of the premises is confirmed by the records of the machine operators in the BMR / Проведение подготовки помещения подтверждается записями операторов машин в ЗПС.
+6.5.3.  The cleanliness of the room is monitored by the controller / Контроль чистоты помещения осуществляет контролер.
+6.6. Preparation of technological equipment / Подготовка технологического оборудования
+6.6.1. The preparation of technological equipment is carried out in accordance with the requirements of SOP-413/ Подготовка технологического оборудования производится в соответствии с требованиями СОП-413.
+6.6.2.  The mechanic checks the equipment's readiness for operation / Механик проверяет готовность оборудования к работе.
+6.6.3. The inspector performs visual inspection of the equipment's cleanliness and makes appropriate entries in the BMR for the manufactured batch of Eticox 60,90 and 120 mg. / Проведение визуального контроля чистоты оборудования производит контролер и сопровождает соответствующими записями в ЗПС на изготавливаемую серию Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг.
+6.7. Staff preparation / Подготовка персонала
+6.7.1. Procedure for changing clothes and wearing technological clothing for working in Class D clean rooms in accordance with the requirements of SOP-417/  Порядок переодевания и правила ношения технологической одежды для работы в помещениях класса чистоты "D" в соответствии с требованиями СОП-417.
+6.7.2. The rules of conduct in the production room and personal hygiene compliance by the personnel are established and implemented in accordance with the requirements of SOP-412/  Правила поведения в производственном помещении и соблюдения персоналом личной гигиены установлены и производятся в соответствии с требованиями СОП-412.
+6.7.3.  The QA controllers perform visual inspection of the cleanliness of the workshop workers' technological clothing. / Контролер ДОК производит визуальный контроль чистоты технологической одежды работников цеха.
+6.8. Manufacturing process / Производственный процесс.
+6.8.1. Dispensing and sifting/ Взвешивание и просеивание сырья
+6.8.1.1.  The required amount of raw materials for one batch of Eticox 60,90 and 120 mg is specified in the BMR for this product / Необходимое количество сырья для одной загрузки при изготовлении серии Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг, указано в BMR на данный препарат.
+№Name of substances and excipients / 
+Наименование субстанций и вспомогательных веществНТД
+Quantity for batch/ Количество на серию60 mg 
+(120,000 tablets) 
+/60 мг 
+(120 000 таблеток)90 mg 
+(180,000 tablets) 
+/90 мг 
+(180 000 таблеток)120 mg 
+(60,000 tablets) 
+/120 мг 
+(60 000 таблеток)Composition /Состав:API / АФИ1.Etoricoxib  / ЭторикоксибEu P. BP. USP. CP7,20016,2007,200Excipients/ Вспомогательные вещества2.Dicalcium Phosphate Anhydrous / Дикальцийфосфат безводный (A-Tab)Eu P. BP. USP. CP6,48014,5806,4803.Microcrystalline cellulose / Микрокристаллическая целлюлозаEu P. BP. USP. CP8,88019,9808,8804.Sodium Crosscormelose / Кросскормелоза натрияEu P. BP. USP. CP1,2002,7001,2005.Magnesium Stearate /Магния стеаратEu P. BP. USP. CP0,2400,5400,2406.Оболочка Opadry II GreenEu P. BP. USP. CP0,720*2,430*0,720*
+6.8.1.2. Etoricoxib, Dicalcium Phosphate Anhydrous, MCC (Pharmacel 102), and Sodium Cromarmellose (Primellose) are sieved together through a #30 mesh sieve using a vibrating sieve (ZS-1200 / ZS-2000) according to DPC-609. Check the integrity of the sieve before and after sifting / Эторикоксиб, Дикальцийфосфат безводный, МКЦ (Pharmacel 102) и Кроскармеллозу натрия (Primellose) просеять совместно через меш-сито #30 с использованием вибрационного сита (ZS-1200 / ZS-2000) согласно ДПСК-609. Проверить целостность сита до и после просеивания.
+6.8.1.3. Magnesium stearate is sifted through a #60 mesh. The sifted mass is weighed in plastic bags on a scale / Магний стеарат просеять через cетку #60. Просеянную массу в полиэтиленовых мешках взвесить на весах.
+6.8.2. Pre mixing / Предварительное смешивание.
+6.8.2.1. Install and operate the HTD-250 vertical hopper blender according to DPSC-632 / Установить и эксплуатировать вертикальный бункерный блендер HTD-250 согласно ДПСК-632.
+6.8.2.2. Transfer all the sifted material (except for the magnesium stearate for dusting) to a blender (150 L). / Перенести весь просеянный материал (кроме стеарата магния для опудривания) в блендер (150 л).
+6.8.2.3. Pre-mixing parameters / Параметры предварительного смешивания:
+Parameter / ПараметрValue / ЗначениеTime / Время смешивания10 минут (minutes)Speed / Скорость смешивания15 об/минут (RPM)6.8.2.4. After mixing, unload the mixture into double plastic bags and attach a status label. Make entries in the BMR / После смешивания выгрузить смесь в двойные полиэтиленовые мешки и прикрепить этикетку статуса. Произвести записи в ЗПС.
+
+6.8.3. Compaction/ Компактирование
+6.8.3.1. Install and operate the roller compactor according to the equipment operation procedure / Установить и эксплуатировать роликовый компактор согласно СОП по эксплуатации оборудования.
+6.8.3.2. Compact the mixed materials using a roller compactor according to the following parameters / Уплотнить смешанные материалы с помощью роликового компактора в соответствии с нижеприведёнными параметрами.
+
+ParametersSet Value (Range)Roller Type &WidthKnurled 
+35 mmRoller unit speed15-20 RPMOil Pressure50+5 bar1 St granulator Speed      80-100 RPM2 Nd granulator Speed100-120 RPMScrew Feeder SpeddTo be notedRoller gap2.00+0.1 mm1 St granulator Speed1.50 mm2 Nd granulator Speed0.8mmRoller cooling ONFlake CrusherONVacuum  pressureON
+6.8.4. Blending / Опудривание.
+
+6.8.4.1. Install and operate the HTD-250 vertical hopper blender according to DPSC-632 / Установить и эксплуатировать вертикальный бункерный блендер HTD-250 согласно ДПСК-632.
+6.8.4.2. Load the granulate from stage TP 2 into the blender (150 L) / Загрузить гранулят из стадии ТП 2 в блендер (150 л).
+6.8.4.3. Add sifted magnesium stearate (powdering portion) / Добавить просеянный стеарат магния (порция для опудривания)
+6.8.4.4. Blending parameters / Параметры опудривания:
+Parameter / ПараметрValue / ЗначениеTime / Время смешивания5 минут (minutes)Speed / Скорость смешивания15 об/минут (RPM)6.8.4.5. The technologist and the QA controller fill out an "Application for Intermediate Analysis" and transfer the powdered tablet mass to the QC laboratory / Технолог и контролёр ДОК оформляют "Заявку на проведение промежуточного анализа" и передают опудренную таблеточную массу в лабораторию ДКК.
+6.8.4.6. After blending, the mass is unloaded through the lower hatch into double polyethylene bags, sealed, weighed, and status labels are attached. The procedure data is entered into the BMR / После опудривания массу выгружают через нижний люк в двойные полиэтиленовые мешки, герметично закрывают, взвешивают, прикрепляют этикетки статуса. Данные по процедуре вносятся в ЗПС.
+
+6.9. Compression/ Таблетирование
+
+6.9.1. Install and operate the S250-C 32 EU-B rotary tablet machine (RTM) according to SOP-662/ Установить и эксплуатировать роторную таблеточную машину (РТМ) S250-C 32 EU-B согласно СОП-662.
+6.9.2. Punches parameters / Параметры пуансонов.
+Parameter / ПараметрUpper punch / Верхний пуансонLower punch / Нижний пуансонDiameter / Диаметр7,50 мм7,50 ммForm / ФормаRound Concave Punch / Круглый вогнутый пуансонRound Concave Punch / Круглый вогнутый пуансонЧеканка (60 мг)"N""15"Чеканка (90 мг)"N""14"Чеканка (120 мг)"N""13"Due diameter / Диаметр матрицы9,00 мм-
+6.9.3. The powder for compression is poured into the RTM loading funnels using a stainless steel bucket. After setting up the RTM, the operator checks the first tablets produced for their appearance, average weight, and geometric dimensions / Таблеточную смесь засыпают ковшом из нержавеющей стали в загрузочные воронки РТМ. После настройки РТМ оператор проверяет первые полученные таблетки по внешнему виду, средней массе, геометрическим размерам.
+6.9.4. The technologist and the QA controller fill out the "Request for intermediate analysis" and transfer the first batch of tablets to the QC laboratory. Intermediate control parameters  / Технолог и контролёр ДОК оформляют "Заявку на проведение промежуточного анализа" и передают первую партию таблеток в лабораторию ДКК. Параметры промежуточного контроля
+
+
+
+Parameters/ Наименование контролируемого параметраND requirements/ Требования по НД60 mg / 60 мг90 mg / 90 мг120 mg / 120 мгDescription / ОписаниеWhite, round, biconvex, uncoated tablets with "N" on one side and "15" on the other / Белые, круглые двояковыпуклые таблетки без покрытия, с надписью "N" на одной стороне и "15" на другойWhite, round, biconvex, uncoated tablets with "N" on one side and "14" on the other/ Белые, круглые двояковыпуклые таблетки без покрытия, с надписью "N" на одной стороне и "14" на другойWhite, round, biconvex, uncoated tablets with "N" on one side and "13" on the other/ Белые, круглые двояковыпуклые таблетки без покрытия, с надписью "N" на одной стороне и "13" на другойDisintegration/ РаспадаемостьNMT 15 minutes/ Не более 15 минутAverage weight of 20 tablets / Средний вес 20 таблеток4,00 г ± 3% (Min 3,88 г / Max 4,12 г)6,00 г ± 3% (Min 5,82 г / Max 6,18 г)8,00 г ± 3% (Min 7,76 г / Max 8,24 г)Dissolution / РастворениеNLT 75 % in 30 minutes / не менее 75 % за 30 минAssay/ Количественное определение 90 - 110 %       
+6.10. Coating/ Покрытие оболочкой.
+
+6.10.1. Coating solution preparation/ Приготовление покрывающей суспензии.
+
+6.10.1.1. Weigh the required amount of Opadry II Green 32K510049 according to the calculation per batch (including 50% losses). / Взвесить необходимое количество Opadry II Green 32K510049 согласно расчёту на серию (с учётом 50% потерь).
+6.10.1.2. Pour the required amount of purified water into a stainless steel container. While stirring constantly, slowly add Opadry II Green, making sure that the powder is evenly distributed around the vortex. / В контейнер из нержавеющей стали налить необходимое количество очищенной воды. При постоянном перемешивании медленно добавить Opadry II Green, следя за тем, чтобы порошок равномерно распределялся вокруг вихря.
+6.10.1.3. After the complete addition of Opadry, continue mixing for approximately 45 minutes until a homogeneous dispersion is formed.  / После полного добавления Opadry продолжать перемешивание в течение примерно 45 минут до образования однородной дисперсии.
+6.10.1.4. During the coating process, the suspension should be constantly mixed to avoid sedimentation. / В процессе нанесения покрытия суспензию постоянно перемешивать, чтобы избежать осаждения
+
+6.10.2. Coating with a shell on the BG-200E machine / Нанесение покрытия оболочкой на машине BG-200E.
+
+6.10.2.1. Install and operate the BG-200E coating machine according to BMR, / Установить и эксплуатировать машину покрытия оболочкой BG-200E согласно BMR,
+6.10.2.2. Load the core tablets into the rotating drum of the coating machine  / Загрузить таблетки-ядра в вращающийся барабан машины покрытия оболочкой.
+6.10.2.3. Rotate the tablets intermittently 3-4 times to remove any stuck powder and preheat the tablets for about 10 minutes  / Вращать таблетки прерывисто 3-4 раза для удаления прилипшего порошка и предварительного нагрева таблеток в течение примерно 10 минут.
+6.10.2.4. Record the average weight of 20 pieces of tablets cores selected from 3 different locations on the drum after preheating (record in BMR). / Зафиксировать средний вес по 20 шт. ядер таблеток, отобранных из 3 разных мест барабана после предварительного нагрева (записать в ЗПС).
+6.10.2.5. Set the coating process parameters and start spraying the slurry / Установить параметры процесса покрытия и начать распыление суспензии:
+№Parameters / ПараметрыValue / Значения (пределы)1Air inlet temperature (preheating)/ Температура воздуха на входе (предварительный нагрев)NMT 70 °С /  Не более 70 °С2Product temperature / Температура слоя препарата (предварительный нагрев)NMT 45 °С  / Не более 45 °С3RPM Prehetaing / Скорость вращения (предварительный нагрев)1-3 об/мин4RPM coating / Скорость вращения барабана (покрытие)1-6 об/мин5Air inlet temperature / Температура воздуха на входе (покрытие)NMT 70 °С / Не более 70 °С6Exhaust temperature / Температура выхлопных газов45-70 °С7Temperature of the preparation layer (coating)/ Температура слоя препарата (покрытие)NMT 45 °С  / Не более 45 °С8Metering pump speed / Скорость дозирующего насоса10-30 об/мин9Spray nozzle size / Размер сопла распылителя0,04 мм10The distance of the gun to the bed / Расстояние пистолет - слой таблеток26-35 см11Weight gain / Прирост массы оболочки3,0% по массе12Tablet drying time (after coating)/ Время сушки таблеток (после покрытия)5-10 минут (прерывистое вращение)13Время высыхания таблетки (после нанесения покрытия)/ Температура препарата (сушка)45 ± 5 °С6.10.2.6. Continue the coating process until the required mass gain is achieved (3.0%). Monitor the process and record observations every 15 minutes / Продолжать процесс нанесения покрытия до достижения необходимого прироста массы (3,0%). Контролировать процесс и записывать наблюдения каждые 15 минут.
+6.10.2.7. After the required shell accumulation is achieved, dry the tablets by intermittent rotation for 5-10 minutes. Record the average weight of 100 tablets (5 measurements)./ После достижения необходимого накопления оболочки высушить таблетки прерывистым вращением 5-10 минут. Зафиксировать средний вес 100 таблеток (5 замеров).
+6.10.2.8. Cool and unload the coated tablets into double plastic bags, seal tightly in a suitable container with silica gel bags. Attach a status label / Охладить и выгрузить покрытые оболочкой таблетки в двойные полиэтиленовые мешки, герметично завязать в подходящем контейнере с пакетами силикагеля. Прикрепить этикетку статуса.
+6.10.2.9. The technologist and the QA controller fill out the "Request for intermediate analysis" and transfer the coated tablets to the QC laboratory Intermediate control parameters / Технолог и контролёр ДОК оформляют "Заявку на проведение промежуточного анализа" и передают таблетки с покрытием в лабораторию ДКК. Параметры промежуточного контроля:
+Pаrameter / Параметр60 mg / 60 мг90 mg / 90 мг120 mg / 120 мгDescription (coated tablet)/ Описание (таблетка с покрытием)Round green-colored coated tablets with the inscription "N" / "15"/ Круглые таблетки, покрытые оболочкой зелёного цвета, с надписью "N" / "15"Round green-colored coated tablets with the inscription "N" / "14"/ Круглые таблетки, покрытые оболочкой зелёного цвета, с надписью "N" / "14"Round green-colored coated tablets with the inscription "N" / "13"/ Круглые таблетки, покрытые оболочкой зелёного цвета, с надписью "N" / "13"Tablet weight/ Основной вес таблетки (ядро)200 мг300 мг400 мгWeight gain /  Прирост массы оболочки (Opadry II Green)3,0% от веса ядра (6 мг)3,0% от веса ядра (9 мг)3,0% от веса ядра (12 мг)Coated tablet weight / Общий вес таблетки с оболочкой206 мг309 мг412 мгDisintegrations / РаспадаемостьНе более 30 минут Не более 30 минут Не более 30 минут 
+
+
+
+6.11. Blistering and Packaging/ Упаковка и фасовка.
+6.11.1. Blistering / Блистеровка. 
+Blistering of Eticox 60,90 and 120 mg coated tablets / Блистеровка Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг.  
+Before starting work, it is necessary to check / Перед началом работы необходимо проверить:
+•  Cleanliness of the workplace / Чистоту рабочего места
+•  Absence of foreign objects in the workplace / Отсутствие посторонних предметов на рабочем месте
+•  Purity of the thermal adhesive and forming plate, and the cutting die / Чистоту терма-склеивающего и формующей плиты, вырубного штампа
+•  Serviceability of the moving parts of the machine / Исправность движущихся частей автомата
+Turn on/ Включают:
+•  Central switch for electric power supply to the machine / Центральный рубильник подачи электрической энергии машине
+•  Open the compressed air supply / Открыть кран сжатого воздуха
+•  The machine's toggle switch is located on the side of the control cabinet, and a green light illuminates, along with the automatic machine control on the front panel. / Тумблер машины с боковой стороны шкафа управления, при этом загорается зеленая лампочка, а также на передней панели высвечиваются автоматическая управление машины.
+
+    From the end side, the reels with thermoplastic film (according to FSP 42 Uz-25938724-5473-2024, item Packaging) are placed on the axial flanges and secured. The heaters are brought to the forming plate using a lever. The required pressure for the heater feed lever and the forming plate is adjusted, as well as the pressure of the heater lever. The temperature settings for the heaters are set. The tablets are placed in the cells using a pair of tweezers and a spatula./ С торцевой стороны насаживают бобины с термопластической пленкой (Согласно ФСП 42 Уз-25938724-5473-2024 пункт Упаковка) на осевые фланцы и закрепляют. Рычагом подводят нагреватели к формующей плите. Регулируют необходимое давление для рычага подачи  нагревателя и формующего плиты и давление рычаганагревателя. Устанавливают температурные режимы нагревателей. Таблетки с помощью пинцета и шпателя укладывают в ячейки.  
+    
+After heating the forming (for aluminum foil, the forming plate is not heated) and the thermal bonding plate, the heater is removed and the film and foil are fed. When the machine is started, wait for all the plates to heat up and press the "START" button/ После нагрева формующей (для алюминиевой фольги формующяя плита без нагрева)  и терма склеивающей плиты отводят нагреватель и заправляют пленку и фольгу. При пуске автомата ожидание нагрева всех плит и включают кнопку "ПУСК".
+
+      Check the correctness of the cell on the film, the correctness of the gluing of the aluminum foil. Stop the machine, check the quality of the packaging, the correctness of the cutting, the clarity of the series number and expiration date, the tightness, etc./  Проверяют правильность получения ячейки на пленке, правильность склейки алюминиевой фольги. Останавливают машину, проверяют качество упаковки, правильность вырубки, четкость нанесения номера серии и годен до, герметичность и т.д. 
+      The entire process is constantly monitored by the shop foreman and the QA controllers. All control points are registered in the BMR./ Весь процесс постоянно контролируется начальником цеха и контролером ДОК. Все контрольные точки  регистрируются в ЗПС.
+
+
+6.11.2. Packaging / Упаковка.
+
+The packaging is done on tables. Each blister is checked for clarity of printing (expiry date and batch number). The blisters, along with the instructions for use, are placed in cardboard packs. The packs are placed in corrugated boxes, closed, and sealed with tape. A group label is placed on each box. Each corrugated box is stamped with the individual stamp of the packaging inspector. / Упаковку производят на столах. Проверяют каждый блистер, чёткость печати (годен до и номер серии). Блистеры вместе с инструкциями по применению помещают в пачки из картона. Пачки укладывают в гофрокоробки, закрывают и склеивают скотч-лентой. На каждую коробку наклеивают групповую этикетку. На каждый гофрокороб проставляется индивидуальный штамп проверяющего упаковщика.
+
+6.11.3. Storage and movement of finished products / Хранение и перемещение готовой продукции.
+6.11.3.1.  According to the transfer invoice issued by the head of the workshop or the workshop technologist, the corrugated boxes with the products are transferred to the quarantine storage warehouse of the finished products / По накладной на перемещение, оформленной начальником цеха или технологом цеха, гофрокоробки с продукцией переносят на склад карантийного хранения готовой продукции, 
+6.11.3.2. The head of the workshop issues a presentation notice, on the basis of which the quality control inspector selects samples in accordance with the requirements of SOP-533 for quality control to meet the requirements of FSP 42 Uz 25938724-5473-2024. / Начальник цеха оформляет предъявительское извещение,  на основании которого контролер ДОК производит отбор проб в соответствии с требованиями СОП-533 для проведение контроля качества на соответствие требований ФСП 42 Уз 25938724-5473-2024.
+6.11.3.3.  After the quality control of finished products and certification, the UL issues a "Sale Permit" and transfers it to the manager of the finished products warehouse. 
+According to the transfer invoice, the products are moved to the finished products warehouse and accounted for in the 1C program./ После проведения контроля  качества готовой продукции и сертификации УЛ выдаёт "Разрешение на реализацию" и передаёт его заведующему склада готовой продукции.
+По накладной на перемещение продукция перемещается на склад ГП и оприходовается на склад ГП по программе 1С.
+
+7. RECORDS AND REPORTS / ЗАПИСИ И ОТЧЕТЫ:
+
+* BMR for Eticox 60,90 and 120 mg / ЗПС на таблетки покрытые оболочкой Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг.
+* Information sheets "When manufacturing medicines" / Информационные листы "При изготовлении лекарственных средств".
+* Identification labels for room and equipment status  Идентификацонные этикетки статуса помещений и оборудования.
+* Temperature, humidity, and pressure differential sheet./ Лист учёта температуры, влажности и перепада давления.
+* Application no. for analysis / Заявка № на проведение анализа.
+* Bearer notice  / Предъявительское извещение.
+* Bill of lading / Накладная на перемещение
+
+8. ARCHIEVE/ ХРАНЕНИЕ: 
+The original of this document is stored in the Quality Assurance Department (QAD) under the number SOP - 436/ Оригинал данного документа хранится в департаменте обеспечения качества (ДОК) под номером СОП - 436.
+9. APPENDIX / ПРИЛОЖЕНИЯ:
+Absent/ Отсутствуют.
+
+10. CHANGE REGISTRATION FORM/ЛИСТ РЕГИСТРАЦИИ ИЗМЕНЕНИЙ:
+№Change description/
+Содержание измененияDate of change/
+Дата внесения измененияSheet/
+ЛистWho makes changes /
+Кто вносит изменения 
+(Ф.И.О.)Signature/
+Подпись                     
+11.  DOCUMENT ISSUE LIST/ЛИСТ ВЫДАЧИ ДОКУМЕНТОВ:
+№ п/пDocument name /
+Наименование документаIssue date/ Дата выдачиIssued to whom/Кому выданCopy/
+Копия №Issued/ ВыдалTake/
+ПринялWithdrawal of a copy of the document/
+Изъятие копии документаDate of withdrawal /Дата изъятияSignature of the recipient/ Подпись получившего
+12. INTRODUCTION LIST/ ЛИСТ ОЗНАКОМЛЕНИЯ:
+№
+п/пDate/
+ДатаName of employee who reviewed the document/
+ФИО сотрудника, ознакомившегося с документомDesignation/
+Должность сотрудникаSignatures/ПодписиWho has read the document/ Ознакомившийся с документомResponsible for the document /
+Ответственный за документ
+
+
+СОП- 436 Технологический процесс производства Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг / Manufacturing process for Eticox 60,90 and 120 mgEdition №0Page: 21 of 21
+
+СОП- 436 Технологический процесс производства Этикокс таблетки, покрытые оболочкой 60,90 и 120 мг / Manufacturing process for Eticox 60,90 and 120 mgEdition №0Page: 1 of 21Developer:
+Technologist
+Name: Shamsiev Mansur.
+
+Signature:
+
+
+
+Date:Agreed:
+
+
+Foreman_____________ Seitova Vayde.
+
+Head of QC___________ Khalmetova L.R.
+
+   
+Date :Approved:
+Position:
+Head of QA
+Name: Filatov P.A.
+Signature:
+
+Date :Validity period:
+From"____" ________________y.
+To "____" _________________y.
+Extended to
+"____" ___________________y.Status:
+Current
+	
+OutdatedCopy № 
+
+__________________________
+/Signature/
+when sending out a document
+

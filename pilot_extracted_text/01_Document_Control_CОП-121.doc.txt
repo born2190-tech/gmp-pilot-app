@@ -1,0 +1,203 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+
+
+
+1. PURPOSE/ЦЕЛЬ:
+To define the basic requirements for handling and recording information in all documentation considered essential to the maintenance of Quality System. / Определить основные требования к обработке и записи информации во всей документации, которая считается необходимой для поддержания Системы качества.
+2. SCOPE/ОБЛАСТЬ ПРИМЕНЕНИЯ:
+This SOP shall be applicable to all quality system documents on FE LLC Novugen Pharma Uzbekistan Plant/ Эта СОП применима для документов системы качества в Novugen Pharm Uzbekistan.
+
+3. DEFINITIONS AND ACRONYMS/ ОПРЕДЕЛЕНИЯ И СОКРАЩЕНИЯ:
+TermDefinitionSOP/СОПStandard operational procedure/ Стандартная операционная процедураIPQCIn process Quality Control-  This is a product quality inspection performed directly on the production line.  / Внутри производственный контроль -  Это проверка качества продукции, выполняемая непосредственно на производственной линии
+4. ROLES AND RESPONSIBILITIES/ ОТВЕТСТВЕННОСТЬ:
+
+Role/ ДолжностьKey Responsibility/ ОтветственностьAll employees of Novugen Pharma Uzbekistan / Все сотрудники Novugen Pharma UzbekistanFollow this SOP/ Следовать данному СОП
+5. PROCEDURE/ ПРОЦЕДУРА: 
+5.1 General Responsibilities for Completion of GMP Documentation / Общие обязанности по заполнению документации GMP.
+5.1.1. The operator must check to confirm that the document for completion is / Оператор должен проверить, соответствует ли документ для заполнения
+5.1.1.1. The one intended for the task/ Тот, который предназначен для выполнения данной задачи.
+5.1.1.2. The current authorised version/ Текущая версия
+5.1.2. The document for completion must be issued by QA. / Документ для заполнения должен быть выдан отделом ДОК.
+5.1.3. The document must be followed correctly and precisely. If the documentation cannot be followed for any reason the operator must consult immediately with their superiors or IPQC. Note: Any resulting actions must be recorded and justified/ Документация должна соблюдаться правильно и в точности. Если по какой-либо причине документация не может быть соблюдена, оператор должен немедленно проконсультироваться со своим руководством или IPQC. Примечание: Любые последующие действия должны быть запротоколированы и обоснованы.
+5.1.4. Care must be taken to prevent exposing the document to potentially damaging agents or conditions e.g. moisture and staining/ Необходимо позаботиться о том, чтобы документ не подвергался воздействию потенциально опасных веществ или условий, например влаги и краски. 
+The document must be kept intact at all times i.e. groups must not be detached from each other / Документ должен всегда оставаться нетронутым, т.е. группы не должны быть отделены друг от друга.
+
+5.2. Specific Responsibilities for Operators and Checkers/ Особые обязанности операторов и контролеров.
+5.2.1. When completing GMP documentation the operator is acknowledging that/ При заполнении документации GMP оператор подтверждает, что;
+5.2.1.1. They carried out the procedure according to written instruction/ Они выполнили процедуру в соответствии с письменной инструкцией.
+5.2.1.2. The information entered is complete and accurate/ Введенная информация является полной и точной
+5.2.2. If a checker and / or supervisors' initials / signature are required it is the operator's responsibility to obtain them/ Если требуются инициалы/подпись проверяющего и/или контролеров, то оператор несет ответственность за их получение
+Note: Further processing must not occur without a checker's initials / 	signature if they are required/ Примечание: Дальнейшая обработка не должна производиться без инициалов/подписи проверяющего, если они требуются
+5.2.3. The operator and checker must have both received appropriate training in the procedure which they are recording / Оператор и контролер должны пройти соответствующую подготовку по процедуре, которую они регистрируют.
+5.2.4. When completing the GMP documentation the checker's initials / signature act as confirmation that/ При заполнении документации GMP инициалы/подпись проверяющего служат подтверждением того, что
+5.2.4.1. They observed the procedure being carried out according to the written 	instruction/ Они соблюдали процедуру в соответствии с письменной инструкцией
+5.2.4.2. They have checked that the information entered is complete and 	accurate / Они проверили, является ли введенная информация полной и точной.
+5.2.5. Operators and checkers must ensure that all entries are legible and clearly understandable to an outside observer / Операторы и контролеры должны следить за тем, чтобы все записи были разборчивыми и понятными стороннему наблюдателю.
+
+5.3. Routine Completion of GMP Documents(s) / Рутинное заполнение GMP документации.
+5.3.1. Information should be recorded at the time the task is being performed. Documents should not be completed retrospectively. / Информация должна быть записана во время выполнения задания. Документы не должны быть заполнены ретроспективно.
+5.3.2. Data should be recorded directly onto the documents. Use of scrap paper, "post-it" notes or similar items is not permitted. / Данные должны быть занесены непосредственно в документы. Использование черновиков, стикеров и подобных материалов не допускается.
+5.3.3. Members of staff must only complete documents for work that they have performed themselves. They must not complete documents on behalf of another person. / Сотрудники должны заполнять документы только по тем работам, которые они выполняли самостоятельно. Они не должны заполнять документы от имени другого лица.
+5.3.4. Documents must be completed using the appropriate ink / Документы должны быть заполнены соответствующими чернилами;
+5.3.4.1. Indelible blue ink for all department and black pen only for QA department (Ball point only) is to be used for completion of documentation. / Для заполнения документации следует использовать несмываемые синие чернила для всех отделов и черные чернила для отдела ДОК (только шариковой ручкой)
+Note/Примечание: Pencils must never be used. / Карандаши не допускаются.
+5.3.5. All entries must be completed as required by the document e.g. it is not acceptable to record operator initials when document requests a signature. / Все записи должны быть заполнены в соответствии с требованиями документа, например, недопустимо указывать инициалы оператора, когда документ требует подписи.
+5.3.6. Symbols e.g. arrows, ticks, may only be used when specified. / Символы, например стрелки, галочки, могут использоваться только в специальных местах. 
+5.3.7. Non-standard abbreviations must no be used./ Запрещается использовать нестандартные сокращения. 
+5.3.8. When numerical information e.g. weights, volumes, temperatures, pH is recorded from instrumentation; ALL digits displayed by the instrumentation must be recorded./ Когда числовая информация, например, вес, объем, температура, pH, записывается с помощью измерительных приборов, все цифры, отображаемые приборами, должны быть записаны.
+Note: Rounding of values prior to recording is not permitted./ Округление значений перед записью не допускается
+5.3.9. Appropriate units must be recorded if they are not included as a part of the document text./ Должны быть указаны соответствующие единицы измерения, если они не включены в текст документа.
+5.3.10. All calculations recorded in GMP documentation must include the final result, e.g. x-y=z / Все расчеты, записанные в документации GMP, должны включать конечный результат, например, x-y=z.
+5.3.11. All boxes or areas intended for the recording of actions / information must be completed. Shaded boxes (if any) do not require completion. / Все поля или области, предназначенные для записи действий/информации, должны быть заполнены. Заштрихованные поля (если таковые имеются) заполнять не требуется
+5.3.11.1. If an entry is not required in an un-shaded box then the area must be 	completed as "N/A"  / Если запись в незатененном поле не требуется, то область должна быть заполнена как "N/A".
+5.3.11.2. If the N/A area extends over more than one box then a single line 	may be drawn which clearly indicates the entire area concerned and 	"N/A" written alongside./ Если область N/A распространяется более чем на один прямоугольник, то может быть проведена одна линия, которая четко обозначает всю соответствующую область, и рядом написано "N/A".
+5.3.11.3. If the unused section of the document extends over the multiple 	pages an initialled and dated comment may be entered on the first 	unused page e.g. "pages 12 to 20 inclusive N/A", and the remaining 	pages lined through with no requirements to N/A./ Если неиспользуемый раздел документа занимает несколько страниц, на первой неиспользуемой странице может быть указан комментарий с инициалами и датой, например: "страницы с 12 по 20 включительно", а на остальных страницах, выровненных по ширине, никаких требований к "N/A" не предъявляется.
+5.4. Time Format/ Формат времени
+5.4.1. Times must be recorded using the 24-hour format e.g. 24-hour format shall be as follows 09-15; 13-05 or 09:15; 13:05 / Время должно быть записано в формате 24 часа, например, 24-часовой формат должен быть следующим: 09:15; 13:05 или 09:15; 13:05
+5.5. Date Format / Формат Даты
+5.5.1. Date should be written in such a fashion that Day, Month and Year should be demarcated & clear. DD/MM/YYYY or DD/MM/YY also DD.MM.YYYY or DD.MM.YY format should be used e.g. 07/03/2026 or 07/03/26. / Дата должна быть написана таким образом, чтобы День, месяц и год были четко разграничены. Следует использовать формат ДД/ММ/ГГГГ или ДД/ММ/ГГ, а также ДД.ММ.ГГГГ или ДД.ММ.ГГ, например, 07/03/2026 или 07/03/26 а так же 07.03.2026 или 07.03.26
+Note/ Примечание: An exception to this general rule is the copying of dates that are presented in 	alternative formats e.g. expiry dates from product labels. In these cases the date must be copied exactly as seen/ Исключением из этого общего правила является копирование дат, которые представлены в альтернативных форматах, например, даты истечения срока годности на этикетках продуктов. В этих случаях дата должна быть скопирована в точности так, как показано на рисунке.
+5.6. Corrections/ Исправления
+5.6.1. If a mistake is made, it must be clearly deleted with a single line ensuring the original entry is still visible (e.g. visible) and the correct information entered alongside and make signature and date./ Если допущена ошибка, она должна быть четко удалена одной строкой, гарантируя, что исходная запись все еще видна (например, видна), а рядом с ней указана правильная информация, включая подпись и дату.
+5.6.2. If the original entry requires a checkers initials / signature and date then the correction also requires a checkers initials / signature and date. / Если для первоначальной записи требуются инициалы / подпись и дата проверяющего, то для исправления также требуются инициалы / подпись и дата проверяющего.
+5.6.3. The overwriting of errors is not permitted. / Перезапись ошибок не допускается
+5.6.4. The use of correction fluid like "white ink" or "whitener" is not acceptable. / Использование корректоров, такой как "белые чернила" или "замаска", недопустимо.
+5.6.5. In case of multiple options, out of which only corrected one shall be ticked (?) and other is to be striked off. / В случае наличия нескольких вариантов, из которых только исправленный должен быть отмечен галочкой (?), а остальные должны быть вычеркнуты
+	e.g. The material complies / does not complies with the established 	specifications (in case the material complies the specification). / например, материал соответствует/не соответствует установленным техническим требованиям (в случае, если материал соответствует спецификации)
+5.7. Attachments to documentation/ Приложения к документации
+5.7.1. Any paperwork appended to documentation, e.g. instrument printouts/traces or sheets containing unused labels must be firmly attached and clearly annotated or labelled with appropriate batch number/document reference/page/section number to allow them to be traced if they become detached. / Любые документы, прилагаемые к документации, например, распечатки приборов/трассировки или листы, содержащие неиспользованные этикетки, должны быть надежно прикреплены и снабжены четкими комментариями или маркированы соответствующим номером партии/ссылкой на документ/номером страницы/раздела, чтобы их можно было отследить, если они отклеятся.
+5.7.2. Each individual page of an attachment must be numbered and the total number of pages indicated, e.g. "Page 1 of 3". If this information is hand written it must be signatured and date. / Каждая отдельная страница приложения должна быть пронумерована и указано общее количество страниц, например, "Страница 1 из 3". Если эта информация написана от руки, ее необходимо проставить подпись и датировать
+5.7.3. There must also be a reference within the document to indicate that an attachment has been made. If the attachment has been made as a response to a specific prompt within the document text then no further comment is required. If there is no such prompt for attachment within the document text then an initialed and dated, handwritten comment must be added to the document at the relevant point which / В документе также должна быть упоминание, указывающая на то, что было сделано вложение. Если вложение было сделано в соответствующее поле, то дополнительные комментарии не требуются. Если в тексте документа нет такого поля для прикрепления, то к документу в соответствующем месте должен быть добавлен рукописный комментарий, с подписью и датированный соответствующим образом.
+5.7.3.1. It defines the contents of the attachment / Это определяет содержание приложения
+5.7.3.2. It should indicate where it is attached / На нем должно быть указано, где он прикреплен
+5.7.3.3. It should include a reference to the appropriate step(s) of the 	document. / В нем должна содержаться ссылка на соответствующий этап (этапы) документа
+5.8. Additional Entries / Дополнительные внесения
+	  The section applies to all the entries not directly prompted by the documentation e.g. 	  comments and calculations added to the paperwork. / Этот раздел относится ко всем записям, которые не указаны непосредственно в документации, например, к комментариям и расчетам, добавленным к документам.
+5.8.1. Any comments added to documentation must be initialed and dated at the time they are made and, if appropriate, it must be clear to which section of the documentation they refer. If asterisk symbols are used then both the comment and the section of the document to which it refers must be asterisked. / Любые комментарии, добавляемые к документации, должны быть подписаны и датированы на момент их внесения, и, при необходимости, должно быть ясно, к какому разделу документации они относятся. Если используются символы звездочки, то и комментарий, и раздел документа, на который он ссылается, должны быть помечены звездочкой.
+5.8.2. If there is insufficient room to record required information the reverse of the page may be used. There must be a clear indication that the entry may be found there and the entry must reference the appropriate section(s) of the document. / Если недостаточно места для записи необходимой информации, можно использовать оборотную сторону страницы. Должно быть четкое указание на то, что там можно найти нужную запись, и ссылка на соответствующий раздел(разделы) документа.
+Any NCR's raised during the performance of a procedure must be fully referenced in the appropriate section of the document/ Любые замечания, возникающие в ходе выполнения процедуры, должны быть полностью отражены в соответствующем разделе документа
+
+5.9. Document Completion Troubleshooting / Устранение несоответсвий при заполнении документов
+The procedures described in this section are intended for use only in exceptional circumstances and are not acceptable as part of the routine completion of GMP documentation. Full justification for the use of these procedures is required in all cases./ Процедуры, описанные в этом разделе, предназначены для использования только в исключительных случаях и не являются приемлемыми в рамках рутинного заполнения документации GMP. Во всех случаях требуется полное обоснование использования этих процедур
+5.9.1. Any retrospective entries that have to be made to a document must be clearly identified as such and an initialed/dated comment included which explains / Любые ретроспективные записи, которые необходимо внести в документ, должны быть четко обозначены как таковые и сопровождаться комментарием с инициалами/датой, который объясняет;
+5.9.1.1. Why the entry is being made retrospectively e.g. "missing entry due 	to operator not completing document at the time of operation" and / Почему запись вносится ретроспективно, например, "пропущена запись из-за того, что оператор не заполнил документ во время операции" и
+5.9.1.2. How the validity of the entry can be assured. / Как можно гарантировать правильность записи
+5.9.2. If the validity of any process critical entry cannot be assured retrospectively then an NCR must be raised. / Если достоверность какой-либо критически важной записи процесса не может быть подтверждена ретроспективно, то должен быть поднят вопрос об ограничении доступа
+	Note/ Примечание: Retrospective entries must never be backdated to the (assumed) time that 		          operations were performed / Ретроспективные записи ни в коем случае нельзя относить задним числом к (предполагаемому) времени выполнения операций
+5.10. If the QA issued documentation intended for the task is not available the following steps should be followed / Если документация по обеспечению качества, предназначенная для выполнения задачи, недоступна, необходимо выполнить следующие действия:
+5.10.1. If it is necessary to record information associated with a GMP procedure on anything other than documentation issued by QA for that specific purpose, then the additional documentation must be completed using the principles outlined in this SOP. / Если необходимо зафиксировать информацию, связанную с процедурой GMP, в какой-либо другой документации, кроме документации, выданной отделом контроля качества для этой конкретной цели, то дополнительная документация должна быть заполнена с использованием принципов, изложенных в данном SOP
+5.10.2. The additional documentation should be carried out on A4 paper. / Дополнительная документация должна быть оформлена на бумаге формата А4
+5.10.3. The information recorded should be transferred to QA issued documentation, if applicable, as soon as possible. An operator and a checker must sign and date to indicate the information is transcribed correctly. / Записанная информация должна быть как можно скорее включена в документацию, выданную службой контроля качества, если это применимо. Оператор и проверяющий должны поставить подписи и дату, чтобы указать, что информация расшифрована правильно
+5.10.4. A comment justifying why QA issued documentation could not be used at the time the procedure was performed. / Комментарий, объясняющий, почему выданная ДОК документация не могла быть использована во время выполнения процедуры.
+5.10.5. Each page should be labeled, on each page, with an initialed and dated comment including information to allow traceability, e.g. batch number, document / section reference. / Каждая страница должна быть помечена инициалами и датой, включая информацию, обеспечивающую прослеживаемость, например, номер партии, ссылку на документ/раздел.
+5.10.6. The additional documentation must be attached to the appropriate QA issued documentation (Refer Point No. 5.7). / Дополнительная документация должна быть приложена к соответствующей документации (см. пункт 5.7).
+5.10.7. The additional documentation must be referenced on the appropriate QA issued documentation in an initial and dated comment. / Ссылка на дополнительную документацию должна быть указана в соответствующей документации, выданной по обеспечению качества, в первоначальном комментарии с указанием даты
+5.11. Final Steps / Заключение
+5.11.1. At the end of the task check that all the pages are present, are in order and have been completed in the correct manner. Refer to the appropriate SOP for further action. / В конце выполнения задания убедитесь, что все страницы присутствуют, находятся в порядке и заполнены надлежащим образом. Для дальнейших действий обратитесь к соответствующему SOP.
+
+6. APPENDIX/ ПРИЛОЖЕНИЯ
+- None/ Отсутствуют 
+7.  ЛИСТ РЕГИСТРАЦИИ ИЗМЕНЕНИЙ/CHANGE REGISTER SHEET:
+№Содержание изменения/Content of ChangeДата внесения изменения/Date of ChangeЛист/Page NoКто вносит изменения (фамилия И. О.)/ Change Initiated By (Name)Подпись/Signature                     
+
+
+8.   ЛИСТ ВЫДАЧИ ДОКУМЕНТОВ/ DOCUMENT ISSUE RECORD: 
+№ п/п/S. No.Наименование документа/ Document TitleДата выдачи/Copy Issue DateКому выдан/ Issued ToКопия №/ Copy No.Выдал/Issued ByПринял/Received ByИзъятие копии документа/Document Copy WithdrawalДата изъятия/ Date of WithdrawalПодпись получившего/Signature of Receiver
+9.  ЛИСТ ОЗНАКОМЛЕНИЯ/READER'S ACKNOWLEDGEMENT SHEET:
+№
+п/п/ S. No.Дата/DateФИО сотрудника, ознакомившегося с документом/Employee Name (of Acknowledgement)Должность сотрудника/Employee DesignationПодписи/SignaturesОзнакомившийся с документом/Acknowledged ByОтветственный за документ/Document Owner
+
+
+
+
+
+
+
+SOP- 121 Good Recording Practice/Правила ведения записейEdition № 0Page: 7 of 7
+
+
+
+
+
+SOP- 121 Good Recording Practice/Правила ведения записейEdition № 0Page: 1 of 7Developer:
+Hodjimahamedov Nodir
+Name: 
+Document specialist.
+
+
+
+
+
+
+
+
+Signature:
+Date:Agreed:
+
+Head of production & RnD
+_______________________ Babar Hussain
+
+Head of QC
+_______________________ Khalmetova L.R.
+
+Foreman
+_______________________ Seitova Vayde
+
+Technologist
+_______________________ Shamsiev Mansur
+
+Warehouse manager
+_______________________ Rahmatov Laziz
+
+Chief engineer
+_______________________ Rustamov Ikrom
+
+Director of Manufacturing project and Engineering
+_______________________ Ashish Sehgal
+
+
+Date:Approved:
+Position:
+Head of QA
+Name: Filatov P.A.
+
+
+
+
+
+
+
+
+Signature:
+Date:Validity period:
+From"____" ________________y.
+To "____" _________________y.
+Extended to
+"____" ___________________y.Status:
+Current
+	
+OutdatedCopy № 
+
+__________________________
+/Signature/
+when sending out a document
+
+
+
