@@ -11,12 +11,23 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from app.db import get_database_url, get_sqlite_db_path
+
 app = FastAPI(title="GMP Pilot App", version="0.1.0")
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "gmp_pilot.db"
 UI_PATH = BASE_DIR / "app" / "ui.html"
+DATABASE_URL = get_database_url()
+
+try:
+    DB_PATH = get_sqlite_db_path(DATABASE_URL)
+except RuntimeError as exc:
+    raise RuntimeError(
+        "Current API runtime still uses sqlite3 in app/main.py and cannot run with non-sqlite DATABASE_URL yet. "
+        "Keep DATABASE_URL as sqlite for runtime, and use PostgreSQL for Alembic migration flow until ORM runtime migration is complete."
+    ) from exc
 
 WAREHOUSE_TYPES = {
     "SUBSTANCE_WAREHOUSE",

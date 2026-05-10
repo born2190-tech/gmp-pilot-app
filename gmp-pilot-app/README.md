@@ -44,6 +44,36 @@ uvicorn app.main:app --reload --app-dir gmp-pilot-app
 
 Server starts at `http://127.0.0.1:8000`.
 
+## Frontend (React + TypeScript + Vite)
+
+The project now includes a frontend app in `gmp-pilot-app/web`:
+
+- React + TypeScript + Vite
+- Tailwind CSS (v4)
+- Component-based UI foundation
+- Bearer auth with `/auth/login` and `/auth/me`
+- Dashboard wired to `/lots` and `/inventory/movements`
+
+Run frontend locally:
+
+```bash
+cd gmp-pilot-app/web
+npm install
+npm run dev
+```
+
+Set backend URL if needed (default `http://127.0.0.1:8000`):
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env`:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
 ## Auth model (pilot)
 
 Every protected request must include header:
@@ -90,3 +120,38 @@ For critical actions requiring e-signature, include `signature` object in reques
 
 - DB file is created at `gmp-pilot-app/data/gmp_pilot.db`.
 - This is a pilot foundation and can be extended without rewriting core controls.
+
+## DB portability & migrations (Sprint 1)
+
+The project now includes SQLAlchemy models and Alembic scaffold for migration-driven schema changes.
+
+- Default local DB URL: `sqlite:///data/gmp_pilot.db`
+- Override via env: `DATABASE_URL`
+- Alembic config: `gmp-pilot-app/alembic.ini`
+
+Typical flow:
+
+```bash
+cd gmp-pilot-app
+alembic -c alembic.ini stamp 20260510_0001
+alembic -c alembic.ini revision --autogenerate -m "next change"
+alembic -c alembic.ini upgrade head
+```
+
+For PostgreSQL target environments, set:
+
+```env
+DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname
+```
+
+For local Docker Compose PostgreSQL in this repo, use:
+
+```env
+DATABASE_URL=postgresql+psycopg://gmp_user:gmp_pass@127.0.0.1:5433/gmp_pilot
+```
+
+Important current status:
+
+- Alembic/SQLAlchemy portability scaffold is in place.
+- API runtime in `app/main.py` still executes via `sqlite3` and requires a sqlite `DATABASE_URL` for now.
+- Full runtime switch to PostgreSQL will happen during the next backend migration step (moving endpoint data access from `sqlite3` to SQLAlchemy sessions).

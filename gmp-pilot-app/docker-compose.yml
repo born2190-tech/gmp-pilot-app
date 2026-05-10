@@ -1,14 +1,38 @@
 services:
+  gmp-pilot-postgres:
+    image: postgres:16-alpine
+    container_name: gmp-pilot-postgres
+    environment:
+      POSTGRES_DB: gmp_pilot
+      POSTGRES_USER: gmp_user
+      POSTGRES_PASSWORD: gmp_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - gmp_pilot_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gmp_user -d gmp_pilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   gmp-pilot-api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: gmp-pilot-api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///data/gmp_pilot.db}
     ports:
       - "8001:8000"
     volumes:
       - gmp_pilot_data:/app/data
     restart: unless-stopped
+    depends_on:
+      gmp-pilot-postgres:
+        condition: service_healthy
 
 volumes:
   gmp_pilot_data:
+  gmp_pilot_postgres_data:
