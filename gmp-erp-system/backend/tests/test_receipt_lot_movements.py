@@ -6,7 +6,7 @@ from app.core.database import SessionLocal
 from app.main import create_app
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession
-from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
+from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import QCReport, QCReportParameter
 from app.services.seed import seed_foundation_data
@@ -20,6 +20,8 @@ def reset_inventory_data() -> None:
         db.query(QCReportParameter).delete()
         db.query(QCReport).delete()
         db.query(InventoryMovement).delete()
+        db.query(InventoryCountLine).delete()
+        db.query(InventoryCountDocument).delete()
         db.query(FGShipmentLine).delete()
         db.query(FGShipmentDocument).delete()
         db.query(Lot).delete()
@@ -336,3 +338,37 @@ def test_finished_goods_shipment_records_customer_traceability_and_reduces_stock
     movements = client.get("/api/inventory/movements", headers=headers).json()["movements"]
     assert movements[0]["movement_type"] == "SHIPMENT"
     assert movements[0]["quantity_delta"] == -250
+
+
+def test_inventory_count_posts_variance_and_updates_stock_with_signature() -> None:
+    reset_inventory_data()
+    client = TestClient(create_app())
+    lot_id, _, token = create_posted_lot(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.post(
+        "/api/inventory/counts",
+        headers=headers,
+        json={
+            "document_no": "INV-2026-0001",
+            "count_date": "2026-05-10",
+            "lines": [{"lot_id": lot_id, "actual_quantity": 123.0}],
+            "username": "warehouse_substance",
+            "password": "whs123",
+            "meaning": "Post inventory count",
+            "reason": "Scheduled cycle count",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["document_no"] == "INV-2026-0001"
+    assert response.json()["lines"][0]["system_quantity"] == 125.5
+    assert response.json()["lines"][0]["variance"] == -2.5
+
+    lots = client.get("/api/inventory/lots", headers=headers).json()["lots"]
+    counted_lot = next(item for item in lots if item["id"] == lot_id)
+    assert counted_lot["quantity"] == 123.0
+
+    movements = client.get("/api/inventory/movements", headers=headers).json()["movements"]
+    assert movements[0]["movement_type"] == "INVENTORY_COUNT"
+    assert movements[0]["quantity_delta"] == -2.5

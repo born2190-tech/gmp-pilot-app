@@ -120,3 +120,30 @@ class FGShipmentLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     shipment: Mapped[FGShipmentDocument] = relationship()
     lot: Mapped[Lot] = relationship()
+
+
+class InventoryCountDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "inventory_count_documents"
+
+    document_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=False)
+    count_date: Mapped[date] = mapped_column(Date, nullable=False)
+    posted_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    posted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    warehouse: Mapped[Warehouse] = relationship()
+
+
+class InventoryCountLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "inventory_count_lines"
+
+    count_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("inventory_count_documents.id"), nullable=False)
+    lot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lots.id"), nullable=False)
+    system_quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    actual_quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    variance: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    count: Mapped[InventoryCountDocument] = relationship()
+    lot: Mapped[Lot] = relationship()

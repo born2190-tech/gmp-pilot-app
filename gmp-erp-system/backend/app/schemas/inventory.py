@@ -139,6 +139,43 @@ class FGShipmentsResponse(BaseModel):
     shipments: list[FGShipmentItem]
 
 
+class InventoryCountLineCreate(BaseModel):
+    lot_id: UUID
+    actual_quantity: float = Field(ge=0)
+
+
+class InventoryCountCreate(SignatureRequest):
+    document_no: str = Field(min_length=1, max_length=64)
+    count_date: date
+    lines: list[InventoryCountLineCreate] = Field(min_length=1)
+
+
+class InventoryCountLineItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    lot_id: UUID
+    internal_lot: str
+    material_code: str
+    system_quantity: float
+    actual_quantity: float
+    variance: float
+    unit: str
+
+
+class InventoryCountItem(BaseModel):
+    id: UUID
+    document_no: str
+    status: str
+    warehouse_type: str
+    count_date: date
+    posted_at: datetime
+    lines: list[InventoryCountLineItem]
+
+
+class InventoryCountsResponse(BaseModel):
+    counts: list[InventoryCountItem]
+
+
 class MovementItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -5,6 +5,7 @@ import { WarehouseDashboard } from './features/dashboard/WarehouseDashboard'
 import { WarehouseCenterPage } from './features/inventory/WarehouseCenterPage'
 import { LotsBoardPage } from './features/inventory/LotsBoardPage'
 import { FGShipmentsPage } from './features/inventory/FGShipmentsPage'
+import { InventoryCountPage } from './features/inventory/InventoryCountPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
 import { ReceiptDocumentPage } from './features/inventory/ReceiptDocumentPage'
 import { WarehouseOperationsPage } from './features/inventory/WarehouseOperationsPage'
@@ -93,6 +94,8 @@ export function App() {
       <WarehouseOperationsPage token={token} user={user} />
     ) : route === 'fg-shipments' ? (
       <FGShipmentsPage token={token} user={user} />
+    ) : route === 'inventory-counts' ? (
+      <InventoryCountPage token={token} user={user} />
     ) : route === 'receipt-documents' ? (
       <ReceiptDocumentPage token={token} username={user.username} />
     ) : route === 'master-data' ? (

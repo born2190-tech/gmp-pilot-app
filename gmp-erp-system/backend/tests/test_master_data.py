@@ -4,7 +4,7 @@ from app.core.database import SessionLocal
 from app.main import create_app
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession, Department, Permission, Role, User, role_permissions
-from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
+from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import QCReport, QCReportParameter
 from app.services.seed import seed_foundation_data
@@ -18,6 +18,8 @@ def reset_seeded_data() -> None:
         db.query(QCReportParameter).delete()
         db.query(QCReport).delete()
         db.query(InventoryMovement).delete()
+        db.query(InventoryCountLine).delete()
+        db.query(InventoryCountDocument).delete()
         db.query(FGShipmentLine).delete()
         db.query(FGShipmentDocument).delete()
         db.query(ReceiptLine).delete()

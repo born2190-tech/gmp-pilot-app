@@ -5,9 +5,9 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
-from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
+from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.schemas.inventory import AdjustLotRequest, FGShipmentCreate, IssueProductionRequest, ReceiptCreate, SignatureRequest, TransferLotRequest
+from app.schemas.inventory import AdjustLotRequest, FGShipmentCreate, InventoryCountCreate, IssueProductionRequest, ReceiptCreate, SignatureRequest, TransferLotRequest
 from app.services.audit import write_audit
 from app.services.permissions import require_permission, require_warehouse_type_scope
 from app.services.signature import validate_signature
@@ -376,3 +376,82 @@ def create_fg_shipment(db: Session, user: CurrentUser, payload: FGShipmentCreate
     db.commit()
     db.refresh(shipment)
     return shipment
+
+
+def create_inventory_count(db: Session, user: CurrentUser, payload: InventoryCountCreate) -> InventoryCountDocument:
+    require_permission(user, "POST_RECEIPT")
+    if db.query(InventoryCountDocument).filter(InventoryCountDocument.document_no == payload.document_no).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Inventory count document number already exists")
+
+    first_lot = get_lot_for_operation(db, user, payload.lines[0].lot_id)
+    warehouse = get_required(db, Warehouse, first_lot.warehouse_id, "Warehouse")
+    validate_signature(db, user, payload, "POST_INVENTORY_COUNT", "inventory_count_document", payload.document_no)
+    count = InventoryCountDocument(
+        document_no=payload.document_no,
+        status="posted",
+        warehouse_id=warehouse.id,
+        count_date=payload.count_date,
+        posted_by=user.id,
+        posted_at=now_utc(),
+    )
+    db.add(count)
+    db.flush()
+
+    for line in payload.lines:
+        lot = get_lot_for_operation(db, user, line.lot_id)
+        if lot.warehouse_id != warehouse.id:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="All counted lots must belong to one warehouse")
+        old_quantity = lot.quantity
+        variance = line.actual_quantity - old_quantity
+        lot.quantity = line.actual_quantity
+        db.add(
+            InventoryCountLine(
+                count_id=count.id,
+                lot_id=lot.id,
+                system_quantity=old_quantity,
+                actual_quantity=line.actual_quantity,
+                variance=variance,
+                unit=lot.unit,
+            )
+        )
+        db.add(
+            InventoryMovement(
+                movement_type="INVENTORY_COUNT",
+                document_type="inventory_count",
+                document_id=count.id,
+                lot_id=lot.id,
+                from_warehouse_id=lot.warehouse_id,
+                from_location_id=lot.location_id,
+                to_warehouse_id=lot.warehouse_id,
+                to_location_id=lot.location_id,
+                quantity_delta=variance,
+                quantity_after=lot.quantity,
+                unit=lot.unit,
+                reason=payload.reason,
+                user_id=user.id,
+                workstation_id=user.workstation_id,
+            )
+        )
+        write_audit(
+            db,
+            user,
+            object_type="lot",
+            object_id=str(lot.id),
+            action_type="POST_INVENTORY_COUNT",
+            old_value={"quantity": old_quantity},
+            new_value={"quantity": lot.quantity, "variance": variance, "document_no": payload.document_no},
+            reason=payload.reason,
+        )
+
+    write_audit(
+        db,
+        user,
+        object_type="inventory_count_document",
+        object_id=str(count.id),
+        action_type="POST_INVENTORY_COUNT",
+        new_value={"document_no": count.document_no, "warehouse_type": warehouse.warehouse_type, "lines": len(payload.lines)},
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(count)
+    return count

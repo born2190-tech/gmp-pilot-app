@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
-from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryMovement, Lot
+from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
 from app.schemas.inventory import (
     AdjustLotRequest,
@@ -13,6 +13,10 @@ from app.schemas.inventory import (
     FGShipmentItem,
     FGShipmentLineItem,
     FGShipmentsResponse,
+    InventoryCountCreate,
+    InventoryCountItem,
+    InventoryCountLineItem,
+    InventoryCountsResponse,
     IssueProductionRequest,
     LotOperationResponse,
     LotsResponse,
@@ -23,7 +27,7 @@ from app.schemas.inventory import (
     SignatureRequest,
     TransferLotRequest,
 )
-from app.services.inventory import adjust_lot, create_fg_shipment, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
+from app.services.inventory import adjust_lot, create_fg_shipment, create_inventory_count, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
 from app.services.permissions import require_permission
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
@@ -95,6 +99,35 @@ def shipment_item(db: Session, shipment: FGShipmentDocument) -> FGShipmentItem:
         waybill_no=shipment.waybill_no,
         posted_at=shipment.posted_at,
         lines=[FGShipmentLineItem.model_validate(row) for row in rows],
+    )
+
+
+def count_item(db: Session, count: InventoryCountDocument) -> InventoryCountItem:
+    warehouse = db.get(Warehouse, count.warehouse_id)
+    rows = (
+        db.query(
+            InventoryCountLine.lot_id,
+            Lot.internal_lot,
+            Material.code.label("material_code"),
+            InventoryCountLine.system_quantity,
+            InventoryCountLine.actual_quantity,
+            InventoryCountLine.variance,
+            InventoryCountLine.unit,
+        )
+        .join(Lot, Lot.id == InventoryCountLine.lot_id)
+        .join(Material, Material.id == Lot.material_id)
+        .filter(InventoryCountLine.count_id == count.id)
+        .order_by(InventoryCountLine.created_at)
+        .all()
+    )
+    return InventoryCountItem(
+        id=count.id,
+        document_no=count.document_no,
+        status=count.status,
+        warehouse_type=warehouse.warehouse_type if warehouse else "",
+        count_date=count.count_date,
+        posted_at=count.posted_at,
+        lines=[InventoryCountLineItem.model_validate(row) for row in rows],
     )
 
 
@@ -172,6 +205,28 @@ def list_fg_shipments(
     if current_user.warehouse_scope and current_user.warehouse_scope != "FG_WAREHOUSE":
         return FGShipmentsResponse(shipments=[])
     return FGShipmentsResponse(shipments=[shipment_item(db, shipment) for shipment in query.all()])
+
+
+@router.post("/counts", response_model=InventoryCountItem)
+def create_inventory_count_route(
+    payload: InventoryCountCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryCountItem:
+    count = create_inventory_count(db, current_user, payload)
+    return count_item(db, count)
+
+
+@router.get("/counts", response_model=InventoryCountsResponse)
+def list_inventory_counts(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryCountsResponse:
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    query = db.query(InventoryCountDocument).join(Warehouse, Warehouse.id == InventoryCountDocument.warehouse_id).order_by(InventoryCountDocument.posted_at.desc())
+    if current_user.warehouse_scope:
+        query = query.filter(Warehouse.warehouse_type == current_user.warehouse_scope)
+    return InventoryCountsResponse(counts=[count_item(db, count) for count in query.all()])
 
 
 @router.get("/lots", response_model=LotsResponse)

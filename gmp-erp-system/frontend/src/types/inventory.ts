@@ -223,6 +223,39 @@ export interface FGShipmentsResponse {
   shipments: FGShipmentItem[]
 }
 
+export interface InventoryCountCreate extends SignatureRequest {
+  document_no: string
+  count_date: string
+  lines: Array<{
+    lot_id: string
+    actual_quantity: number
+  }>
+}
+
+export interface InventoryCountLineItem {
+  lot_id: string
+  internal_lot: string
+  material_code: string
+  system_quantity: number
+  actual_quantity: number
+  variance: number
+  unit: string
+}
+
+export interface InventoryCountItem {
+  id: string
+  document_no: string
+  status: string
+  warehouse_type: string
+  count_date: string
+  posted_at: string
+  lines: InventoryCountLineItem[]
+}
+
+export interface InventoryCountsResponse {
+  counts: InventoryCountItem[]
+}
+
 export interface ReceiptCreate {
   document_no: string
   supplier_id: string

@@ -15,6 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.lots', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'lots' },
   { labelKey: 'nav.movements', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'movements' },
   { labelKey: 'nav.warehouseOperations', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'warehouse-operations' },
+  { labelKey: 'nav.inventoryCounts', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'inventory-counts' },
   { labelKey: 'nav.fgShipments', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'fg-shipments' },
   { labelKey: 'nav.masterData', section: 'reference', permission: 'VIEW_MASTER_DATA', route: 'master-data' },
   { labelKey: 'nav.qcTasks', section: 'qc', permission: 'VIEW_QC', route: 'qc-tasks' },

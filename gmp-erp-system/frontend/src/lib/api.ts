@@ -6,6 +6,9 @@ import type {
   FGShipmentCreate,
   FGShipmentItem,
   FGShipmentsResponse,
+  InventoryCountCreate,
+  InventoryCountItem,
+  InventoryCountsResponse,
   IssueProductionRequest,
   ManufacturerCreate,
   ManufacturerItem,
@@ -134,6 +137,14 @@ export function createFgShipment(token: string, payload: FGShipmentCreate): Prom
 
 export function listFgShipments(token: string): Promise<FGShipmentsResponse> {
   return request<FGShipmentsResponse>('/api/inventory/fg-shipments', 'GET', { token })
+}
+
+export function createInventoryCount(token: string, payload: InventoryCountCreate): Promise<InventoryCountItem> {
+  return request<InventoryCountItem>('/api/inventory/counts', 'POST', { token, body: payload })
+}
+
+export function listInventoryCounts(token: string): Promise<InventoryCountsResponse> {
+  return request<InventoryCountsResponse>('/api/inventory/counts', 'GET', { token })
 }
 
 export function createReceipt(token: string, payload: ReceiptCreate): Promise<ReceiptResponse> {
