@@ -1429,51 +1429,74 @@ def create_sampling_task(
     lot_id: int,
     payload: SamplingTaskRequest,
     user: AuthUser = Depends(get_current_user),
+    db_session: Any = Depends(get_session),
 ) -> dict[str, Any]:
     require_permission(user, "CREATE_SAMPLING_TASK")
-    db = get_db()
     try:
-        lot = get_lot(db, lot_id)
-        enforce_warehouse_scope(user, lot["warehouse_type"])
-        if lot["quality_status"] not in {"quarantine", "sampled"}:
+        lot = db_session.query(Lot).filter(Lot.id == lot_id).first()
+        if not lot:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lot not found")
+
+        enforce_warehouse_scope(user, lot.warehouse_type)
+        if lot.quality_status not in {"quarantine", "sampled"}:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Sampling allowed only for quarantine/sampled lots")
 
-        validate_signature(db, user, payload.signature, "CREATE_SAMPLING_TASK", "lot", str(lot_id))
-        profile = get_profile_by_warehouse_type(lot["warehouse_type"])
+        validate_signature_orm(db_session, user, payload.signature, "CREATE_SAMPLING_TASK", "lot", str(lot_id))
+        profile = get_profile_by_warehouse_type(lot.warehouse_type)
         test_name = payload.test_name or profile["default_test_name"]
         specification_ref = payload.specification_ref or profile["default_specification_ref"]
 
-        db.execute(
-            """
-            INSERT INTO sampling_tasks(lot_id, test_name, specification_ref, status, created_by, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (lot_id, test_name, specification_ref, "open", user.username, now_utc()),
+        task = SamplingTask(
+            lot_id=lot_id,
+            test_name=test_name,
+            specification_ref=specification_ref,
+            status="open",
+            created_by=user.username,
+            created_at=now_utc(),
         )
-        task_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db_session.add(task)
+        db_session.flush()
+        task_id = task.id
+
         incoming_control_notified_at = now_utc()
-        db.execute("UPDATE lots SET incoming_control_notified_at = ? WHERE id = ?", (incoming_control_notified_at, lot_id))
+        lot.incoming_control_notified_at = incoming_control_notified_at
 
-        if lot["quality_status"] == "quarantine":
-            db.execute("UPDATE lots SET quality_status = ? WHERE id = ?", ("sampled", lot_id))
+        if lot.quality_status == "quarantine":
+            lot.quality_status = "sampled"
 
-        write_audit(
-            db,
-            user,
-            object_type="sampling_task",
-            object_id=str(task_id),
-            action_type="CREATE_SAMPLING_TASK",
-            new_value={"lot_id": lot_id, "test_name": test_name, "specification_ref": specification_ref, "warehouse_type": lot["warehouse_type"]},
+        db_session.add(
+            AuditEvent(
+                timestamp_utc=now_utc(),
+                user_id=user.username,
+                role_at_time=user.role,
+                object_type="sampling_task",
+                object_id=str(task_id),
+                action_type="CREATE_SAMPLING_TASK",
+                old_value=None,
+                new_value=json.dumps(
+                    {
+                        "lot_id": lot_id,
+                        "test_name": test_name,
+                        "specification_ref": specification_ref,
+                        "warehouse_type": lot.warehouse_type,
+                    }
+                ),
+                reason=None,
+                source="API",
+                correlation_id=None,
+            )
         )
-        db.commit()
+
+        db_session.commit()
         return {
             "task_id": task_id,
             "status": "open",
             "lot_id": lot_id,
             "incoming_control_notified_at": incoming_control_notified_at,
         }
-    finally:
-        db.close()
+    except Exception:
+        db_session.rollback()
+        raise
 
 
 @app.post("/qc/results")
