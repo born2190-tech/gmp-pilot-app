@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.db import SessionLocal, get_database_url, get_sqlite_db_path
-from app.models import AuditEvent, AuthSession, Deviation, InventoryMovement, Lot, Material, SamplingTask, User
+from app.models import AuditEvent, AuthSession, Deviation, InventoryMovement, Lot, Material, SamplingTask, SignatureEvent, User
 
 app = FastAPI(title="GMP Pilot App", version="0.1.0")
 
@@ -738,6 +738,61 @@ def validate_signature(
     return signer
 
 
+def validate_signature_orm(
+    db_session: Any,
+    actor: AuthUser,
+    signature: SignatureRequest,
+    action_type: str,
+    object_type: str,
+    object_id: str,
+    require_role: Optional[str] = None,
+    require_different_user: bool = False,
+) -> Any:
+    signer = db_session.query(User).filter(User.username == signature.username).first()
+    if not signer:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown user")
+
+    if signer.password != signature.password:
+        db_session.add(
+            SignatureEvent(
+                username=signature.username,
+                role=signer.role,
+                action_type=action_type,
+                object_type=object_type,
+                object_id=object_id,
+                meaning=signature.meaning,
+                comment=signature.comment,
+                result="failed",
+                created_at=now_utc(),
+            )
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid signature password")
+
+    if require_role and signer.role != require_role:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Signature requires role {require_role}")
+
+    if require_different_user and signer.username == actor.username:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Second signature must be from a different user")
+
+    if signer.username != actor.username and require_role is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signature user must match acting user")
+
+    db_session.add(
+        SignatureEvent(
+            username=signer.username,
+            role=signer.role,
+            action_type=action_type,
+            object_type=object_type,
+            object_id=object_id,
+            meaning=signature.meaning,
+            comment=signature.comment,
+            result="success",
+            created_at=now_utc(),
+        )
+    )
+    return signer
+
+
 def get_lot(db: sqlite3.Connection, lot_id: int) -> sqlite3.Row:
     lot = db.execute("SELECT * FROM lots WHERE id = ?", (lot_id,)).fetchone()
     if not lot:
@@ -934,84 +989,97 @@ def get_lot_incoming_control_profile(
 
 
 @app.post("/materials/receipts")
-def create_material_receipt(payload: MaterialReceiptRequest, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
+def create_material_receipt(
+    payload: MaterialReceiptRequest,
+    user: AuthUser = Depends(get_current_user),
+    db_session: Any = Depends(get_session),
+) -> dict[str, Any]:
     require_permission(user, "CREATE_RECEIPT")
     if payload.warehouse_type not in WAREHOUSE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown warehouse_type")
     enforce_warehouse_scope(user, payload.warehouse_type)
 
-    db = get_db()
     try:
-        validate_signature(db, user, payload.signature, "CREATE_RECEIPT", "material_receipt", "new")
+        validate_signature_orm(db_session, user, payload.signature, "CREATE_RECEIPT", "material_receipt", "new")
 
         created_at = now_utc()
-        db.execute(
-            "INSERT INTO materials(material_code, material_name, created_at) VALUES (?, ?, ?)",
-            (payload.material_code, payload.material_name, created_at),
+        material = Material(
+            material_code=payload.material_code,
+            material_name=payload.material_name,
+            created_at=created_at,
         )
-        material_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db_session.add(material)
+        db_session.flush()
+        material_id = material.id
 
         internal_lot = f"LOT-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{material_id}"
-        db.execute(
-            """
-            INSERT INTO lots(
-                material_id, supplier_lot, internal_lot, warehouse_type, production_year, expiry_date,
-                quantity, unit, location, quality_status, incoming_control_notified_at, qc_result_received_at, created_at
+        lot = Lot(
+            material_id=material_id,
+            supplier_lot=payload.supplier_lot,
+            internal_lot=internal_lot,
+            warehouse_type=payload.warehouse_type,
+            production_year=payload.production_year,
+            expiry_date=payload.expiry_date,
+            quantity=payload.quantity,
+            unit=payload.unit,
+            location=payload.location,
+            quality_status="received",
+            incoming_control_notified_at=None,
+            qc_result_received_at=None,
+            created_at=created_at,
+        )
+        db_session.add(lot)
+        db_session.flush()
+        lot_id = lot.id
+
+        db_session.add(
+            InventoryMovement(
+                timestamp_utc=now_utc(),
+                movement_type="RECEIPT",
+                lot_id=lot_id,
+                material_id=material_id,
+                warehouse_type=payload.warehouse_type,
+                quantity_delta=payload.quantity,
+                quantity_after=payload.quantity,
+                unit=payload.unit,
+                reference_type="material_receipt",
+                reference_id=str(lot_id),
+                user_id=user.username,
+                comment="Приход на склад",
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                material_id,
-                payload.supplier_lot,
-                internal_lot,
-                payload.warehouse_type,
-                payload.production_year,
-                payload.expiry_date,
-                payload.quantity,
-                payload.unit,
-                payload.location,
-                "received",
-                None,
-                None,
-                created_at,
-            ),
-        )
-        lot_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        lot = db.execute("SELECT * FROM lots WHERE id = ?", (lot_id,)).fetchone()
-
-        write_inventory_movement(
-            db,
-            user,
-            movement_type="RECEIPT",
-            lot=lot,
-            quantity_delta=payload.quantity,
-            quantity_after=payload.quantity,
-            reference_type="material_receipt",
-            reference_id=str(lot_id),
-            comment="Приход на склад",
         )
 
-        write_audit(
-            db,
-            user,
-            object_type="lot",
-            object_id=str(lot_id),
-            action_type="CREATE_RECEIPT",
-            new_value={
-                "material_code": payload.material_code,
-                "supplier_lot": payload.supplier_lot,
-                "warehouse_type": payload.warehouse_type,
-                "internal_lot": internal_lot,
-                "quality_status": "received",
-                "sop_status": to_sop_status("received"),
-                "production_year": payload.production_year,
-                "expiry_date": payload.expiry_date,
-                "quantity": payload.quantity,
-                "unit": payload.unit,
-                "location": payload.location,
-            },
+        db_session.add(
+            AuditEvent(
+                timestamp_utc=now_utc(),
+                user_id=user.username,
+                role_at_time=user.role,
+                object_type="lot",
+                object_id=str(lot_id),
+                action_type="CREATE_RECEIPT",
+                old_value=None,
+                new_value=json.dumps(
+                    {
+                        "material_code": payload.material_code,
+                        "supplier_lot": payload.supplier_lot,
+                        "warehouse_type": payload.warehouse_type,
+                        "internal_lot": internal_lot,
+                        "quality_status": "received",
+                        "sop_status": to_sop_status("received"),
+                        "production_year": payload.production_year,
+                        "expiry_date": payload.expiry_date,
+                        "quantity": payload.quantity,
+                        "unit": payload.unit,
+                        "location": payload.location,
+                    }
+                ),
+                reason=None,
+                source="API",
+                correlation_id=None,
+            )
         )
-        db.commit()
+
+        db_session.commit()
         return {
             "lot_id": lot_id,
             "internal_lot": internal_lot,
@@ -1022,8 +1090,9 @@ def create_material_receipt(payload: MaterialReceiptRequest, user: AuthUser = De
             "expiry_date": payload.expiry_date,
             "message": "Material receipt created",
         }
-    finally:
-        db.close()
+    except Exception:
+        db_session.rollback()
+        raise
 
 
 @app.get("/lots")
