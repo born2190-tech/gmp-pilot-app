@@ -10,6 +10,7 @@ export interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.warehouseDashboard', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'warehouse-dashboard' },
+  { labelKey: 'nav.warehouseCenter', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'warehouse-center' },
   { labelKey: 'nav.receiptDocuments', section: 'warehouse', permission: 'CREATE_RECEIPT', route: 'receipt-documents' },
   { labelKey: 'nav.lots', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'lots' },
   { labelKey: 'nav.movements', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'movements' },

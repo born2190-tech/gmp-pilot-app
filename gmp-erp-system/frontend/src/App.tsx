@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { LoginPage } from './features/auth/LoginPage'
 import { WarehouseDashboard } from './features/dashboard/WarehouseDashboard'
+import { WarehouseCenterPage } from './features/inventory/WarehouseCenterPage'
 import { LotsBoardPage } from './features/inventory/LotsBoardPage'
 import { FGShipmentsPage } from './features/inventory/FGShipmentsPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
@@ -82,7 +83,9 @@ export function App() {
   const visibleNav = getVisibleNavItems(user)
   const route = visibleNav.some((item) => item.route === activeRoute) ? activeRoute : visibleNav[0]?.route
   const content =
-    route === 'lots' ? (
+    route === 'warehouse-center' ? (
+      <WarehouseCenterPage token={token} />
+    ) : route === 'lots' ? (
       <LotsBoardPage token={token} />
     ) : route === 'movements' ? (
       <MovementsPage token={token} />
