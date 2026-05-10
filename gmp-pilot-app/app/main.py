@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -135,6 +136,21 @@ class QCResultRequest(BaseModel):
     signature: SignatureRequest
 
 
+class QCParameterResultRequest(BaseModel):
+    parameter_name: str
+    value: float
+    unit: str
+    lower_limit: Optional[float] = None
+    upper_limit: Optional[float] = None
+    instrument: str
+
+
+class QCBatchReportRequest(BaseModel):
+    task_id: int
+    results: list[QCParameterResultRequest] = Field(min_length=1)
+    signature: SignatureRequest
+
+
 class QAReleaseRequest(BaseModel):
     lot_id: int
     decision: Literal["released", "blocked", "rejected"]
@@ -198,6 +214,46 @@ class AuthUser(BaseModel):
     role: str
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: str
+    username: str
+    role: str
+
+
+def ensure_column(db: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:
+    cols = db.execute(f"PRAGMA table_info({table_name})").fetchall()
+    existing = {row["name"] for row in cols}
+    if column_name not in existing:
+        db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
+
+def ensure_qc_schema(db: sqlite3.Connection) -> None:
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS qc_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            lot_id INTEGER NOT NULL,
+            parameters_count INTEGER NOT NULL,
+            overall_out_of_spec INTEGER NOT NULL,
+            entered_by TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(task_id) REFERENCES sampling_tasks(id),
+            FOREIGN KEY(lot_id) REFERENCES lots(id)
+        )
+        """
+    )
+    ensure_column(db, "qc_results", "report_id", "INTEGER")
+    ensure_column(db, "qc_results", "parameter_name", "TEXT")
+
+
 def ensure_tables() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     db = get_db()
@@ -244,8 +300,10 @@ def ensure_tables() -> None:
 
             CREATE TABLE IF NOT EXISTS qc_results (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_id INTEGER,
                 task_id INTEGER NOT NULL,
                 lot_id INTEGER NOT NULL,
+                parameter_name TEXT,
                 value REAL NOT NULL,
                 unit TEXT NOT NULL,
                 lower_limit REAL,
@@ -254,6 +312,7 @@ def ensure_tables() -> None:
                 instrument TEXT NOT NULL,
                 entered_by TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                FOREIGN KEY(report_id) REFERENCES qc_reports(id),
                 FOREIGN KEY(task_id) REFERENCES sampling_tasks(id),
                 FOREIGN KEY(lot_id) REFERENCES lots(id)
             );
@@ -358,8 +417,20 @@ def ensure_tables() -> None:
                 source TEXT NOT NULL,
                 correlation_id TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
             """
         )
+
+        ensure_qc_schema(db)
 
         for username, role, password in SEED_USERS:
             db.execute(
@@ -387,14 +458,35 @@ def get_user_by_username(db: sqlite3.Connection, username: str) -> sqlite3.Row:
     return row
 
 
-def get_current_user(x_user: Optional[str] = Header(default=None, alias="X-User")) -> AuthUser:
-    if not x_user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="X-User header is required")
+def revoke_expired_sessions(db: sqlite3.Connection) -> None:
+    now = now_utc()
+    db.execute("UPDATE auth_sessions SET revoked = 1 WHERE revoked = 0 AND expires_at < ?", (now,))
+
+
+def get_current_user(authorization: Optional[str] = Header(default=None, alias="Authorization")) -> AuthUser:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization Bearer token is required")
+
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bearer token")
 
     db = get_db()
     try:
-        row = get_user_by_username(db, x_user)
-        return AuthUser(username=row["username"], role=row["role"])
+        revoke_expired_sessions(db)
+        session = db.execute(
+            """
+            SELECT s.id, s.expires_at, u.username, u.role
+            FROM auth_sessions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.token = ? AND s.revoked = 0
+            LIMIT 1
+            """,
+            (token,),
+        ).fetchone()
+        if not session:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
+        return AuthUser(username=session["username"], role=session["role"])
     finally:
         db.close()
 
@@ -528,6 +620,55 @@ def ui() -> FileResponse:
     return FileResponse(UI_PATH)
 
 
+@app.post("/auth/login", response_model=LoginResponse)
+def auth_login(payload: LoginRequest) -> LoginResponse:
+    db = get_db()
+    try:
+        revoke_expired_sessions(db)
+        user = get_user_by_username(db, payload.username)
+        if user["password"] != payload.password:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
+
+        token = secrets.token_urlsafe(32)
+        created_at = now_utc()
+        expires_at = (datetime.now(timezone.utc).replace(microsecond=0) + timedelta(hours=12)).isoformat()
+
+        db.execute(
+            """
+            INSERT INTO auth_sessions(user_id, token, created_at, expires_at, revoked)
+            VALUES (?, ?, ?, ?, 0)
+            """,
+            (user["id"], token, created_at, expires_at),
+        )
+        db.commit()
+
+        return LoginResponse(
+            access_token=token,
+            expires_at=expires_at,
+            username=user["username"],
+            role=user["role"],
+        )
+    finally:
+        db.close()
+
+
+@app.post("/auth/logout")
+def auth_logout(current_user: AuthUser = Depends(get_current_user), authorization: Optional[str] = Header(default=None, alias="Authorization")) -> dict[str, str]:
+    token = authorization.removeprefix("Bearer ").strip() if authorization else ""
+    db = get_db()
+    try:
+        db.execute("UPDATE auth_sessions SET revoked = 1 WHERE token = ?", (token,))
+        db.commit()
+    finally:
+        db.close()
+    return {"message": f"Session revoked for {current_user.username}"}
+
+
+@app.get("/auth/me")
+def auth_me(current_user: AuthUser = Depends(get_current_user)) -> dict[str, str]:
+    return {"username": current_user.username, "role": current_user.role}
+
+
 @app.post("/materials/receipts")
 def create_material_receipt(payload: MaterialReceiptRequest, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
     require_permission(user, "CREATE_RECEIPT")
@@ -604,7 +745,12 @@ def list_lots(status_filter: Optional[str] = None, user: AuthUser = Depends(get_
                 l.quality_status,
                 l.created_at,
                 m.material_code,
-                m.material_name
+                m.material_name,
+                EXISTS(
+                    SELECT 1
+                    FROM deviations d
+                    WHERE d.lot_id = l.id AND d.status = 'open'
+                ) AS has_open_deviation
             FROM lots l
             JOIN materials m ON m.id = l.material_id
         """
@@ -631,6 +777,7 @@ def list_lots(status_filter: Optional[str] = None, user: AuthUser = Depends(get_
                     "location": row["location"],
                     "quality_status": row["quality_status"],
                     "created_at": row["created_at"],
+                    "has_open_deviation": bool(row["has_open_deviation"]),
                 }
             )
 
@@ -778,10 +925,35 @@ def create_sampling_task(
 
 @app.post("/qc/results")
 def enter_qc_result(payload: QCResultRequest, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
+    mapped_payload = QCBatchReportRequest(
+        task_id=payload.task_id,
+        results=[
+            QCParameterResultRequest(
+                parameter_name="Primary",
+                value=payload.value,
+                unit=payload.unit,
+                lower_limit=payload.lower_limit,
+                upper_limit=payload.upper_limit,
+                instrument=payload.instrument,
+            )
+        ],
+        signature=payload.signature,
+    )
+    result = enter_qc_report(mapped_payload, user)
+    return {
+        "result_id": result["report_id"],
+        "lot_id": result["lot_id"],
+        "out_of_spec": result["out_of_spec"],
+        "parameters_count": result["parameters_count"],
+    }
+
+
+@app.post("/qc/reports")
+def enter_qc_report(payload: QCBatchReportRequest, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
     require_permission(user, "ENTER_QC_RESULT")
     db = get_db()
     try:
-        validate_signature(db, user, payload.signature, "ENTER_QC_RESULT", "sampling_task", str(payload.task_id))
+        validate_signature(db, user, payload.signature, "ENTER_QC_REPORT", "sampling_task", str(payload.task_id))
 
         task = db.execute("SELECT * FROM sampling_tasks WHERE id = ?", (payload.task_id,)).fetchone()
         if not task:
@@ -789,61 +961,93 @@ def enter_qc_result(payload: QCResultRequest, user: AuthUser = Depends(get_curre
         if task["status"] != "open":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Sampling task is not open")
 
-        out_of_spec = False
-        if payload.lower_limit is not None and payload.value < payload.lower_limit:
-            out_of_spec = True
-        if payload.upper_limit is not None and payload.value > payload.upper_limit:
-            out_of_spec = True
+        overall_out_of_spec = False
+        for param in payload.results:
+            is_oos = False
+            if param.lower_limit is not None and param.value < param.lower_limit:
+                is_oos = True
+            if param.upper_limit is not None and param.value > param.upper_limit:
+                is_oos = True
+            if is_oos:
+                overall_out_of_spec = True
 
         db.execute(
             """
-            INSERT INTO qc_results(task_id, lot_id, value, unit, lower_limit, upper_limit, out_of_spec, instrument, entered_by, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO qc_reports(task_id, lot_id, parameters_count, overall_out_of_spec, entered_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 payload.task_id,
                 task["lot_id"],
-                payload.value,
-                payload.unit,
-                payload.lower_limit,
-                payload.upper_limit,
-                1 if out_of_spec else 0,
-                payload.instrument,
+                len(payload.results),
+                1 if overall_out_of_spec else 0,
                 user.username,
                 now_utc(),
             ),
         )
-        result_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        report_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        for param in payload.results:
+            out_of_spec = False
+            if param.lower_limit is not None and param.value < param.lower_limit:
+                out_of_spec = True
+            if param.upper_limit is not None and param.value > param.upper_limit:
+                out_of_spec = True
+
+            db.execute(
+                """
+                INSERT INTO qc_results(report_id, task_id, lot_id, parameter_name, value, unit, lower_limit, upper_limit, out_of_spec, instrument, entered_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    report_id,
+                    payload.task_id,
+                    task["lot_id"],
+                    param.parameter_name,
+                    param.value,
+                    param.unit,
+                    param.lower_limit,
+                    param.upper_limit,
+                    1 if out_of_spec else 0,
+                    param.instrument,
+                    user.username,
+                    now_utc(),
+                ),
+            )
 
         db.execute("UPDATE sampling_tasks SET status = ? WHERE id = ?", ("completed", payload.task_id))
         db.execute("UPDATE lots SET quality_status = ? WHERE id = ?", ("under_test", task["lot_id"]))
 
-        if out_of_spec:
+        if overall_out_of_spec:
             db.execute(
                 """
                 INSERT INTO deviations(lot_id, source, description, status, created_by, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (task["lot_id"], "QC", "OOS/OOT detected from QC result", "open", user.username, now_utc()),
+                (task["lot_id"], "QC", "OOS/OOT detected from QC batch report", "open", user.username, now_utc()),
             )
 
         write_audit(
             db,
             user,
-            object_type="qc_result",
-            object_id=str(result_id),
-            action_type="ENTER_QC_RESULT",
+            object_type="qc_report",
+            object_id=str(report_id),
+            action_type="ENTER_QC_REPORT",
             new_value={
                 "task_id": payload.task_id,
                 "lot_id": task["lot_id"],
-                "value": payload.value,
-                "unit": payload.unit,
-                "out_of_spec": out_of_spec,
+                "parameters_count": len(payload.results),
+                "out_of_spec": overall_out_of_spec,
             },
-            reason="OOS/OOT" if out_of_spec else None,
+            reason="OOS/OOT" if overall_out_of_spec else None,
         )
         db.commit()
-        return {"result_id": result_id, "lot_id": task["lot_id"], "out_of_spec": out_of_spec}
+        return {
+            "report_id": report_id,
+            "lot_id": task["lot_id"],
+            "out_of_spec": overall_out_of_spec,
+            "parameters_count": len(payload.results),
+        }
     finally:
         db.close()
 

@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GMP Pilot - Prod UI</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 18px; background: #f5f7fc; color: #111; }
+    h1 { margin: 0 0 8px; }
+    .muted { color: #4b5563; font-size: 13px; }
+    .bar, .card { background:#fff; border:1px solid #d7dbe7; border-radius:10px; padding:12px; margin-bottom:10px; }
+    .hidden { display:none; }
+    .tabs { display:flex; gap:8px; margin-bottom:10px; }
+    .tab { border:none; border-radius:8px; padding:8px 12px; background:#cfd7ee; cursor:pointer; font-weight:600; }
+    .tab.active { background:#1f5eff; color:#fff; }
+    .panel { display:none; }
+    .panel.active { display:block; }
+    .grid { display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+    label { display:block; font-size:12px; margin-top:8px; color:#374151; }
+    input, select, button { width:100%; box-sizing:border-box; margin-top:4px; border:1px solid #bcc6df; border-radius:6px; padding:8px; font-size:14px; }
+    button { background:#1f5eff; color:#fff; border:none; cursor:pointer; font-weight:600; }
+    button:disabled { background:#a8b3d1; cursor:not-allowed; }
+    .secondary { background:#475569; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    table { width:100%; border-collapse: collapse; font-size:13px; }
+    th, td { border:1px solid #e5e7eb; padding:6px; text-align:left; vertical-align: top; }
+    th { background:#eef2ff; }
+    .status { font-family: Consolas, monospace; font-size:13px; }
+    .chip { display:inline-block; border:1px solid #c3cae0; border-radius:999px; padding:2px 8px; font-size:12px; background:#eef2ff; }
+    .warn { color:#a16207; font-weight:600; }
+    pre { background:#0f172a; color:#dbeafe; border-radius:10px; padding:12px; min-height:110px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>GMP Pilot Operations</h1>
+  <div class="muted">Prod-first pilot: login + role-based access + stage gates.</div>
+
+  <div id="loginCard" class="card">
+    <h3>Login</h3>
+    <label>Username</label><input id="loginUsername" value="warehouse_operator" />
+    <label>Password</label><input id="loginPassword" type="password" value="wh123" />
+    <button onclick="login()">Sign In</button>
+  </div>
+
+  <div id="appArea" class="hidden">
+    <div class="bar">
+      <div><b>API:</b> <span id="apiBase" class="status"></span></div>
+      <div><b>User:</b> <span id="currentUser" class="status">-</span> | <b>Role:</b> <span id="currentRole" class="status">-</span></div>
+      <div><b>Selected lot:</b> <span id="selectedLot" class="status">-</span> <span id="lotStatusChip" class="chip">-</span> | <b>Selected task:</b> <span id="selectedTask" class="status">-</span></div>
+      <div class="muted" id="gateHint">Система блокирует недопустимые шаги автоматически.</div>
+      <button class="secondary" onclick="logout()">Logout</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" id="tabWarehouse" onclick="openTab('warehouse')">Warehouse</button>
+      <button class="tab" id="tabQc" onclick="openTab('qc')">QC</button>
+      <button class="tab" id="tabQa" onclick="openTab('qa')">QA</button>
+    </div>
+
+    <div id="panelWarehouse" class="panel active">
+      <div class="grid">
+        <div class="card">
+          <h3>New Material Receipt</h3>
+          <label>material_code</label><input id="wh_material_code" value="API-001" />
+          <label>material_name</label><input id="wh_material_name" value="Acetaminophen" />
+          <label>supplier_lot</label><input id="wh_supplier_lot" value="SUP-LOT-1001" />
+          <div class="row">
+            <div><label>quantity</label><input id="wh_qty" type="number" value="100.5" step="0.1" /></div>
+            <div><label>unit</label><input id="wh_unit" value="kg" /></div>
+          </div>
+          <label>location</label><input id="wh_location" value="WH-A-01" />
+          <label>signature meaning</label><input id="wh_sig_meaning" value="Executed by" />
+          <button id="btnReceipt" onclick="createReceipt()">Create Receipt</button>
+        </div>
+
+        <div class="card">
+          <h3>Warehouse Actions</h3>
+          <label>lot_id</label><input id="wh_lot_id" placeholder="select from table" />
+          <button id="btnMoveQuarantine" onclick="moveToQuarantine()">Move to Quarantine</button>
+          <label>Incoming control task name</label><input id="wh_test" value="Incoming Control - Full Panel" />
+          <label>Specification ref</label><input id="wh_spec" value="SPEC-API-001" />
+          <button id="btnCreateSampling" onclick="createSamplingTask()">Create Sampling Task</button>
+          <button class="secondary" onclick="loadLots();loadTasks();">Refresh Boards</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Lots Board</h3>
+        <table>
+          <thead>
+            <tr><th>Lot ID</th><th>Internal Lot</th><th>Material</th><th>Status</th><th>Deviation</th><th>Qty</th><th>Location</th><th>Action</th></tr>
+          </thead>
+          <tbody id="lotsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="panelQc" class="panel">
+      <div class="grid">
+        <div class="card">
+          <h3>QC Batch Report (all parameters at once)</h3>
+          <label>task_id</label><input id="qc_task_id" placeholder="select from open tasks" />
+          <table style="margin-top:8px;">
+            <thead>
+              <tr><th>Parameter</th><th>Value</th><th>Unit</th><th>Lower</th><th>Upper</th><th>Instrument</th><th>Action</th></tr>
+            </thead>
+            <tbody id="qcRows"></tbody>
+          </table>
+          <button type="button" class="secondary" onclick="addQcRow()">Add Parameter</button>
+          <button id="btnSubmitQcReport" onclick="submitQcReport()">Submit QC Batch Report</button>
+        </div>
+
+        <div class="card">
+          <h3>QC Task Board (open)</h3>
+          <button class="secondary" onclick="loadTasks()">Refresh QC Tasks</button>
+          <table style="margin-top:10px;">
+            <thead>
+              <tr><th>Task ID</th><th>Lot</th><th>Task Name</th><th>Status</th><th>Created</th><th>Action</th></tr>
+            </thead>
+            <tbody id="tasksBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="panelQa" class="panel">
+      <div class="grid">
+        <div class="card">
+          <h3>QA Release Decision</h3>
+          <label>lot_id</label><input id="qa_lot_id" placeholder="select from lots board" />
+          <label>decision</label>
+          <select id="qa_decision">
+            <option>released</option>
+            <option>blocked</option>
+            <option>rejected</option>
+          </select>
+          <label>reason</label><input id="qa_reason" value="qc batch passed" />
+          <label>signature meaning</label><input id="qa_sig_meaning" value="Released by QA" />
+          <button id="btnQaDecision" onclick="submitQaDecision()">Apply QA Decision</button>
+          <div class="muted" id="qaHint"></div>
+        </div>
+
+        <div class="card">
+          <h3>Audit Journal</h3>
+          <label>limit</label><input id="audit_limit" type="number" value="30" />
+          <button class="secondary" onclick="loadAudit()">Load Audit Events</button>
+          <table style="margin-top:10px;">
+            <thead>
+              <tr><th>#</th><th>Time</th><th>User</th><th>Action</th><th>Object</th><th>Reason</th></tr>
+            </thead>
+            <tbody id="auditBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <h3>Technical Response</h3>
+    <pre id="output"></pre>
+  </div>
+
+  <script>
+    const apiBase = window.location.origin;
+    const output = document.getElementById('output');
+    const state = {
+      token: null,
+      username: null,
+      role: null,
+      lotId: null,
+      taskId: null,
+      lots: [],
+      tasks: []
+    };
+    document.getElementById('apiBase').textContent = apiBase;
+
+    function roleCan(role, area) {
+      if (role === 'SYS_ADMIN') return true;
+      if (area === 'warehouse') return ['WAREHOUSE_OPERATOR', 'WAREHOUSE_MANAGER'].includes(role);
+      if (area === 'qc') return ['QC_ANALYST'].includes(role);
+      if (area === 'qa') return ['QA_MANAGER'].includes(role);
+      return false;
+    }
+
+    function applyRoleVisibility() {
+      const tabs = [
+        { id: 'tabWarehouse', area: 'warehouse' },
+        { id: 'tabQc', area: 'qc' },
+        { id: 'tabQa', area: 'qa' }
+      ];
+      for (const t of tabs) {
+        const el = document.getElementById(t.id);
+        el.style.display = roleCan(state.role, t.area) ? 'inline-block' : 'none';
+      }
+
+      if (roleCan(state.role, 'warehouse')) openTab('warehouse');
+      else if (roleCan(state.role, 'qc')) openTab('qc');
+      else openTab('qa');
+    }
+
+    function openTab(name) {
+      document.getElementById('panelWarehouse').classList.remove('active');
+      document.getElementById('panelQc').classList.remove('active');
+      document.getElementById('panelQa').classList.remove('active');
+      document.getElementById('tabWarehouse').classList.remove('active');
+      document.getElementById('tabQc').classList.remove('active');
+      document.getElementById('tabQa').classList.remove('active');
+
+      if (name === 'warehouse') { document.getElementById('panelWarehouse').classList.add('active'); document.getElementById('tabWarehouse').classList.add('active'); }
+      if (name === 'qc') { document.getElementById('panelQc').classList.add('active'); document.getElementById('tabQc').classList.add('active'); }
+      if (name === 'qa') { document.getElementById('panelQa').classList.add('active'); document.getElementById('tabQa').classList.add('active'); }
+    }
+
+    async function api(method, path, body = null) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
+
+      const res = await fetch(apiBase + path, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      });
+
+      const text = await res.text();
+      let data;
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      output.textContent = JSON.stringify({ status: res.status, body: data }, null, 2);
+      if (!res.ok) throw new Error(data.detail || 'API error');
+      return data;
+    }
+
+    function getSelectedLot() { return state.lots.find(l => l.id === state.lotId) || null; }
+    function getSelectedTask() { return state.tasks.find(t => t.id === state.taskId) || null; }
+    function hasOpenTaskForLot(lotId) { return state.tasks.some(t => t.lot_id === lotId && t.status === 'open'); }
+
+    function syncSelection() {
+      const lot = getSelectedLot();
+      const task = getSelectedTask();
+      document.getElementById('selectedLot').textContent = state.lotId ?? '-';
+      document.getElementById('selectedTask').textContent = state.taskId ?? '-';
+      document.getElementById('wh_lot_id').value = state.lotId ?? '';
+      document.getElementById('qa_lot_id').value = state.lotId ?? '';
+      document.getElementById('qc_task_id').value = state.taskId ?? '';
+      document.getElementById('lotStatusChip').textContent = lot ? lot.quality_status : '-';
+
+      const btnMove = document.getElementById('btnMoveQuarantine');
+      const btnSampling = document.getElementById('btnCreateSampling');
+      const btnQc = document.getElementById('btnSubmitQcReport');
+      const btnQa = document.getElementById('btnQaDecision');
+      const qaHint = document.getElementById('qaHint');
+
+      btnMove.disabled = !(lot && lot.quality_status === 'received');
+      btnSampling.disabled = !(lot && ['quarantine', 'sampled'].includes(lot.quality_status) && !hasOpenTaskForLot(lot.id));
+      btnQc.disabled = !(task && task.status === 'open');
+
+      if (!lot) {
+        btnQa.disabled = true; qaHint.textContent = 'Select lot for QA decision';
+      } else if (lot.has_open_deviation) {
+        btnQa.disabled = true; qaHint.textContent = 'Blocked: open deviation exists';
+      } else if (!['under_test', 'sampled', 'blocked'].includes(lot.quality_status)) {
+        btnQa.disabled = true; qaHint.textContent = `QA decision not allowed for status ${lot.quality_status}`;
+      } else {
+        btnQa.disabled = false; qaHint.textContent = 'Lot is eligible for QA decision';
+      }
+
+      document.getElementById('gateHint').textContent = `Stage gate active. Current lot status: ${lot ? lot.quality_status : 'N/A'}`;
+    }
+
+    function defaultQcRows() {
+      return [
+        { parameter_name: 'Assay', value: 98.7, unit: '%', lower_limit: 95, upper_limit: 105, instrument: 'HPLC-01' },
+        { parameter_name: 'Related Substances', value: 0.2, unit: '%', lower_limit: 0, upper_limit: 1.0, instrument: 'HPLC-01' },
+        { parameter_name: 'Moisture', value: 1.8, unit: '%', lower_limit: 0, upper_limit: 3.0, instrument: 'KF-01' }
+      ];
+    }
+
+    function renderQcRows(rows) {
+      const body = document.getElementById('qcRows');
+      body.innerHTML = '';
+      rows.forEach((row, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input id="qc_p_${idx}" value="${row.parameter_name}" /></td>
+          <td><input id="qc_v_${idx}" type="number" step="0.0001" value="${row.value}" /></td>
+          <td><input id="qc_u_${idx}" value="${row.unit}" /></td>
+          <td><input id="qc_l_${idx}" type="number" step="0.0001" value="${row.lower_limit}" /></td>
+          <td><input id="qc_h_${idx}" type="number" step="0.0001" value="${row.upper_limit}" /></td>
+          <td><input id="qc_i_${idx}" value="${row.instrument}" /></td>
+          <td><button type="button" class="secondary" onclick="removeQcRow(${idx})">Remove</button></td>
+        `;
+        body.appendChild(tr);
+      });
+      window.__qcRowsCount = rows.length;
+    }
+
+    function collectQcRows() {
+      const count = window.__qcRowsCount || 0;
+      const rows = [];
+      for (let i = 0; i < count; i++) {
+        const p = document.getElementById(`qc_p_${i}`);
+        if (!p) continue;
+        rows.push({
+          parameter_name: p.value,
+          value: Number(document.getElementById(`qc_v_${i}`).value),
+          unit: document.getElementById(`qc_u_${i}`).value,
+          lower_limit: Number(document.getElementById(`qc_l_${i}`).value),
+          upper_limit: Number(document.getElementById(`qc_h_${i}`).value),
+          instrument: document.getElementById(`qc_i_${i}`).value,
+        });
+      }
+      return rows;
+    }
+
+    function addQcRow() {
+      const rows = collectQcRows();
+      rows.push({ parameter_name: 'New Parameter', value: 0, unit: '%', lower_limit: 0, upper_limit: 100, instrument: 'INST-01' });
+      renderQcRows(rows);
+    }
+
+    function removeQcRow(index) {
+      const rows = collectQcRows();
+      if (rows.length <= 1) return;
+      rows.splice(index, 1);
+      renderQcRows(rows);
+    }
+
+    async function login() {
+      const payload = {
+        username: document.getElementById('loginUsername').value,
+        password: document.getElementById('loginPassword').value,
+      };
+      const data = await api('POST', '/auth/login', payload);
+      state.token = data.access_token;
+      state.username = data.username;
+      state.role = data.role;
+
+      document.getElementById('currentUser').textContent = state.username;
+      document.getElementById('currentRole').textContent = state.role;
+      document.getElementById('loginCard').classList.add('hidden');
+      document.getElementById('appArea').classList.remove('hidden');
+
+      applyRoleVisibility();
+      renderQcRows(defaultQcRows());
+      await loadLots();
+      await loadTasks();
+    }
+
+    async function logout() {
+      try { await api('POST', '/auth/logout'); } catch {}
+      state.token = null;
+      state.username = null;
+      state.role = null;
+      state.lotId = null;
+      state.taskId = null;
+      state.lots = [];
+      state.tasks = [];
+      document.getElementById('loginCard').classList.remove('hidden');
+      document.getElementById('appArea').classList.add('hidden');
+      output.textContent = '';
+    }
+
+    async function loadLots() {
+      const data = await api('GET', '/lots');
+      state.lots = data.lots || [];
+      const body = document.getElementById('lotsBody');
+      body.innerHTML = '';
+      for (const lot of state.lots) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${lot.id}</td><td>${lot.internal_lot}</td><td>${lot.material_code} / ${lot.material_name}</td><td>${lot.quality_status}</td><td>${lot.has_open_deviation ? '<span class="warn">OPEN</span>' : 'none'}</td><td>${lot.quantity} ${lot.unit}</td><td>${lot.location}</td><td><button onclick="selectLot(${lot.id})">Select</button></td>`;
+        body.appendChild(tr);
+      }
+      syncSelection();
+    }
+
+    async function loadTasks() {
+      const data = await api('GET', '/sampling-tasks');
+      state.tasks = data.tasks || [];
+      const body = document.getElementById('tasksBody');
+      body.innerHTML = '';
+      const openTasks = state.tasks.filter(t => t.status === 'open');
+      for (const task of openTasks) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${task.id}</td><td>${task.internal_lot} (#${task.lot_id})</td><td>${task.test_name}</td><td>${task.status}</td><td>${task.created_at}</td><td><button onclick="selectTask(${task.id}, ${task.lot_id})">Select</button></td>`;
+        body.appendChild(tr);
+      }
+      syncSelection();
+    }
+
+    function selectLot(id) {
+      state.lotId = id;
+      syncSelection();
+    }
+
+    function selectTask(taskId, lotId) {
+      state.taskId = taskId;
+      state.lotId = lotId;
+      syncSelection();
+    }
+
+    async function createReceipt() {
+      const body = {
+        material_code: document.getElementById('wh_material_code').value,
+        material_name: document.getElementById('wh_material_name').value,
+        supplier_lot: document.getElementById('wh_supplier_lot').value,
+        quantity: Number(document.getElementById('wh_qty').value),
+        unit: document.getElementById('wh_unit').value,
+        location: document.getElementById('wh_location').value,
+        signature: {
+          username: state.username,
+          password: document.getElementById('loginPassword').value,
+          meaning: document.getElementById('wh_sig_meaning').value,
+          comment: 'receipt'
+        }
+      };
+      const data = await api('POST', '/materials/receipts', body);
+      state.lotId = data.lot_id;
+      await loadLots();
+      await loadTasks();
+    }
+
+    async function moveToQuarantine() {
+      const lotId = Number(document.getElementById('wh_lot_id').value);
+      await api('POST', `/lots/${lotId}/status-transitions`, { to_status: 'quarantine' });
+      state.lotId = lotId;
+      await loadLots();
+    }
+
+    async function createSamplingTask() {
+      const lotId = Number(document.getElementById('wh_lot_id').value);
+      const body = {
+        test_name: document.getElementById('wh_test').value,
+        specification_ref: document.getElementById('wh_spec').value,
+        signature: {
+          username: state.username,
+          password: document.getElementById('loginPassword').value,
+          meaning: 'Executed by'
+        }
+      };
+      const data = await api('POST', `/lots/${lotId}/sampling-tasks`, body);
+      state.taskId = data.task_id;
+      await loadTasks();
+      await loadLots();
+      openTab('qc');
+    }
+
+    async function submitQcReport() {
+      const rows = collectQcRows().filter(r => r.parameter_name && r.unit && r.instrument);
+      const body = {
+        task_id: Number(document.getElementById('qc_task_id').value),
+        results: rows,
+        signature: {
+          username: state.username,
+          password: document.getElementById('loginPassword').value,
+          meaning: 'Executed by'
+        }
+      };
+      const data = await api('POST', '/qc/reports', body);
+      state.lotId = data.lot_id;
+      state.taskId = null;
+      await loadTasks();
+      await loadLots();
+      openTab('qa');
+    }
+
+    async function submitQaDecision() {
+      const body = {
+        lot_id: Number(document.getElementById('qa_lot_id').value),
+        decision: document.getElementById('qa_decision').value,
+        reason: document.getElementById('qa_reason').value,
+        signature: {
+          username: state.username,
+          password: document.getElementById('loginPassword').value,
+          meaning: document.getElementById('qa_sig_meaning').value
+        }
+      };
+      await api('POST', '/qa/release-decisions', body);
+      await loadLots();
+      await loadAudit();
+    }
+
+    async function loadAudit() {
+      const limit = Number(document.getElementById('audit_limit').value);
+      const data = await api('GET', `/audit-events?limit=${limit}`);
+      const body = document.getElementById('auditBody');
+      body.innerHTML = '';
+      for (const ev of data.events || []) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${ev.id}</td><td>${ev.timestamp_utc}</td><td>${ev.user_id}<br/><span class="muted">${ev.role_at_time}</span></td><td>${ev.action_type}</td><td>${ev.object_type}/${ev.object_id}</td><td>${ev.reason ?? '-'}</td>`;
+        body.appendChild(tr);
+      }
+    }
+  </script>
+</body>
+</html>
