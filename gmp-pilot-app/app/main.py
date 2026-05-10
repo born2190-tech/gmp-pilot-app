@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.db import SessionLocal, get_database_url, get_sqlite_db_path
-from app.models import Deviation, InventoryMovement, Lot, Material
+from app.models import Deviation, InventoryMovement, Lot, Material, SamplingTask
 
 app = FastAPI(title="GMP Pilot App", version="0.1.0")
 
@@ -1182,6 +1182,7 @@ def get_inventory_balances(
     material_code: Optional[str] = None,
     quality_status: Optional[str] = None,
     user: AuthUser = Depends(get_current_user),
+    db_session: Any = Depends(get_session),
 ) -> dict[str, Any]:
     require_permission(user, "READ_OPERATIONAL_DATA")
     effective_warehouse_type = warehouse_type
@@ -1190,117 +1191,93 @@ def get_inventory_balances(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Warehouse access denied for requested filter")
         effective_warehouse_type = user.warehouse_scope
 
-    db = get_db()
-    try:
-        query = """
-            SELECT
-                l.warehouse_type,
-                m.material_code,
-                m.material_name,
-                l.unit,
-                SUM(l.quantity) AS total_quantity,
-                COUNT(*) AS lots_count
-            FROM lots l
-            JOIN materials m ON m.id = l.material_id
-        """
-        where_parts: list[str] = []
-        params: list[Any] = []
+    query = db_session.query(
+        Lot.warehouse_type,
+        Material.material_code,
+        Material.material_name,
+        Lot.unit,
+        Lot.quantity,
+    ).join(Material, Material.id == Lot.material_id)
 
-        if effective_warehouse_type:
-            where_parts.append("l.warehouse_type = ?")
-            params.append(effective_warehouse_type)
-        if material_code:
-            where_parts.append("m.material_code = ?")
-            params.append(material_code)
-        if quality_status:
-            where_parts.append("l.quality_status = ?")
-            params.append(quality_status)
+    if effective_warehouse_type:
+        query = query.filter(Lot.warehouse_type == effective_warehouse_type)
+    if material_code:
+        query = query.filter(Material.material_code == material_code)
+    if quality_status:
+        query = query.filter(Lot.quality_status == quality_status)
 
-        if where_parts:
-            query += " WHERE " + " AND ".join(where_parts)
+    rows = query.all()
+    grouped: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (row.warehouse_type, row.material_code, row.material_name, row.unit)
+        if key not in grouped:
+            grouped[key] = {
+                "warehouse_type": row.warehouse_type,
+                "material_code": row.material_code,
+                "material_name": row.material_name,
+                "unit": row.unit,
+                "total_quantity": 0.0,
+                "lots_count": 0,
+            }
+        grouped[key]["total_quantity"] += float(row.quantity)
+        grouped[key]["lots_count"] += 1
 
-        query += " GROUP BY l.warehouse_type, m.material_code, m.material_name, l.unit ORDER BY l.warehouse_type, m.material_code"
-        rows = db.execute(query, tuple(params)).fetchall()
-
-        balances = []
-        for row in rows:
-            balances.append(
-                {
-                    "warehouse_type": row["warehouse_type"],
-                    "material_code": row["material_code"],
-                    "material_name": row["material_name"],
-                    "unit": row["unit"],
-                    "total_quantity": row["total_quantity"],
-                    "lots_count": row["lots_count"],
-                }
-            )
-        return {"count": len(balances), "balances": balances}
-    finally:
-        db.close()
+    balances = [grouped[key] for key in sorted(grouped.keys(), key=lambda item: (item[0], item[1]))]
+    return {"count": len(balances), "balances": balances}
 
 
 @app.get("/sampling-tasks")
-def list_sampling_tasks(status_filter: Optional[str] = None, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
+def list_sampling_tasks(
+    status_filter: Optional[str] = None,
+    user: AuthUser = Depends(get_current_user),
+    db_session: Any = Depends(get_session),
+) -> dict[str, Any]:
     require_permission(user, "READ_OPERATIONAL_DATA")
     warehouse_scope = user.warehouse_scope if user.role in {"WAREHOUSE_OPERATOR", "WAREHOUSE_MANAGER"} else None
-    db = get_db()
-    try:
-        base_query = """
-            SELECT
-                st.id,
-                st.lot_id,
-                st.test_name,
-                st.specification_ref,
-                st.status,
-                st.created_by,
-                st.created_at,
-                l.internal_lot,
-                l.production_year,
-                l.expiry_date,
-                l.warehouse_type,
-                l.quality_status
-            FROM sampling_tasks st
-            JOIN lots l ON l.id = st.lot_id
-        """
-        params: list[Any] = []
-        where_parts: list[str] = []
-        if status_filter:
-            where_parts.append("st.status = ?")
-            params.append(status_filter)
 
-        if warehouse_scope:
-            where_parts.append("l.warehouse_type = ?")
-            params.append(warehouse_scope)
+    query = db_session.query(
+        SamplingTask.id,
+        SamplingTask.lot_id,
+        SamplingTask.test_name,
+        SamplingTask.specification_ref,
+        SamplingTask.status,
+        SamplingTask.created_by,
+        SamplingTask.created_at,
+        Lot.internal_lot,
+        Lot.production_year,
+        Lot.expiry_date,
+        Lot.warehouse_type,
+        Lot.quality_status,
+    ).join(Lot, Lot.id == SamplingTask.lot_id)
 
-        if where_parts:
-            base_query += " WHERE " + " AND ".join(where_parts)
+    if status_filter:
+        query = query.filter(SamplingTask.status == status_filter)
+    if warehouse_scope:
+        query = query.filter(Lot.warehouse_type == warehouse_scope)
 
-        base_query += " ORDER BY st.id DESC "
-        rows = db.execute(base_query, tuple(params)).fetchall()
+    rows = query.order_by(SamplingTask.id.desc()).all()
 
-        tasks: list[dict[str, Any]] = []
-        for row in rows:
-            tasks.append(
-                {
-                    "id": row["id"],
-                    "lot_id": row["lot_id"],
-                    "internal_lot": row["internal_lot"],
-                    "production_year": row["production_year"],
-                    "expiry_date": row["expiry_date"],
-                    "warehouse_type": row["warehouse_type"],
-                    "lot_quality_status": row["quality_status"],
-                    "lot_sop_status": to_sop_status(row["quality_status"]),
-                    "test_name": row["test_name"],
-                    "specification_ref": row["specification_ref"],
-                    "status": row["status"],
-                    "created_by": row["created_by"],
-                    "created_at": row["created_at"],
-                }
-            )
+    tasks: list[dict[str, Any]] = []
+    for row in rows:
+        tasks.append(
+            {
+                "id": row.id,
+                "lot_id": row.lot_id,
+                "internal_lot": row.internal_lot,
+                "production_year": row.production_year,
+                "expiry_date": row.expiry_date,
+                "warehouse_type": row.warehouse_type,
+                "lot_quality_status": row.quality_status,
+                "lot_sop_status": to_sop_status(row.quality_status),
+                "test_name": row.test_name,
+                "specification_ref": row.specification_ref,
+                "status": row.status,
+                "created_by": row.created_by,
+                "created_at": row.created_at,
+            }
+        )
 
-        return {"count": len(tasks), "tasks": tasks}
-    finally:
-        db.close()
+    return {"count": len(tasks), "tasks": tasks}
 
 
 @app.post("/lots/{lot_id}/status-transitions")
