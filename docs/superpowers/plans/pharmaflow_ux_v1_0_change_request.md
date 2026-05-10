@@ -526,3 +526,11 @@ UX описывает autosave для QC/приёмки каждые 10 секу
 - SOP-to-system mapping выполняется по стандартному шаблону;
 - все GMP-критичные контроли остаются неизменными между клиентами;
 - клиентские отличия реализуются через Plant Profile и Extension Pack.
+
+### 8) Стартовый пакет шаблонов (готово)
+
+Для быстрого onboarding новой площадки использовать:
+
+- `docs/superpowers/templates/plant-profile/plant_profile.template.yaml`
+- `docs/superpowers/templates/plant-profile/plant_profile.template.json`
+- `docs/superpowers/templates/plant-profile/plant_profile_field_catalog.md`

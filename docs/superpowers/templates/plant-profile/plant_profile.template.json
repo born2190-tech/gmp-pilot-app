@@ -1,0 +1,190 @@
+{
+  "version": "1.0",
+  "profile_id": "PLANT-XXX",
+  "profile_name": "Universal GMP Plant Profile",
+  "status": "draft",
+  "meta": {
+    "customer_name": "",
+    "site_name": "",
+    "country": "",
+    "timezone": "Asia/Tashkent",
+    "created_by": "",
+    "approved_by": "",
+    "effective_from": "YYYY-MM-DD"
+  },
+  "compliance": {
+    "gxp_mode": true,
+    "data_integrity": {
+      "append_only_records": true,
+      "enforce_reason_on_correction": true,
+      "enforce_utc_audit_timestamp": true
+    },
+    "retention": {
+      "audit_events_years": 5,
+      "deviations_years": 5,
+      "ebr_years": 5
+    }
+  },
+  "plant_structure": {
+    "warehouses": [
+      {
+        "code": "SUBSTANCE_WH",
+        "name": "Substance Warehouse",
+        "type": "SUBSTANCE_WAREHOUSE",
+        "issue_policy": "FEFO",
+        "quarantine_zone": true
+      },
+      {
+        "code": "PACKAGING_WH",
+        "name": "Packaging Warehouse",
+        "type": "PACKAGING_WAREHOUSE",
+        "issue_policy": "FIFO",
+        "quarantine_zone": true
+      },
+      {
+        "code": "FG_WH",
+        "name": "Finished Goods Warehouse",
+        "type": "FG_WAREHOUSE",
+        "issue_policy": "FEFO",
+        "quarantine_zone": true
+      }
+    ],
+    "locations": [
+      {
+        "code": "SUB-Q-01",
+        "warehouse_code": "SUBSTANCE_WH",
+        "kind": "quarantine"
+      },
+      {
+        "code": "SUB-R-01",
+        "warehouse_code": "SUBSTANCE_WH",
+        "kind": "released"
+      }
+    ]
+  },
+  "master_data": {
+    "units": ["kg", "g", "l", "pcs", "box"],
+    "material_types": ["API", "EXCIPIENT", "PACKAGING", "FG"],
+    "mandatory_material_fields": ["material_code", "material_name", "material_type", "unit"]
+  },
+  "lot_policy": {
+    "series_numbering": {
+      "pattern": "{PRODUCT_CODE}-{YYYY}-{SEQ:5}",
+      "reset_period": "year"
+    },
+    "expiry": {
+      "require_expiry_date": true,
+      "warning_days": 90,
+      "block_days": 0
+    },
+    "issue_strategy": {
+      "default": "FEFO",
+      "allow_manual_override": true,
+      "override_requires_reason": true
+    }
+  },
+  "workflow": {
+    "lot_fsm": {
+      "states": ["received", "quarantine", "sampled", "under_test", "released", "blocked", "rejected", "expired"],
+      "transitions": [
+        { "from": "received", "to": ["quarantine", "blocked"] },
+        { "from": "quarantine", "to": ["sampled", "blocked", "rejected", "expired"] },
+        { "from": "sampled", "to": ["under_test", "blocked", "rejected", "expired"] },
+        { "from": "under_test", "to": ["released", "blocked", "rejected", "expired"] }
+      ]
+    },
+    "blocking_rules": {
+      "qa_release_requires_no_open_deviation": true,
+      "production_issue_requires_release_status": true,
+      "block_if_training_expired": true,
+      "block_if_equipment_calibration_expired": true
+    }
+  },
+  "rbac": {
+    "roles": [
+      {
+        "code": "WAREHOUSE_OPERATOR",
+        "permissions": ["CREATE_RECEIPT", "TRANSITION_STATUS", "CREATE_SAMPLING_TASK", "ISSUE_TO_PRODUCTION"]
+      },
+      {
+        "code": "QC_ANALYST",
+        "permissions": ["ENTER_QC_REPORT", "READ_OPERATIONAL_DATA"]
+      },
+      {
+        "code": "QA_MANAGER",
+        "permissions": ["QA_RELEASE", "READ_AUDIT_EVENTS", "READ_OPERATIONAL_DATA"]
+      },
+      {
+        "code": "SYS_ADMIN",
+        "permissions": ["ADJUST_STOCK", "READ_AUDIT_EVENTS", "READ_OPERATIONAL_DATA"]
+      }
+    ]
+  },
+  "sod": {
+    "enforce_same_user_qc_qa_block": false,
+    "phase2_ready_flag": true
+  },
+  "signatures": {
+    "meanings": {
+      "receipt": "Material receipt approved",
+      "qc_report": "QC report entered",
+      "qa_release": "Released by QA",
+      "stock_adjustment": "Stock adjusted"
+    },
+    "require_e_sign_for": ["CREATE_RECEIPT", "ENTER_QC_REPORT", "QA_RELEASE", "ADJUST_STOCK"]
+  },
+  "notifications": {
+    "channels": ["in_app", "email"],
+    "rules": [
+      {
+        "code": "LOW_STOCK",
+        "enabled": true,
+        "severity": "warning",
+        "recipients_roles": ["WAREHOUSE_MANAGER"]
+      },
+      {
+        "code": "EXPIRY_SOON",
+        "enabled": true,
+        "severity": "warning",
+        "recipients_roles": ["WAREHOUSE_MANAGER", "QA_MANAGER"]
+      },
+      {
+        "code": "CRITICAL_DEVIATION",
+        "enabled": true,
+        "severity": "critical",
+        "recipients_roles": ["QA_MANAGER", "SYS_ADMIN"]
+      }
+    ]
+  },
+  "reports": {
+    "default_timezone": "local",
+    "export_formats": ["xlsx", "pdf"],
+    "templates": [
+      { "code": "INV_BALANCE", "enabled": true },
+      { "code": "AUDIT_TRAIL", "enabled": true },
+      { "code": "QC_QA_SUMMARY", "enabled": true }
+    ]
+  },
+  "integrations": {
+    "erp": {
+      "enabled": false,
+      "mode": "pull_push",
+      "idempotency_required": true,
+      "profile": "default"
+    },
+    "scanners": {
+      "barcode_enabled": true,
+      "qr_enabled": true
+    }
+  },
+  "feature_flags": {
+    "mobile_warehouse": false,
+    "websocket_statuses": false,
+    "extension_pack_qr_batch": false
+  },
+  "acceptance_gate": {
+    "no_p0_rbac_fsm_audit_defects": true,
+    "migration_portability_verified": true,
+    "no_client_code_fork": true
+  }
+}
