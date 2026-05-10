@@ -90,6 +90,54 @@ class IssueProductionRequest(SignatureRequest):
     production_order_no: str = Field(min_length=1, max_length=128)
 
 
+class FGShipmentLineCreate(BaseModel):
+    lot_id: UUID
+    quantity: float = Field(gt=0)
+
+
+class FGShipmentCreate(SignatureRequest):
+    document_no: str = Field(min_length=1, max_length=64)
+    customer_name: str = Field(min_length=1, max_length=255)
+    customer_tax_id: str | None = Field(default=None, max_length=64)
+    destination_address: str = Field(min_length=1, max_length=500)
+    shipment_date: date
+    vehicle_no: str | None = Field(default=None, max_length=64)
+    waybill_no: str | None = Field(default=None, max_length=128)
+    lines: list[FGShipmentLineCreate] = Field(min_length=1)
+
+
+class FGShipmentLineItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    lot_id: UUID
+    internal_lot: str
+    material_code: str
+    material_name: str
+    production_date: date | None
+    expiry_date: date
+    quantity: float
+    unit: str
+    quantity_after: float
+
+
+class FGShipmentItem(BaseModel):
+    id: UUID
+    document_no: str
+    status: str
+    customer_name: str
+    customer_tax_id: str | None
+    destination_address: str
+    shipment_date: date
+    vehicle_no: str | None
+    waybill_no: str | None
+    posted_at: datetime
+    lines: list[FGShipmentLineItem]
+
+
+class FGShipmentsResponse(BaseModel):
+    shipments: list[FGShipmentItem]
+
+
 class MovementItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

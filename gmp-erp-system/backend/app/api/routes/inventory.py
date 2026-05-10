@@ -5,10 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
-from app.models.inventory import InventoryMovement, Lot
+from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryMovement, Lot
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
 from app.schemas.inventory import (
     AdjustLotRequest,
+    FGShipmentCreate,
+    FGShipmentItem,
+    FGShipmentLineItem,
+    FGShipmentsResponse,
     IssueProductionRequest,
     LotOperationResponse,
     LotsResponse,
@@ -19,7 +23,7 @@ from app.schemas.inventory import (
     SignatureRequest,
     TransferLotRequest,
 )
-from app.services.inventory import adjust_lot, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
+from app.services.inventory import adjust_lot, create_fg_shipment, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
 from app.services.permissions import require_permission
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
@@ -57,6 +61,40 @@ def lot_item_query(db: Session, lot_id: UUID) -> LotOperationResponse:
         .one()
     )
     return LotOperationResponse.model_validate(row)
+
+
+def shipment_item(db: Session, shipment: FGShipmentDocument) -> FGShipmentItem:
+    rows = (
+        db.query(
+            FGShipmentLine.lot_id,
+            Lot.internal_lot,
+            Material.code.label("material_code"),
+            Material.name.label("material_name"),
+            Lot.production_date,
+            Lot.expiry_date,
+            FGShipmentLine.quantity,
+            FGShipmentLine.unit,
+            FGShipmentLine.quantity_after,
+        )
+        .join(Lot, Lot.id == FGShipmentLine.lot_id)
+        .join(Material, Material.id == Lot.material_id)
+        .filter(FGShipmentLine.shipment_id == shipment.id)
+        .order_by(FGShipmentLine.created_at)
+        .all()
+    )
+    return FGShipmentItem(
+        id=shipment.id,
+        document_no=shipment.document_no,
+        status=shipment.status,
+        customer_name=shipment.customer_name,
+        customer_tax_id=shipment.customer_tax_id,
+        destination_address=shipment.destination_address,
+        shipment_date=shipment.shipment_date,
+        vehicle_no=shipment.vehicle_no,
+        waybill_no=shipment.waybill_no,
+        posted_at=shipment.posted_at,
+        lines=[FGShipmentLineItem.model_validate(row) for row in rows],
+    )
 
 
 @router.post("/receipts", response_model=ReceiptResponse)
@@ -111,6 +149,28 @@ def issue_to_production_route(
 ) -> LotOperationResponse:
     lot = issue_to_production(db, current_user, lot_id, payload)
     return lot_item_query(db, lot.id)
+
+
+@router.post("/fg-shipments", response_model=FGShipmentItem)
+def create_fg_shipment_route(
+    payload: FGShipmentCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> FGShipmentItem:
+    shipment = create_fg_shipment(db, current_user, payload)
+    return shipment_item(db, shipment)
+
+
+@router.get("/fg-shipments", response_model=FGShipmentsResponse)
+def list_fg_shipments(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> FGShipmentsResponse:
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    query = db.query(FGShipmentDocument).order_by(FGShipmentDocument.posted_at.desc())
+    if current_user.warehouse_scope and current_user.warehouse_scope != "FG_WAREHOUSE":
+        return FGShipmentsResponse(shipments=[])
+    return FGShipmentsResponse(shipments=[shipment_item(db, shipment) for shipment in query.all()])
 
 
 @router.get("/lots", response_model=LotsResponse)

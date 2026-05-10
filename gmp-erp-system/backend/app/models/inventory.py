@@ -92,3 +92,31 @@ class InventoryMovement(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     workstation_id: Mapped[str] = mapped_column(String(128), nullable=False)
 
     lot: Mapped[Lot] = relationship()
+
+
+class FGShipmentDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "fg_shipment_documents"
+
+    document_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    customer_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    customer_tax_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    destination_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    shipment_date: Mapped[date] = mapped_column(Date, nullable=False)
+    vehicle_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    waybill_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    posted_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    posted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class FGShipmentLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "fg_shipment_lines"
+
+    shipment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("fg_shipment_documents.id"), nullable=False)
+    lot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lots.id"), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    quantity_after: Mapped[float] = mapped_column(Float, nullable=False)
+
+    shipment: Mapped[FGShipmentDocument] = relationship()
+    lot: Mapped[Lot] = relationship()

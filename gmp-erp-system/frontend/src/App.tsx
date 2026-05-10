@@ -3,6 +3,7 @@ import { AppShell } from './components/layout/AppShell'
 import { LoginPage } from './features/auth/LoginPage'
 import { WarehouseDashboard } from './features/dashboard/WarehouseDashboard'
 import { LotsBoardPage } from './features/inventory/LotsBoardPage'
+import { FGShipmentsPage } from './features/inventory/FGShipmentsPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
 import { ReceiptDocumentPage } from './features/inventory/ReceiptDocumentPage'
 import { WarehouseOperationsPage } from './features/inventory/WarehouseOperationsPage'
@@ -87,6 +88,8 @@ export function App() {
       <MovementsPage token={token} />
     ) : route === 'warehouse-operations' ? (
       <WarehouseOperationsPage token={token} user={user} />
+    ) : route === 'fg-shipments' ? (
+      <FGShipmentsPage token={token} user={user} />
     ) : route === 'receipt-documents' ? (
       <ReceiptDocumentPage token={token} username={user.username} />
     ) : route === 'master-data' ? (

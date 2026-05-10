@@ -3,6 +3,9 @@ import type {
   LocationsResponse,
   LotsResponse,
   AdjustLotRequest,
+  FGShipmentCreate,
+  FGShipmentItem,
+  FGShipmentsResponse,
   IssueProductionRequest,
   ManufacturerCreate,
   ManufacturerItem,
@@ -123,6 +126,14 @@ export function adjustLot(token: string, lotId: string, payload: AdjustLotReques
 
 export function issueProduction(token: string, lotId: string, payload: IssueProductionRequest): Promise<QualityLotsResponse['lots'][number]> {
   return request<QualityLotsResponse['lots'][number]>(`/api/inventory/lots/${lotId}/issue-production`, 'POST', { token, body: payload })
+}
+
+export function createFgShipment(token: string, payload: FGShipmentCreate): Promise<FGShipmentItem> {
+  return request<FGShipmentItem>('/api/inventory/fg-shipments', 'POST', { token, body: payload })
+}
+
+export function listFgShipments(token: string): Promise<FGShipmentsResponse> {
+  return request<FGShipmentsResponse>('/api/inventory/fg-shipments', 'GET', { token })
 }
 
 export function createReceipt(token: string, payload: ReceiptCreate): Promise<ReceiptResponse> {

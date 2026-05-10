@@ -176,6 +176,52 @@ export interface IssueProductionRequest extends SignatureRequest {
   production_order_no: string
 }
 
+export interface FGShipmentLineCreate {
+  lot_id: string
+  quantity: number
+}
+
+export interface FGShipmentCreate extends SignatureRequest {
+  document_no: string
+  customer_name: string
+  customer_tax_id?: string
+  destination_address: string
+  shipment_date: string
+  vehicle_no?: string
+  waybill_no?: string
+  lines: FGShipmentLineCreate[]
+}
+
+export interface FGShipmentLineItem {
+  lot_id: string
+  internal_lot: string
+  material_code: string
+  material_name: string
+  production_date: string | null
+  expiry_date: string
+  quantity: number
+  unit: string
+  quantity_after: number
+}
+
+export interface FGShipmentItem {
+  id: string
+  document_no: string
+  status: string
+  customer_name: string
+  customer_tax_id: string | null
+  destination_address: string
+  shipment_date: string
+  vehicle_no: string | null
+  waybill_no: string | null
+  posted_at: string
+  lines: FGShipmentLineItem[]
+}
+
+export interface FGShipmentsResponse {
+  shipments: FGShipmentItem[]
+}
+
 export interface ReceiptCreate {
   document_no: string
   supplier_id: string

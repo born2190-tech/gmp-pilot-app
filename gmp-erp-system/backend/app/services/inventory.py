@@ -5,9 +5,9 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
-from app.models.inventory import InventoryMovement, Lot, ReceiptDocument, ReceiptLine
+from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.schemas.inventory import AdjustLotRequest, IssueProductionRequest, ReceiptCreate, SignatureRequest, TransferLotRequest
+from app.schemas.inventory import AdjustLotRequest, FGShipmentCreate, IssueProductionRequest, ReceiptCreate, SignatureRequest, TransferLotRequest
 from app.services.audit import write_audit
 from app.services.permissions import require_permission, require_warehouse_type_scope
 from app.services.signature import validate_signature
@@ -286,3 +286,93 @@ def issue_to_production(db: Session, user: CurrentUser, lot_id: UUID, payload: I
     db.commit()
     db.refresh(lot)
     return lot
+
+
+def create_fg_shipment(db: Session, user: CurrentUser, payload: FGShipmentCreate) -> FGShipmentDocument:
+    require_permission(user, "POST_RECEIPT")
+    if db.query(FGShipmentDocument).filter(FGShipmentDocument.document_no == payload.document_no).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Shipment document number already exists")
+
+    validate_signature(db, user, payload, "SHIP_FINISHED_GOODS", "fg_shipment_document", payload.document_no)
+    shipment = FGShipmentDocument(
+        document_no=payload.document_no,
+        status="posted",
+        customer_name=payload.customer_name,
+        customer_tax_id=payload.customer_tax_id,
+        destination_address=payload.destination_address,
+        shipment_date=payload.shipment_date,
+        vehicle_no=payload.vehicle_no,
+        waybill_no=payload.waybill_no,
+        posted_by=user.id,
+        posted_at=now_utc(),
+    )
+    db.add(shipment)
+    db.flush()
+
+    for line in payload.lines:
+        lot = get_lot_for_operation(db, user, line.lot_id)
+        warehouse = get_required(db, Warehouse, lot.warehouse_id, "Warehouse")
+        if warehouse.warehouse_type != "FG_WAREHOUSE":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only finished goods warehouse lots can be shipped")
+        if lot.quality_status != "released":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only released finished goods can be shipped")
+        if line.quantity > lot.quantity:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Shipment quantity exceeds available stock")
+
+        old_quantity = lot.quantity
+        lot.quantity = lot.quantity - line.quantity
+        db.add(
+            FGShipmentLine(
+                shipment_id=shipment.id,
+                lot_id=lot.id,
+                quantity=line.quantity,
+                unit=lot.unit,
+                quantity_after=lot.quantity,
+            )
+        )
+        db.add(
+            InventoryMovement(
+                movement_type="SHIPMENT",
+                document_type="fg_shipment",
+                document_id=shipment.id,
+                lot_id=lot.id,
+                from_warehouse_id=lot.warehouse_id,
+                from_location_id=lot.location_id,
+                to_warehouse_id=None,
+                to_location_id=None,
+                quantity_delta=-line.quantity,
+                quantity_after=lot.quantity,
+                unit=lot.unit,
+                reason=f"{payload.customer_name}: {payload.reason or ''}".strip(),
+                user_id=user.id,
+                workstation_id=user.workstation_id,
+            )
+        )
+        write_audit(
+            db,
+            user,
+            object_type="lot",
+            object_id=str(lot.id),
+            action_type="SHIP_FINISHED_GOODS",
+            old_value={"quantity": old_quantity},
+            new_value={
+                "quantity": lot.quantity,
+                "shipment_document_no": payload.document_no,
+                "customer_name": payload.customer_name,
+                "shipped_quantity": line.quantity,
+            },
+            reason=payload.reason,
+        )
+
+    write_audit(
+        db,
+        user,
+        object_type="fg_shipment_document",
+        object_id=str(shipment.id),
+        action_type="POST_FG_SHIPMENT",
+        new_value={"document_no": shipment.document_no, "customer_name": shipment.customer_name, "lines": len(payload.lines)},
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(shipment)
+    return shipment

@@ -6,7 +6,7 @@ from app.core.database import SessionLocal
 from app.main import create_app
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession
-from app.models.inventory import InventoryMovement, Lot, ReceiptDocument, ReceiptLine
+from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import QCReport, QCReportParameter
 from app.services.seed import seed_foundation_data
@@ -20,6 +20,8 @@ def reset_inventory_data() -> None:
         db.query(QCReportParameter).delete()
         db.query(QCReport).delete()
         db.query(InventoryMovement).delete()
+        db.query(FGShipmentLine).delete()
+        db.query(FGShipmentDocument).delete()
         db.query(Lot).delete()
         db.query(ReceiptLine).delete()
         db.query(ReceiptDocument).delete()
@@ -258,3 +260,78 @@ def test_issue_to_production_requires_released_lot_and_reduces_quantity() -> Non
     first = movements.json()["movements"][0]
     assert first["movement_type"] == "ISSUE_PRODUCTION"
     assert first["quantity_delta"] == -25.5
+
+
+def test_finished_goods_shipment_records_customer_traceability_and_reduces_stock() -> None:
+    reset_inventory_data()
+    db = SessionLocal()
+    try:
+        supplier = Supplier(code="SUP-FG-001", name="In-house packaging")
+        manufacturer = Manufacturer(code="MFG-FG-001", name="Validated Finished Goods Site")
+        material = Material(code="FG-TAB-500", name="Paracetamol tablets 500 mg", item_type="finished_good", default_unit="pack")
+        fg = db.query(Warehouse).filter(Warehouse.warehouse_type == "FG_WAREHOUSE").one()
+        location = db.query(Location).filter(Location.warehouse_id == fg.id, Location.code == "RELEASED").one()
+        db.add_all([supplier, manufacturer, material])
+        db.flush()
+        lot = Lot(
+            material_id=material.id,
+            supplier_id=supplier.id,
+            manufacturer_id=manufacturer.id,
+            supplier_lot="BMR-2026-015",
+            internal_lot="FG-2026-00015",
+            item_type="finished_good",
+            production_date=date(2026, 4, 20),
+            production_year=2026,
+            expiry_date=date(2028, 4, 19),
+            warehouse_id=fg.id,
+            location_id=location.id,
+            quantity=1000,
+            unit="pack",
+            quality_status="released",
+        )
+        db.add(lot)
+        db.commit()
+        lot_id = str(lot.id)
+    finally:
+        db.close()
+
+    client = TestClient(create_app())
+    token = login(client, username="sys_admin", password="admin123")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    response = client.post(
+        "/api/inventory/fg-shipments",
+        headers=headers,
+        json={
+            "document_no": "SHP-2026-0001",
+            "customer_name": "Tashkent Hospital No. 1",
+            "customer_tax_id": "301234567",
+            "destination_address": "Tashkent, Chilanzar district",
+            "shipment_date": "2026-05-10",
+            "vehicle_no": "01A123AA",
+            "waybill_no": "WB-2026-0001",
+            "lines": [{"lot_id": lot_id, "quantity": 250}],
+            "username": "sys_admin",
+            "password": "admin123",
+            "meaning": "Ship finished goods",
+            "reason": "Approved customer order",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "posted"
+    assert response.json()["lines"][0]["internal_lot"] == "FG-2026-00015"
+    assert response.json()["lines"][0]["quantity"] == 250
+
+    lots = client.get("/api/inventory/lots", headers=headers).json()["lots"]
+    shipped_lot = next(item for item in lots if item["id"] == lot_id)
+    assert shipped_lot["quantity"] == 750
+
+    shipments = client.get("/api/inventory/fg-shipments", headers=headers)
+    assert shipments.status_code == 200
+    assert shipments.json()["shipments"][0]["customer_name"] == "Tashkent Hospital No. 1"
+    assert shipments.json()["shipments"][0]["lines"][0]["internal_lot"] == "FG-2026-00015"
+
+    movements = client.get("/api/inventory/movements", headers=headers).json()["movements"]
+    assert movements[0]["movement_type"] == "SHIPMENT"
+    assert movements[0]["quantity_delta"] == -250
