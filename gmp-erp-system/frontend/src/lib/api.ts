@@ -10,8 +10,12 @@ import type {
   MaterialsResponse,
   MovementsResponse,
   PostReceiptResponse,
+  QADecisionRequest,
+  QCResultRequest,
+  QualityLotsResponse,
   ReceiptCreate,
   ReceiptResponse,
+  SampleLotRequest,
   SignatureRequest,
   SupplierCreate,
   SupplierItem,
@@ -110,4 +114,24 @@ export function createReceipt(token: string, payload: ReceiptCreate): Promise<Re
 
 export function postReceipt(token: string, receiptId: string, payload: SignatureRequest): Promise<PostReceiptResponse> {
   return request<PostReceiptResponse>(`/api/inventory/receipts/${receiptId}/post`, 'POST', { token, body: payload })
+}
+
+export function listQcLots(token: string): Promise<QualityLotsResponse> {
+  return request<QualityLotsResponse>('/api/quality/qc/lots', 'GET', { token })
+}
+
+export function listQaLots(token: string): Promise<QualityLotsResponse> {
+  return request<QualityLotsResponse>('/api/quality/qa/lots', 'GET', { token })
+}
+
+export function sampleLot(token: string, lotId: string, payload: SampleLotRequest): Promise<QualityLotsResponse['lots'][number]> {
+  return request<QualityLotsResponse['lots'][number]>(`/api/quality/lots/${lotId}/sample`, 'POST', { token, body: payload })
+}
+
+export function submitQcResult(token: string, lotId: string, payload: QCResultRequest): Promise<QualityLotsResponse['lots'][number]> {
+  return request<QualityLotsResponse['lots'][number]>(`/api/quality/lots/${lotId}/qc-result`, 'POST', { token, body: payload })
+}
+
+export function submitQaDecision(token: string, lotId: string, payload: QADecisionRequest): Promise<QualityLotsResponse['lots'][number]> {
+  return request<QualityLotsResponse['lots'][number]>(`/api/quality/lots/${lotId}/qa-decision`, 'POST', { token, body: payload })
 }

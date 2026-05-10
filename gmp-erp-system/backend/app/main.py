@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from app.api.routes.auth import router as auth_router
 from app.api.routes.inventory import router as inventory_router
 from app.api.routes.master_data import router as master_data_router
+from app.api.routes.quality import router as quality_router
 from app.core.database import SessionLocal
 from app.services.seed import seed_foundation_data
 
@@ -25,6 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(master_data_router)
     app.include_router(inventory_router)
+    app.include_router(quality_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:

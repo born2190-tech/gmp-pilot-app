@@ -96,6 +96,22 @@ export interface LotsResponse {
   lots: LotItem[]
 }
 
+export interface QualityLotsResponse {
+  lots: LotItem[]
+}
+
+export interface SampleLotRequest {
+  reason: string
+}
+
+export interface QCResultRequest extends SignatureRequest {
+  result_summary: string
+}
+
+export interface QADecisionRequest extends SignatureRequest {
+  decision: 'released' | 'rejected'
+}
+
 export interface MovementItem {
   id: string
   movement_type: string
