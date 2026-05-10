@@ -911,23 +911,26 @@ def list_incoming_control_profiles(user: AuthUser = Depends(get_current_user)) -
 
 
 @app.get("/lots/{lot_id}/incoming-control-profile")
-def get_lot_incoming_control_profile(lot_id: int, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
+def get_lot_incoming_control_profile(
+    lot_id: int,
+    user: AuthUser = Depends(get_current_user),
+    db_session: Any = Depends(get_session),
+) -> dict[str, Any]:
     require_permission(user, "READ_OPERATIONAL_DATA")
-    db = get_db()
-    try:
-        lot = get_lot(db, lot_id)
-        enforce_warehouse_scope(user, lot["warehouse_type"])
-        profile = get_profile_by_warehouse_type(lot["warehouse_type"])
-        return {
-            "lot_id": lot_id,
-            "warehouse_type": lot["warehouse_type"],
-            "display_name": profile["display_name"],
-            "default_test_name": profile["default_test_name"],
-            "default_specification_ref": profile["default_specification_ref"],
-            "parameters": profile["parameters"],
-        }
-    finally:
-        db.close()
+    lot = db_session.query(Lot.id, Lot.warehouse_type).filter(Lot.id == lot_id).first()
+    if not lot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lot not found")
+
+    enforce_warehouse_scope(user, lot.warehouse_type)
+    profile = get_profile_by_warehouse_type(lot.warehouse_type)
+    return {
+        "lot_id": lot_id,
+        "warehouse_type": lot.warehouse_type,
+        "display_name": profile["display_name"],
+        "default_test_name": profile["default_test_name"],
+        "default_specification_ref": profile["default_specification_ref"],
+        "parameters": profile["parameters"],
+    }
 
 
 @app.post("/materials/receipts")
