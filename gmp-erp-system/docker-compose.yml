@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gmp-erp-postgres
+    environment:
+      POSTGRES_DB: gmp_erp
+      POSTGRES_USER: gmp_user
+      POSTGRES_PASSWORD: gmp_pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - gmp_erp_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gmp_user -d gmp_erp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  gmp_erp_postgres_data:

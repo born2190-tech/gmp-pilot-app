@@ -1,0 +1,113 @@
+from uuid import UUID
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.api.deps import CurrentUser, get_current_user
+from app.core.database import get_db
+from app.models.inventory import InventoryMovement, Lot
+from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
+from app.schemas.inventory import (
+    LotsResponse,
+    MovementsResponse,
+    PostReceiptResponse,
+    ReceiptCreate,
+    ReceiptResponse,
+    SignatureRequest,
+)
+from app.services.inventory import create_receipt_draft, post_receipt
+from app.services.permissions import require_permission
+
+router = APIRouter(prefix="/api/inventory", tags=["inventory"])
+
+
+@router.post("/receipts", response_model=ReceiptResponse)
+def create_receipt(
+    payload: ReceiptCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReceiptResponse:
+    receipt = create_receipt_draft(db, current_user, payload)
+    return ReceiptResponse(id=receipt.id, document_no=receipt.document_no, status=receipt.status)
+
+
+@router.post("/receipts/{receipt_id}/post", response_model=PostReceiptResponse)
+def post_receipt_route(
+    receipt_id: UUID,
+    payload: SignatureRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PostReceiptResponse:
+    receipt, lots_created = post_receipt(db, current_user, receipt_id, payload)
+    return PostReceiptResponse(id=receipt.id, document_no=receipt.document_no, status=receipt.status, lots_created=lots_created)
+
+
+@router.get("/lots", response_model=LotsResponse)
+def list_lots(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> LotsResponse:
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    query = (
+        db.query(
+            Lot.id,
+            Lot.internal_lot,
+            Lot.supplier_lot,
+            Material.code.label("material_code"),
+            Material.name.label("material_name"),
+            Supplier.name.label("supplier_name"),
+            Manufacturer.name.label("manufacturer_name"),
+            Warehouse.warehouse_type,
+            Location.code.label("location_code"),
+            Lot.quantity,
+            Lot.unit,
+            Lot.quality_status,
+            Lot.production_date,
+            Lot.production_year,
+            Lot.expiry_date,
+            Lot.incoming_control_notified_at,
+            Lot.sampling_date,
+            Lot.qc_result_received_at,
+            Lot.qa_decision_at,
+        )
+        .join(Material, Material.id == Lot.material_id)
+        .join(Supplier, Supplier.id == Lot.supplier_id)
+        .join(Manufacturer, Manufacturer.id == Lot.manufacturer_id)
+        .join(Warehouse, Warehouse.id == Lot.warehouse_id)
+        .join(Location, Location.id == Lot.location_id)
+        .order_by(Lot.created_at.desc())
+    )
+    if current_user.warehouse_scope:
+        query = query.filter(Warehouse.warehouse_type == current_user.warehouse_scope)
+    return LotsResponse(lots=query.all())
+
+
+@router.get("/movements", response_model=MovementsResponse)
+def list_movements(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MovementsResponse:
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    query = (
+        db.query(
+            InventoryMovement.id,
+            InventoryMovement.movement_type,
+            InventoryMovement.document_type,
+            InventoryMovement.document_id,
+            Lot.internal_lot,
+            Material.code.label("material_code"),
+            InventoryMovement.quantity_delta,
+            InventoryMovement.quantity_after,
+            InventoryMovement.unit,
+            InventoryMovement.reason,
+            InventoryMovement.workstation_id,
+            InventoryMovement.created_at,
+        )
+        .join(Lot, Lot.id == InventoryMovement.lot_id)
+        .join(Material, Material.id == Lot.material_id)
+        .join(Warehouse, Warehouse.id == Lot.warehouse_id)
+        .order_by(InventoryMovement.created_at.desc())
+    )
+    if current_user.warehouse_scope:
+        query = query.filter(Warehouse.warehouse_type == current_user.warehouse_scope)
+    return MovementsResponse(movements=query.all())

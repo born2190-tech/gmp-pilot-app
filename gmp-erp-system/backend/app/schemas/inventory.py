@@ -1,0 +1,93 @@
+from datetime import date, datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ReceiptLineCreate(BaseModel):
+    material_id: UUID
+    supplier_lot: str = Field(min_length=1)
+    production_date: date | None = None
+    production_year: int = Field(ge=2000, le=2100)
+    expiry_date: date
+    quantity: float = Field(gt=0)
+    unit: str = Field(min_length=1)
+    location_id: UUID
+
+
+class ReceiptCreate(BaseModel):
+    document_no: str = Field(min_length=1)
+    supplier_id: UUID
+    manufacturer_id: UUID
+    warehouse_id: UUID
+    received_date: date
+    lines: list[ReceiptLineCreate] = Field(min_length=1)
+
+
+class ReceiptResponse(BaseModel):
+    id: UUID
+    document_no: str
+    status: str
+
+
+class SignatureRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    meaning: str = Field(min_length=1)
+    reason: str | None = None
+
+
+class PostReceiptResponse(BaseModel):
+    id: UUID
+    document_no: str
+    status: str
+    lots_created: int
+
+
+class LotItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    internal_lot: str
+    supplier_lot: str
+    material_code: str
+    material_name: str
+    supplier_name: str
+    manufacturer_name: str
+    warehouse_type: str
+    location_code: str
+    quantity: float
+    unit: str
+    quality_status: str
+    production_date: date | None
+    production_year: int
+    expiry_date: date
+    incoming_control_notified_at: datetime | None
+    sampling_date: datetime | None
+    qc_result_received_at: datetime | None
+    qa_decision_at: datetime | None
+
+
+class LotsResponse(BaseModel):
+    lots: list[LotItem]
+
+
+class MovementItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    movement_type: str
+    document_type: str
+    document_id: UUID
+    internal_lot: str
+    material_code: str
+    quantity_delta: float
+    quantity_after: float
+    unit: str
+    reason: str | None
+    workstation_id: str
+    created_at: datetime
+
+
+class MovementsResponse(BaseModel):
+    movements: list[MovementItem]
