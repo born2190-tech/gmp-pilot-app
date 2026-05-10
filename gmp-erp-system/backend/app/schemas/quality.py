@@ -44,3 +44,48 @@ class QualityLotItem(BaseModel):
 
 class QualityLotsResponse(BaseModel):
     lots: list[QualityLotItem]
+
+
+class QCReportParameterCreate(BaseModel):
+    parameter_name: str = Field(min_length=1, max_length=255)
+    specification: str = Field(min_length=1)
+    result_value: str = Field(min_length=1)
+    unit: str | None = Field(default=None, max_length=32)
+    method_reference: str | None = Field(default=None, max_length=255)
+    complies: bool
+
+
+class QCReportCreate(BaseModel):
+    lot_id: UUID
+    report_no: str = Field(min_length=1, max_length=64)
+    analysis_started_at: datetime | None = None
+    analysis_finished_at: datetime | None = None
+    method_reference: str | None = Field(default=None, max_length=255)
+    parameters: list[QCReportParameterCreate] = Field(min_length=1)
+
+
+class QCReportParameterItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    parameter_name: str
+    specification: str
+    result_value: str
+    unit: str | None
+    method_reference: str | None
+    complies: bool
+
+
+class QCReportItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    lot_id: UUID
+    report_no: str
+    status: str
+    method_reference: str | None
+    analysis_started_at: datetime | None
+    analysis_finished_at: datetime | None
+    overall_result: str | None
+    submitted_at: datetime | None
+    parameters: list[QCReportParameterItem] = Field(default_factory=list)

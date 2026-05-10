@@ -108,6 +108,37 @@ export interface QCResultRequest extends SignatureRequest {
   result_summary: string
 }
 
+export interface QCReportParameterCreate {
+  parameter_name: string
+  specification: string
+  result_value: string
+  unit: string | null
+  method_reference: string | null
+  complies: boolean
+}
+
+export interface QCReportCreate {
+  lot_id: string
+  report_no: string
+  analysis_started_at: string | null
+  analysis_finished_at: string | null
+  method_reference: string | null
+  parameters: QCReportParameterCreate[]
+}
+
+export interface QCReportItem {
+  id: string
+  lot_id: string
+  report_no: string
+  status: string
+  method_reference: string | null
+  analysis_started_at: string | null
+  analysis_finished_at: string | null
+  overall_result: string | null
+  submitted_at: string | null
+  parameters: Array<QCReportParameterCreate & { id: string }>
+}
+
 export interface QADecisionRequest extends SignatureRequest {
   decision: 'released' | 'rejected'
 }

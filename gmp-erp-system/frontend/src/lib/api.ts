@@ -12,6 +12,8 @@ import type {
   PostReceiptResponse,
   QADecisionRequest,
   QCResultRequest,
+  QCReportCreate,
+  QCReportItem,
   QualityLotsResponse,
   ReceiptCreate,
   ReceiptResponse,
@@ -130,6 +132,14 @@ export function sampleLot(token: string, lotId: string, payload: SampleLotReques
 
 export function submitQcResult(token: string, lotId: string, payload: QCResultRequest): Promise<QualityLotsResponse['lots'][number]> {
   return request<QualityLotsResponse['lots'][number]>(`/api/quality/lots/${lotId}/qc-result`, 'POST', { token, body: payload })
+}
+
+export function createQcReport(token: string, payload: QCReportCreate): Promise<QCReportItem> {
+  return request<QCReportItem>('/api/quality/qc-reports', 'POST', { token, body: payload })
+}
+
+export function submitQcReport(token: string, reportId: string, payload: SignatureRequest): Promise<QCReportItem> {
+  return request<QCReportItem>(`/api/quality/qc-reports/${reportId}/submit`, 'POST', { token, body: payload })
 }
 
 export function submitQaDecision(token: string, lotId: string, payload: QADecisionRequest): Promise<QualityLotsResponse['lots'][number]> {

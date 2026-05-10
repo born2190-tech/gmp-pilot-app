@@ -6,6 +6,7 @@ from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession, Department, Permission, Role, User, role_permissions
 from app.models.inventory import InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
+from app.models.quality import QCReport, QCReportParameter
 from app.services.seed import seed_foundation_data
 
 
@@ -14,6 +15,8 @@ def reset_seeded_data() -> None:
     try:
         db.query(SignatureEvent).delete()
         db.query(AuditEvent).delete()
+        db.query(QCReportParameter).delete()
+        db.query(QCReport).delete()
         db.query(InventoryMovement).delete()
         db.query(Lot).delete()
         db.query(ReceiptLine).delete()

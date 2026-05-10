@@ -4,6 +4,7 @@ from app.core.database import SessionLocal
 from app.main import create_app
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.inventory import Lot
+from app.models.quality import QCReport, QCReportParameter
 from test_receipt_lot_movements import create_reference_item, login, receipt_payload, reset_inventory_data
 
 
@@ -111,3 +112,74 @@ def test_qa_decision_requires_qc_result_first() -> None:
     )
 
     assert response.status_code == 409
+
+
+def test_qc_report_document_persists_parameters_and_submits_result() -> None:
+    reset_inventory_data()
+    client = TestClient(create_app())
+    lot_id = create_quarantine_lot(client)
+    qc_token = login(client, "head_qc", "qchead123")
+    headers = {"Authorization": f"Bearer {qc_token}"}
+
+    sample = client.post(f"/api/quality/lots/{lot_id}/sample", headers=headers, json={"reason": "Sample taken"})
+    assert sample.status_code == 200
+
+    report = client.post(
+        "/api/quality/qc-reports",
+        headers=headers,
+        json={
+            "lot_id": lot_id,
+            "report_no": "QC-2026-0001",
+            "analysis_started_at": "2026-05-10T09:00:00Z",
+            "analysis_finished_at": "2026-05-10T12:30:00Z",
+            "method_reference": "SOP-QC-001",
+            "parameters": [
+                {
+                    "parameter_name": "Appearance",
+                    "specification": "White powder",
+                    "result_value": "White powder",
+                    "unit": None,
+                    "method_reference": "SOP-QC-001",
+                    "complies": True,
+                },
+                {
+                    "parameter_name": "Assay",
+                    "specification": "98.0-102.0",
+                    "result_value": "99.4",
+                    "unit": "%",
+                    "method_reference": "SOP-QC-ASSAY",
+                    "complies": True,
+                },
+            ],
+        },
+    )
+    assert report.status_code == 201
+    assert report.json()["status"] == "draft"
+    assert len(report.json()["parameters"]) == 2
+
+    submit = client.post(
+        f"/api/quality/qc-reports/{report.json()['id']}/submit",
+        headers=headers,
+        json={
+            "username": "head_qc",
+            "password": "qchead123",
+            "meaning": "Submit QC report",
+            "reason": "All parameters comply",
+        },
+    )
+    assert submit.status_code == 200
+    assert submit.json()["status"] == "submitted"
+    assert submit.json()["overall_result"] == "complies"
+
+    db = SessionLocal()
+    try:
+        saved_report = db.query(QCReport).filter(QCReport.report_no == "QC-2026-0001").one()
+        assert saved_report.status == "submitted"
+        assert saved_report.overall_result == "complies"
+        assert db.query(QCReportParameter).filter(QCReportParameter.report_id == saved_report.id).count() == 2
+        lot = db.get(Lot, lot_id)
+        assert lot is not None
+        assert lot.quality_status == "under_test"
+        assert lot.qc_result_received_at is not None
+    finally:
+        db.close()

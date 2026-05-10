@@ -6,6 +6,7 @@ from app.main import create_app
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession, Department, Permission, Role, User, role_permissions
 from app.models.inventory import InventoryMovement, Lot, ReceiptDocument, ReceiptLine
+from app.models.quality import QCReport, QCReportParameter
 
 
 def seed_auth_user() -> None:
@@ -13,10 +14,12 @@ def seed_auth_user() -> None:
     try:
         db.query(SignatureEvent).delete()
         db.query(AuditEvent).delete()
+        db.query(QCReportParameter).delete()
+        db.query(QCReport).delete()
         db.query(InventoryMovement).delete()
-        db.query(Lot).delete()
         db.query(ReceiptLine).delete()
         db.query(ReceiptDocument).delete()
+        db.query(Lot).delete()
         db.query(AuthSession).delete()
         db.query(User).filter(User.username == "warehouse_substance").delete()
         db.execute(role_permissions.delete())

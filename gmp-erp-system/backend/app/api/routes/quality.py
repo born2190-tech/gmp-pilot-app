@@ -7,9 +7,20 @@ from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.models.inventory import Lot
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.schemas.quality import QADecisionRequest, QCResultRequest, QualityLotItem, QualityLotsResponse, SampleLotRequest
+from app.models.quality import QCReportParameter
+from app.schemas.inventory import SignatureRequest
+from app.schemas.quality import (
+    QADecisionRequest,
+    QCReportCreate,
+    QCReportItem,
+    QCReportParameterItem,
+    QCResultRequest,
+    QualityLotItem,
+    QualityLotsResponse,
+    SampleLotRequest,
+)
 from app.services.permissions import require_permission
-from app.services.quality import qa_decision, sample_lot, submit_qc_result
+from app.services.quality import create_qc_report, qa_decision, sample_lot, submit_qc_report, submit_qc_result
 
 router = APIRouter(prefix="/api/quality", tags=["quality"])
 
@@ -46,6 +57,16 @@ def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
         .one()
     )
     return QualityLotItem.model_validate(row)
+
+
+def qc_report_item(db: Session, report_id: UUID) -> QCReportItem:
+    from app.models.quality import QCReport
+
+    report = db.get(QCReport, report_id)
+    parameters = db.query(QCReportParameter).filter(QCReportParameter.report_id == report_id).order_by(QCReportParameter.created_at).all()
+    item = QCReportItem.model_validate(report)
+    item.parameters = [QCReportParameterItem.model_validate(parameter) for parameter in parameters]
+    return item
 
 
 @router.get("/qc/lots", response_model=QualityLotsResponse)
@@ -159,3 +180,24 @@ def qa_decision_route(
 ) -> QualityLotItem:
     lot = qa_decision(db, current_user, lot_id, payload)
     return quality_lot_item(db, lot.id)
+
+
+@router.post("/qc-reports", response_model=QCReportItem, status_code=201)
+def create_qc_report_route(
+    payload: QCReportCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCReportItem:
+    report = create_qc_report(db, current_user, payload)
+    return qc_report_item(db, report.id)
+
+
+@router.post("/qc-reports/{report_id}/submit", response_model=QCReportItem)
+def submit_qc_report_route(
+    report_id: UUID,
+    payload: SignatureRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCReportItem:
+    report = submit_qc_report(db, current_user, report_id, payload)
+    return qc_report_item(db, report.id)

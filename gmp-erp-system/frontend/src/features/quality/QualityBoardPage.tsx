@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { listQaLots, listQcLots, sampleLot, submitQaDecision, submitQcResult } from '../../lib/api'
+import { createQcReport, listQaLots, listQcLots, sampleLot, submitQaDecision, submitQcReport } from '../../lib/api'
 import { DataTable } from '../../components/table/DataTable'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
-import type { LotItem } from '../../types/inventory'
+import type { LotItem, QCReportItem, QCReportParameterCreate } from '../../types/inventory'
 
 interface QualityBoardPageProps {
   mode: 'qc' | 'qa'
@@ -25,7 +25,14 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
   const [selectedLotId, setSelectedLotId] = useState('')
   const [filter, setFilter] = useState('')
   const [password, setPassword] = useState('')
-  const [summary, setSummary] = useState('')
+  const [reportNo, setReportNo] = useState(`QC-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-001`)
+  const [methodReference, setMethodReference] = useState('')
+  const [analysisStartedAt, setAnalysisStartedAt] = useState('')
+  const [analysisFinishedAt, setAnalysisFinishedAt] = useState('')
+  const [parameters, setParameters] = useState<QCReportParameterCreate[]>([
+    { parameter_name: '', specification: '', result_value: '', unit: '', method_reference: '', complies: true },
+  ])
+  const [draftReport, setDraftReport] = useState<QCReportItem | null>(null)
   const [reason, setReason] = useState(mode === 'qc' ? t('quality.sampleReason') : t('quality.releaseReason'))
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -51,7 +58,15 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
 
   const selectedLot = lots.find((lot) => lot.id === selectedLotId)
 
-  async function runAction(action: 'sample' | 'qc-result' | 'release' | 'reject') {
+  function updateParameter(index: number, patch: Partial<QCReportParameterCreate>) {
+    setParameters((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)))
+  }
+
+  function addParameter() {
+    setParameters((current) => [...current, { parameter_name: '', specification: '', result_value: '', unit: '', method_reference: methodReference, complies: true }])
+  }
+
+  async function runAction(action: 'sample' | 'create-report' | 'submit-report' | 'release' | 'reject') {
     if (!selectedLot) return
     setError(null)
     setSuccess(null)
@@ -60,15 +75,29 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
       if (action === 'sample') {
         await sampleLot(token, selectedLot.id, { reason: reason || t('quality.sampleReason') })
         setSuccess(t('quality.sampled'))
-      } else if (action === 'qc-result') {
-        await submitQcResult(token, selectedLot.id, {
+      } else if (action === 'create-report') {
+        const report = await createQcReport(token, {
+          lot_id: selectedLot.id,
+          report_no: reportNo,
+          analysis_started_at: analysisStartedAt ? new Date(analysisStartedAt).toISOString() : null,
+          analysis_finished_at: analysisFinishedAt ? new Date(analysisFinishedAt).toISOString() : null,
+          method_reference: methodReference || null,
+          parameters: parameters.map((parameter) => ({
+            ...parameter,
+            unit: parameter.unit || null,
+            method_reference: parameter.method_reference || methodReference || null,
+          })),
+        })
+        setDraftReport(report)
+        setSuccess(t('quality.reportCreated'))
+      } else if (action === 'submit-report' && draftReport) {
+        await submitQcReport(token, draftReport.id, {
           username: user.username,
           password,
           meaning: t('quality.resultMeaning'),
           reason: reason || t('quality.resultReason'),
-          result_summary: summary,
         })
-        setSuccess(t('quality.resultSubmitted'))
+        setSuccess(t('quality.reportSubmitted'))
       } else {
         await submitQaDecision(token, selectedLot.id, {
           username: user.username,
@@ -80,7 +109,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
         setSuccess(t('quality.decisionSubmitted'))
       }
       setPassword('')
-      setSummary('')
+      if (action === 'submit-report') setDraftReport(null)
       await loadLots()
     } catch (err) {
       setError(err instanceof Error ? err.message : t('quality.actionFailed'))
@@ -139,10 +168,45 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
           <input className="input mt-1" onChange={(event) => setReason(event.target.value)} value={reason} />
         </label>
         {mode === 'qc' && (
-          <label className="block text-sm font-medium text-slate-700 xl:col-span-2">
-            {t('quality.resultSummary')}
-            <input className="input mt-1" onChange={(event) => setSummary(event.target.value)} value={summary} />
-          </label>
+          <>
+            <label className="block text-sm font-medium text-slate-700">
+              {t('quality.reportNo')}
+              <input className="input mt-1" onChange={(event) => setReportNo(event.target.value)} value={reportNo} />
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              {t('quality.methodReference')}
+              <input className="input mt-1" onChange={(event) => setMethodReference(event.target.value)} value={methodReference} />
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              {t('quality.analysisStarted')}
+              <input className="input mt-1" onChange={(event) => setAnalysisStartedAt(event.target.value)} type="datetime-local" value={analysisStartedAt} />
+            </label>
+            <label className="block text-sm font-medium text-slate-700">
+              {t('quality.analysisFinished')}
+              <input className="input mt-1" onChange={(event) => setAnalysisFinishedAt(event.target.value)} type="datetime-local" value={analysisFinishedAt} />
+            </label>
+            <div className="xl:col-span-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-900">{t('quality.parameters')}</h2>
+                <Button onClick={addParameter} type="button" variant="secondary">{t('quality.addParameter')}</Button>
+              </div>
+              <div className="space-y-2">
+                {parameters.map((parameter, index) => (
+                  <div className="grid gap-2 rounded-md border border-slate-200 p-3 xl:grid-cols-6" key={index}>
+                    <input className="input" onChange={(event) => updateParameter(index, { parameter_name: event.target.value })} placeholder={t('quality.parameterName')} value={parameter.parameter_name} />
+                    <input className="input" onChange={(event) => updateParameter(index, { specification: event.target.value })} placeholder={t('quality.specification')} value={parameter.specification} />
+                    <input className="input" onChange={(event) => updateParameter(index, { result_value: event.target.value })} placeholder={t('quality.resultValue')} value={parameter.result_value} />
+                    <input className="input" onChange={(event) => updateParameter(index, { unit: event.target.value })} placeholder={t('common.unit')} value={parameter.unit ?? ''} />
+                    <input className="input" onChange={(event) => updateParameter(index, { method_reference: event.target.value })} placeholder={t('quality.methodReference')} value={parameter.method_reference ?? ''} />
+                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      <input checked={parameter.complies} onChange={(event) => updateParameter(index, { complies: event.target.checked })} type="checkbox" />
+                      {t('quality.complies')}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
         )}
         <label className="block text-sm font-medium text-slate-700">
           {t('quality.signaturePassword')}
@@ -154,8 +218,11 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
               <Button disabled={isLoading || !selectedLot || selectedLot.quality_status !== 'quarantine'} onClick={() => runAction('sample')} type="button">
                 {t('quality.sample')}
               </Button>
-              <Button disabled={isLoading || !selectedLot || selectedLot.quality_status === 'quarantine' || !password || !summary} onClick={() => runAction('qc-result')} type="button">
-                {t('quality.submitResult')}
+              <Button disabled={isLoading || !selectedLot || selectedLot.quality_status === 'quarantine' || Boolean(draftReport)} onClick={() => runAction('create-report')} type="button">
+                {t('quality.createReport')}
+              </Button>
+              <Button disabled={isLoading || !selectedLot || !draftReport || !password} onClick={() => runAction('submit-report')} type="button">
+                {t('quality.submitReport')}
               </Button>
             </>
           ) : (
