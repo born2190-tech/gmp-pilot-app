@@ -18,6 +18,12 @@ DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "gmp_pilot.db"
 UI_PATH = BASE_DIR / "app" / "ui.html"
 
+WAREHOUSE_TYPES = {
+    "SUBSTANCE_WAREHOUSE",
+    "PACKAGING_WAREHOUSE",
+    "FG_WAREHOUSE",
+}
+
 QUALITY_STATUSES = {
     "received",
     "quarantine",
@@ -27,6 +33,55 @@ QUALITY_STATUSES = {
     "blocked",
     "rejected",
     "expired",
+}
+
+SOP_STATUS_BY_QUALITY_STATUS: dict[str, str] = {
+    "received": "ПРИНЯТО",
+    "quarantine": "КАРАНТИН",
+    "sampled": "ОТОБРАНО",
+    "under_test": "НА ИСПЫТАНИИ",
+    "released": "ДОПУЩЕНО",
+    "blocked": "БЛОКИРОВАНО",
+    "rejected": "БРАК",
+    "expired": "ПРОСРОЧЕНО",
+}
+
+INCOMING_CONTROL_PROFILES: dict[str, dict[str, Any]] = {
+    "SUBSTANCE_WAREHOUSE": {
+        "display_name": "Склад субстанций и вспомогательных веществ",
+        "default_test_name": "Входной контроль сырья (СОП-533)",
+        "default_specification_ref": "SOP-533/F1",
+        "parameters": [
+            {"parameter_name": "Идентификация (IR)", "unit": "pass/fail", "lower_limit": 1, "upper_limit": 1, "target_value": 1},
+            {"parameter_name": "Количественное содержание", "unit": "%", "lower_limit": 95.0, "upper_limit": 105.0, "target_value": 99.0},
+            {"parameter_name": "Примеси", "unit": "%", "lower_limit": 0.0, "upper_limit": 1.0, "target_value": 0.2},
+            {"parameter_name": "Влага (KF)", "unit": "%", "lower_limit": 0.0, "upper_limit": 3.0, "target_value": 1.5},
+            {"parameter_name": "Микробиологическая чистота", "unit": "CFU/g", "lower_limit": 0.0, "upper_limit": 1000.0, "target_value": 10.0},
+        ],
+    },
+    "PACKAGING_WAREHOUSE": {
+        "display_name": "Склад упаковочных и печатных материалов",
+        "default_test_name": "Входной контроль упаковочных материалов",
+        "default_specification_ref": "SOP-209/PACK",
+        "parameters": [
+            {"parameter_name": "Визуальная целостность", "unit": "pass/fail", "lower_limit": 1, "upper_limit": 1, "target_value": 1},
+            {"parameter_name": "Читаемость печати", "unit": "pass/fail", "lower_limit": 1, "upper_limit": 1, "target_value": 1},
+            {"parameter_name": "Соответствие макету", "unit": "pass/fail", "lower_limit": 1, "upper_limit": 1, "target_value": 1},
+            {"parameter_name": "Размер/геометрия", "unit": "mm", "lower_limit": 0.0, "upper_limit": 9999.0, "target_value": 0.0},
+        ],
+    },
+    "FG_WAREHOUSE": {
+        "display_name": "Склад карантина и готовой продукции",
+        "default_test_name": "Приемочный контроль готовой продукции (СОП-548)",
+        "default_specification_ref": "SOP-548/F1",
+        "parameters": [
+            {"parameter_name": "Описание/внешний вид", "unit": "pass/fail", "lower_limit": 1, "upper_limit": 1, "target_value": 1},
+            {"parameter_name": "Средняя масса", "unit": "mg", "lower_limit": 0.0, "upper_limit": 9999.0, "target_value": 0.0},
+            {"parameter_name": "Распадаемость", "unit": "min", "lower_limit": 0.0, "upper_limit": 30.0, "target_value": 10.0},
+            {"parameter_name": "Растворение", "unit": "%", "lower_limit": 75.0, "upper_limit": 100.0, "target_value": 85.0},
+            {"parameter_name": "Количественное содержание", "unit": "%", "lower_limit": 95.0, "upper_limit": 105.0, "target_value": 99.0},
+        ],
+    },
 }
 
 ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
@@ -58,6 +113,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     "ENTER_QC_RESULT": {"QC_ANALYST"},
     "QA_RELEASE": {"QA_MANAGER"},
     "ISSUE_TO_PRODUCTION": {"WAREHOUSE_OPERATOR", "WAREHOUSE_MANAGER"},
+    "ADJUST_STOCK": {"WAREHOUSE_MANAGER", "SYS_ADMIN"},
     "CREATE_PRODUCTION_ORDER": {"SHIFT_MASTER", "TECHNOLOGIST"},
     "START_PRODUCTION_ORDER": {"SHIFT_MASTER"},
     "CREATE_EBR_TEMPLATE": {"SHIFT_MASTER", "TECHNOLOGIST", "QA_MANAGER"},
@@ -69,6 +125,9 @@ SEED_USERS = [
     ("qa_manager", "QA_MANAGER", "qa123"),
     ("qc_analyst", "QC_ANALYST", "qc123"),
     ("warehouse_operator", "WAREHOUSE_OPERATOR", "wh123"),
+    ("warehouse_substance", "WAREHOUSE_OPERATOR", "whs123"),
+    ("warehouse_packaging", "WAREHOUSE_OPERATOR", "whp123"),
+    ("warehouse_fg", "WAREHOUSE_OPERATOR", "whfg123"),
     ("warehouse_manager", "WAREHOUSE_MANAGER", "whm123"),
     ("production_operator", "PRODUCTION_OPERATOR", "prod123"),
     ("shift_master", "SHIFT_MASTER", "shift123"),
@@ -99,6 +158,9 @@ class MaterialReceiptRequest(BaseModel):
     material_code: str
     material_name: str
     supplier_lot: str
+    warehouse_type: Literal["SUBSTANCE_WAREHOUSE", "PACKAGING_WAREHOUSE", "FG_WAREHOUSE"] = "SUBSTANCE_WAREHOUSE"
+    production_year: int = Field(ge=2000, le=2100)
+    expiry_date: str
     quantity: float = Field(gt=0)
     unit: str
     location: str
@@ -121,8 +183,8 @@ class StatusTransitionRequest(BaseModel):
 
 
 class SamplingTaskRequest(BaseModel):
-    test_name: str
-    specification_ref: str
+    test_name: Optional[str] = None
+    specification_ref: Optional[str] = None
     signature: SignatureRequest
 
 
@@ -165,6 +227,12 @@ class IssueToProductionRequest(BaseModel):
     signature: SignatureRequest
     override_signature: Optional[SignatureRequest] = None
     override_reason: Optional[str] = None
+
+class StockAdjustmentRequest(BaseModel):
+    lot_id: int
+    quantity_delta: float
+    reason: str
+    signature: SignatureRequest
 
 
 class CreateProductionOrderRequest(BaseModel):
@@ -212,11 +280,14 @@ class CompleteEBRStepRequest(BaseModel):
 class AuthUser(BaseModel):
     username: str
     role: str
+    warehouse_scope: Optional[str] = None
+    workstation_id: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+    workstation_id: Optional[str] = None
 
 
 class LoginResponse(BaseModel):
@@ -225,6 +296,8 @@ class LoginResponse(BaseModel):
     expires_at: str
     username: str
     role: str
+    warehouse_scope: Optional[str] = None
+    workstation_id: Optional[str] = None
 
 
 def ensure_column(db: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:
@@ -264,7 +337,8 @@ def ensure_tables() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 role TEXT NOT NULL,
-                password TEXT NOT NULL
+                password TEXT NOT NULL,
+                warehouse_scope TEXT
             );
 
             CREATE TABLE IF NOT EXISTS materials (
@@ -279,10 +353,15 @@ def ensure_tables() -> None:
                 material_id INTEGER NOT NULL,
                 supplier_lot TEXT NOT NULL,
                 internal_lot TEXT NOT NULL UNIQUE,
+                warehouse_type TEXT NOT NULL DEFAULT 'SUBSTANCE_WAREHOUSE',
+                production_year INTEGER,
+                expiry_date TEXT,
                 quantity REAL NOT NULL,
                 unit TEXT NOT NULL,
                 location TEXT NOT NULL,
                 quality_status TEXT NOT NULL,
+                incoming_control_notified_at TEXT,
+                qc_result_received_at TEXT,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(material_id) REFERENCES materials(id)
             );
@@ -422,24 +501,56 @@ def ensure_tables() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 token TEXT NOT NULL UNIQUE,
+                workstation_id TEXT,
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
                 revoked INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             );
+
+            CREATE TABLE IF NOT EXISTS inventory_movements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp_utc TEXT NOT NULL,
+                movement_type TEXT NOT NULL,
+                lot_id INTEGER NOT NULL,
+                material_id INTEGER NOT NULL,
+                warehouse_type TEXT NOT NULL,
+                quantity_delta REAL NOT NULL,
+                quantity_after REAL NOT NULL,
+                unit TEXT NOT NULL,
+                reference_type TEXT,
+                reference_id TEXT,
+                user_id TEXT NOT NULL,
+                comment TEXT,
+                FOREIGN KEY(lot_id) REFERENCES lots(id),
+                FOREIGN KEY(material_id) REFERENCES materials(id)
+            );
             """
         )
 
         ensure_qc_schema(db)
+        ensure_column(db, "lots", "warehouse_type", "TEXT NOT NULL DEFAULT 'SUBSTANCE_WAREHOUSE'")
+        ensure_column(db, "lots", "production_year", "INTEGER")
+        ensure_column(db, "lots", "expiry_date", "TEXT")
+        ensure_column(db, "lots", "incoming_control_notified_at", "TEXT")
+        ensure_column(db, "lots", "qc_result_received_at", "TEXT")
+        ensure_column(db, "users", "warehouse_scope", "TEXT")
+        ensure_column(db, "auth_sessions", "workstation_id", "TEXT")
+
+        warehouse_scopes = {
+            "warehouse_substance": "SUBSTANCE_WAREHOUSE",
+            "warehouse_packaging": "PACKAGING_WAREHOUSE",
+            "warehouse_fg": "FG_WAREHOUSE",
+        }
 
         for username, role, password in SEED_USERS:
             db.execute(
                 """
-                INSERT INTO users(username, role, password)
-                VALUES(?, ?, ?)
-                ON CONFLICT(username) DO UPDATE SET role=excluded.role
+                INSERT INTO users(username, role, password, warehouse_scope)
+                VALUES(?, ?, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET role=excluded.role, warehouse_scope=excluded.warehouse_scope
                 """,
-                (username, role, password),
+                (username, role, password, warehouse_scopes.get(username)),
             )
         db.commit()
     finally:
@@ -476,7 +587,7 @@ def get_current_user(authorization: Optional[str] = Header(default=None, alias="
         revoke_expired_sessions(db)
         session = db.execute(
             """
-            SELECT s.id, s.expires_at, u.username, u.role
+            SELECT s.id, s.expires_at, s.workstation_id, u.username, u.role, u.warehouse_scope
             FROM auth_sessions s
             JOIN users u ON u.id = s.user_id
             WHERE s.token = ? AND s.revoked = 0
@@ -486,7 +597,12 @@ def get_current_user(authorization: Optional[str] = Header(default=None, alias="
         ).fetchone()
         if not session:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
-        return AuthUser(username=session["username"], role=session["role"])
+        return AuthUser(
+            username=session["username"],
+            role=session["role"],
+            warehouse_scope=session["warehouse_scope"],
+            workstation_id=session["workstation_id"],
+        )
     finally:
         db.close()
 
@@ -599,6 +715,70 @@ def get_lot(db: sqlite3.Connection, lot_id: int) -> sqlite3.Row:
     return lot
 
 
+def get_profile_by_warehouse_type(warehouse_type: str) -> dict[str, Any]:
+    profile = INCOMING_CONTROL_PROFILES.get(warehouse_type)
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown warehouse_type: {warehouse_type}")
+    return profile
+
+
+def to_sop_status(quality_status: str) -> str:
+    return SOP_STATUS_BY_QUALITY_STATUS.get(quality_status, "НЕ ОПРЕДЕЛЕН")
+
+
+def to_sop_labels(quality_status: str) -> list[str]:
+    if quality_status == "sampled":
+        return ["ОТОБРАНО", "КАРАНТИН"]
+    return [to_sop_status(quality_status)]
+
+
+def write_inventory_movement(
+    db: sqlite3.Connection,
+    user: AuthUser,
+    movement_type: str,
+    lot: sqlite3.Row,
+    quantity_delta: float,
+    quantity_after: float,
+    reference_type: Optional[str] = None,
+    reference_id: Optional[str] = None,
+    comment: Optional[str] = None,
+) -> None:
+    db.execute(
+        """
+        INSERT INTO inventory_movements(
+            timestamp_utc, movement_type, lot_id, material_id, warehouse_type,
+            quantity_delta, quantity_after, unit, reference_type, reference_id, user_id, comment
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            now_utc(),
+            movement_type,
+            lot["id"],
+            lot["material_id"],
+            lot["warehouse_type"],
+            quantity_delta,
+            quantity_after,
+            lot["unit"],
+            reference_type,
+            reference_id,
+            user.username,
+            comment,
+        ),
+    )
+
+
+def enforce_warehouse_scope(user: AuthUser, warehouse_type: str) -> None:
+    if user.role not in {"WAREHOUSE_OPERATOR", "WAREHOUSE_MANAGER"}:
+        return
+    if not user.warehouse_scope:
+        return
+    if user.warehouse_scope != warehouse_type:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Warehouse access denied: user scope {user.warehouse_scope}, target {warehouse_type}",
+        )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "gmp-pilot-app"}
@@ -635,10 +815,10 @@ def auth_login(payload: LoginRequest) -> LoginResponse:
 
         db.execute(
             """
-            INSERT INTO auth_sessions(user_id, token, created_at, expires_at, revoked)
-            VALUES (?, ?, ?, ?, 0)
+            INSERT INTO auth_sessions(user_id, token, workstation_id, created_at, expires_at, revoked)
+            VALUES (?, ?, ?, ?, ?, 0)
             """,
-            (user["id"], token, created_at, expires_at),
+            (user["id"], token, payload.workstation_id, created_at, expires_at),
         )
         db.commit()
 
@@ -647,6 +827,8 @@ def auth_login(payload: LoginRequest) -> LoginResponse:
             expires_at=expires_at,
             username=user["username"],
             role=user["role"],
+            warehouse_scope=user["warehouse_scope"],
+            workstation_id=payload.workstation_id,
         )
     finally:
         db.close()
@@ -666,12 +848,58 @@ def auth_logout(current_user: AuthUser = Depends(get_current_user), authorizatio
 
 @app.get("/auth/me")
 def auth_me(current_user: AuthUser = Depends(get_current_user)) -> dict[str, str]:
-    return {"username": current_user.username, "role": current_user.role}
+    return {
+        "username": current_user.username,
+        "role": current_user.role,
+        "warehouse_scope": current_user.warehouse_scope or "",
+        "workstation_id": current_user.workstation_id or "",
+    }
+
+
+@app.get("/incoming-control/profiles")
+def list_incoming_control_profiles(user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
+    require_permission(user, "READ_OPERATIONAL_DATA")
+    profiles: list[dict[str, Any]] = []
+    for warehouse_type, profile in INCOMING_CONTROL_PROFILES.items():
+        profiles.append(
+            {
+                "warehouse_type": warehouse_type,
+                "display_name": profile["display_name"],
+                "default_test_name": profile["default_test_name"],
+                "default_specification_ref": profile["default_specification_ref"],
+                "parameters": profile["parameters"],
+            }
+        )
+    return {"count": len(profiles), "profiles": profiles}
+
+
+@app.get("/lots/{lot_id}/incoming-control-profile")
+def get_lot_incoming_control_profile(lot_id: int, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
+    require_permission(user, "READ_OPERATIONAL_DATA")
+    db = get_db()
+    try:
+        lot = get_lot(db, lot_id)
+        enforce_warehouse_scope(user, lot["warehouse_type"])
+        profile = get_profile_by_warehouse_type(lot["warehouse_type"])
+        return {
+            "lot_id": lot_id,
+            "warehouse_type": lot["warehouse_type"],
+            "display_name": profile["display_name"],
+            "default_test_name": profile["default_test_name"],
+            "default_specification_ref": profile["default_specification_ref"],
+            "parameters": profile["parameters"],
+        }
+    finally:
+        db.close()
 
 
 @app.post("/materials/receipts")
 def create_material_receipt(payload: MaterialReceiptRequest, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
     require_permission(user, "CREATE_RECEIPT")
+    if payload.warehouse_type not in WAREHOUSE_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown warehouse_type")
+    enforce_warehouse_scope(user, payload.warehouse_type)
+
     db = get_db()
     try:
         validate_signature(db, user, payload.signature, "CREATE_RECEIPT", "material_receipt", "new")
@@ -686,21 +914,42 @@ def create_material_receipt(payload: MaterialReceiptRequest, user: AuthUser = De
         internal_lot = f"LOT-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{material_id}"
         db.execute(
             """
-            INSERT INTO lots(material_id, supplier_lot, internal_lot, quantity, unit, location, quality_status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO lots(
+                material_id, supplier_lot, internal_lot, warehouse_type, production_year, expiry_date,
+                quantity, unit, location, quality_status, incoming_control_notified_at, qc_result_received_at, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 material_id,
                 payload.supplier_lot,
                 internal_lot,
+                payload.warehouse_type,
+                payload.production_year,
+                payload.expiry_date,
                 payload.quantity,
                 payload.unit,
                 payload.location,
                 "received",
+                None,
+                None,
                 created_at,
             ),
         )
         lot_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        lot = db.execute("SELECT * FROM lots WHERE id = ?", (lot_id,)).fetchone()
+
+        write_inventory_movement(
+            db,
+            user,
+            movement_type="RECEIPT",
+            lot=lot,
+            quantity_delta=payload.quantity,
+            quantity_after=payload.quantity,
+            reference_type="material_receipt",
+            reference_id=str(lot_id),
+            comment="Приход на склад",
+        )
 
         write_audit(
             db,
@@ -711,8 +960,12 @@ def create_material_receipt(payload: MaterialReceiptRequest, user: AuthUser = De
             new_value={
                 "material_code": payload.material_code,
                 "supplier_lot": payload.supplier_lot,
+                "warehouse_type": payload.warehouse_type,
                 "internal_lot": internal_lot,
                 "quality_status": "received",
+                "sop_status": to_sop_status("received"),
+                "production_year": payload.production_year,
+                "expiry_date": payload.expiry_date,
                 "quantity": payload.quantity,
                 "unit": payload.unit,
                 "location": payload.location,
@@ -722,7 +975,11 @@ def create_material_receipt(payload: MaterialReceiptRequest, user: AuthUser = De
         return {
             "lot_id": lot_id,
             "internal_lot": internal_lot,
+            "warehouse_type": payload.warehouse_type,
             "quality_status": "received",
+            "sop_status": to_sop_status("received"),
+            "production_year": payload.production_year,
+            "expiry_date": payload.expiry_date,
             "message": "Material receipt created",
         }
     finally:
@@ -730,8 +987,22 @@ def create_material_receipt(payload: MaterialReceiptRequest, user: AuthUser = De
 
 
 @app.get("/lots")
-def list_lots(status_filter: Optional[str] = None, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
+def list_lots(
+    status_filter: Optional[str] = None,
+    warehouse_type: Optional[Literal["SUBSTANCE_WAREHOUSE", "PACKAGING_WAREHOUSE", "FG_WAREHOUSE"]] = None,
+    material_code: Optional[str] = None,
+    q: Optional[str] = None,
+    min_quantity: Optional[float] = None,
+    max_quantity: Optional[float] = None,
+    user: AuthUser = Depends(get_current_user),
+) -> dict[str, Any]:
     require_permission(user, "READ_OPERATIONAL_DATA")
+    effective_warehouse_type = warehouse_type
+    if user.role in {"WAREHOUSE_OPERATOR", "WAREHOUSE_MANAGER"} and user.warehouse_scope:
+        if warehouse_type and warehouse_type != user.warehouse_scope:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Warehouse access denied for requested filter")
+        effective_warehouse_type = user.warehouse_scope
+
     db = get_db()
     try:
         base_query = """
@@ -739,10 +1010,15 @@ def list_lots(status_filter: Optional[str] = None, user: AuthUser = Depends(get_
                 l.id,
                 l.internal_lot,
                 l.supplier_lot,
+                l.warehouse_type,
+                l.production_year,
+                l.expiry_date,
                 l.quantity,
                 l.unit,
                 l.location,
                 l.quality_status,
+                l.incoming_control_notified_at,
+                l.qc_result_received_at,
                 l.created_at,
                 m.material_code,
                 m.material_name,
@@ -756,9 +1032,34 @@ def list_lots(status_filter: Optional[str] = None, user: AuthUser = Depends(get_
         """
 
         params: list[Any] = []
+        where_parts: list[str] = []
         if status_filter:
-            base_query += " WHERE l.quality_status = ? "
+            where_parts.append("l.quality_status = ?")
             params.append(status_filter)
+
+        if effective_warehouse_type:
+            where_parts.append("l.warehouse_type = ?")
+            params.append(effective_warehouse_type)
+
+        if material_code:
+            where_parts.append("m.material_code = ?")
+            params.append(material_code)
+
+        if q:
+            where_parts.append("(m.material_code LIKE ? OR m.material_name LIKE ? OR l.internal_lot LIKE ? OR l.supplier_lot LIKE ?)")
+            like_q = f"%{q}%"
+            params.extend([like_q, like_q, like_q, like_q])
+
+        if min_quantity is not None:
+            where_parts.append("l.quantity >= ?")
+            params.append(min_quantity)
+
+        if max_quantity is not None:
+            where_parts.append("l.quantity <= ?")
+            params.append(max_quantity)
+
+        if where_parts:
+            base_query += " WHERE " + " AND ".join(where_parts)
 
         base_query += " ORDER BY l.id DESC "
         rows = db.execute(base_query, tuple(params)).fetchall()
@@ -770,12 +1071,19 @@ def list_lots(status_filter: Optional[str] = None, user: AuthUser = Depends(get_
                     "id": row["id"],
                     "internal_lot": row["internal_lot"],
                     "supplier_lot": row["supplier_lot"],
+                    "warehouse_type": row["warehouse_type"],
                     "material_code": row["material_code"],
                     "material_name": row["material_name"],
+                    "production_year": row["production_year"],
+                    "expiry_date": row["expiry_date"],
                     "quantity": row["quantity"],
                     "unit": row["unit"],
                     "location": row["location"],
                     "quality_status": row["quality_status"],
+                    "sop_status": to_sop_status(row["quality_status"]),
+                    "sop_labels": to_sop_labels(row["quality_status"]),
+                    "incoming_control_notified_at": row["incoming_control_notified_at"],
+                    "qc_result_received_at": row["qc_result_received_at"],
                     "created_at": row["created_at"],
                     "has_open_deviation": bool(row["has_open_deviation"]),
                 }
@@ -786,9 +1094,169 @@ def list_lots(status_filter: Optional[str] = None, user: AuthUser = Depends(get_
         db.close()
 
 
+@app.get("/inventory/movements")
+def list_inventory_movements(
+    warehouse_type: Optional[Literal["SUBSTANCE_WAREHOUSE", "PACKAGING_WAREHOUSE", "FG_WAREHOUSE"]] = None,
+    material_code: Optional[str] = None,
+    lot_id: Optional[int] = None,
+    movement_type: Optional[str] = None,
+    limit: int = 200,
+    user: AuthUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    require_permission(user, "READ_OPERATIONAL_DATA")
+    effective_warehouse_type = warehouse_type
+    if user.role in {"WAREHOUSE_OPERATOR", "WAREHOUSE_MANAGER"} and user.warehouse_scope:
+        if warehouse_type and warehouse_type != user.warehouse_scope:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Warehouse access denied for requested filter")
+        effective_warehouse_type = user.warehouse_scope
+
+    capped_limit = min(max(limit, 1), 1000)
+    db = get_db()
+    try:
+        query = """
+            SELECT
+                im.id,
+                im.timestamp_utc,
+                im.movement_type,
+                im.lot_id,
+                im.material_id,
+                im.warehouse_type,
+                im.quantity_delta,
+                im.quantity_after,
+                im.unit,
+                im.reference_type,
+                im.reference_id,
+                im.user_id,
+                im.comment,
+                l.internal_lot,
+                l.supplier_lot,
+                l.production_year,
+                l.expiry_date,
+                m.material_code,
+                m.material_name
+            FROM inventory_movements im
+            JOIN lots l ON l.id = im.lot_id
+            JOIN materials m ON m.id = im.material_id
+        """
+        where_parts: list[str] = []
+        params: list[Any] = []
+
+        if effective_warehouse_type:
+            where_parts.append("im.warehouse_type = ?")
+            params.append(effective_warehouse_type)
+        if material_code:
+            where_parts.append("m.material_code = ?")
+            params.append(material_code)
+        if lot_id is not None:
+            where_parts.append("im.lot_id = ?")
+            params.append(lot_id)
+        if movement_type:
+            where_parts.append("im.movement_type = ?")
+            params.append(movement_type)
+
+        if where_parts:
+            query += " WHERE " + " AND ".join(where_parts)
+
+        query += " ORDER BY im.id DESC LIMIT ?"
+        params.append(capped_limit)
+
+        rows = db.execute(query, tuple(params)).fetchall()
+        movements = []
+        for row in rows:
+            movements.append(
+                {
+                    "id": row["id"],
+                    "timestamp_utc": row["timestamp_utc"],
+                    "movement_type": row["movement_type"],
+                    "warehouse_type": row["warehouse_type"],
+                    "lot_id": row["lot_id"],
+                    "internal_lot": row["internal_lot"],
+                    "supplier_lot": row["supplier_lot"],
+                    "production_year": row["production_year"],
+                    "expiry_date": row["expiry_date"],
+                    "material_code": row["material_code"],
+                    "material_name": row["material_name"],
+                    "quantity_delta": row["quantity_delta"],
+                    "quantity_after": row["quantity_after"],
+                    "unit": row["unit"],
+                    "reference_type": row["reference_type"],
+                    "reference_id": row["reference_id"],
+                    "user_id": row["user_id"],
+                    "comment": row["comment"],
+                }
+            )
+        return {"count": len(movements), "movements": movements}
+    finally:
+        db.close()
+
+
+@app.get("/inventory/balances")
+def get_inventory_balances(
+    warehouse_type: Optional[Literal["SUBSTANCE_WAREHOUSE", "PACKAGING_WAREHOUSE", "FG_WAREHOUSE"]] = None,
+    material_code: Optional[str] = None,
+    quality_status: Optional[str] = None,
+    user: AuthUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    require_permission(user, "READ_OPERATIONAL_DATA")
+    effective_warehouse_type = warehouse_type
+    if user.role in {"WAREHOUSE_OPERATOR", "WAREHOUSE_MANAGER"} and user.warehouse_scope:
+        if warehouse_type and warehouse_type != user.warehouse_scope:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Warehouse access denied for requested filter")
+        effective_warehouse_type = user.warehouse_scope
+
+    db = get_db()
+    try:
+        query = """
+            SELECT
+                l.warehouse_type,
+                m.material_code,
+                m.material_name,
+                l.unit,
+                SUM(l.quantity) AS total_quantity,
+                COUNT(*) AS lots_count
+            FROM lots l
+            JOIN materials m ON m.id = l.material_id
+        """
+        where_parts: list[str] = []
+        params: list[Any] = []
+
+        if effective_warehouse_type:
+            where_parts.append("l.warehouse_type = ?")
+            params.append(effective_warehouse_type)
+        if material_code:
+            where_parts.append("m.material_code = ?")
+            params.append(material_code)
+        if quality_status:
+            where_parts.append("l.quality_status = ?")
+            params.append(quality_status)
+
+        if where_parts:
+            query += " WHERE " + " AND ".join(where_parts)
+
+        query += " GROUP BY l.warehouse_type, m.material_code, m.material_name, l.unit ORDER BY l.warehouse_type, m.material_code"
+        rows = db.execute(query, tuple(params)).fetchall()
+
+        balances = []
+        for row in rows:
+            balances.append(
+                {
+                    "warehouse_type": row["warehouse_type"],
+                    "material_code": row["material_code"],
+                    "material_name": row["material_name"],
+                    "unit": row["unit"],
+                    "total_quantity": row["total_quantity"],
+                    "lots_count": row["lots_count"],
+                }
+            )
+        return {"count": len(balances), "balances": balances}
+    finally:
+        db.close()
+
+
 @app.get("/sampling-tasks")
 def list_sampling_tasks(status_filter: Optional[str] = None, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
     require_permission(user, "READ_OPERATIONAL_DATA")
+    warehouse_scope = user.warehouse_scope if user.role in {"WAREHOUSE_OPERATOR", "WAREHOUSE_MANAGER"} else None
     db = get_db()
     try:
         base_query = """
@@ -801,14 +1269,25 @@ def list_sampling_tasks(status_filter: Optional[str] = None, user: AuthUser = De
                 st.created_by,
                 st.created_at,
                 l.internal_lot,
+                l.production_year,
+                l.expiry_date,
+                l.warehouse_type,
                 l.quality_status
             FROM sampling_tasks st
             JOIN lots l ON l.id = st.lot_id
         """
         params: list[Any] = []
+        where_parts: list[str] = []
         if status_filter:
-            base_query += " WHERE st.status = ? "
+            where_parts.append("st.status = ?")
             params.append(status_filter)
+
+        if warehouse_scope:
+            where_parts.append("l.warehouse_type = ?")
+            params.append(warehouse_scope)
+
+        if where_parts:
+            base_query += " WHERE " + " AND ".join(where_parts)
 
         base_query += " ORDER BY st.id DESC "
         rows = db.execute(base_query, tuple(params)).fetchall()
@@ -820,7 +1299,11 @@ def list_sampling_tasks(status_filter: Optional[str] = None, user: AuthUser = De
                     "id": row["id"],
                     "lot_id": row["lot_id"],
                     "internal_lot": row["internal_lot"],
+                    "production_year": row["production_year"],
+                    "expiry_date": row["expiry_date"],
+                    "warehouse_type": row["warehouse_type"],
                     "lot_quality_status": row["quality_status"],
+                    "lot_sop_status": to_sop_status(row["quality_status"]),
                     "test_name": row["test_name"],
                     "specification_ref": row["specification_ref"],
                     "status": row["status"],
@@ -844,6 +1327,7 @@ def transition_lot_status(
     db = get_db()
     try:
         lot = get_lot(db, lot_id)
+        enforce_warehouse_scope(user, lot["warehouse_type"])
         from_status = lot["quality_status"]
         to_status = payload.to_status
 
@@ -877,7 +1361,13 @@ def transition_lot_status(
             reason=payload.reason,
         )
         db.commit()
-        return {"lot_id": lot_id, "from_status": from_status, "to_status": to_status}
+        return {
+            "lot_id": lot_id,
+            "from_status": from_status,
+            "to_status": to_status,
+            "from_sop_status": to_sop_status(from_status),
+            "to_sop_status": to_sop_status(to_status),
+        }
     finally:
         db.close()
 
@@ -892,19 +1382,25 @@ def create_sampling_task(
     db = get_db()
     try:
         lot = get_lot(db, lot_id)
+        enforce_warehouse_scope(user, lot["warehouse_type"])
         if lot["quality_status"] not in {"quarantine", "sampled"}:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Sampling allowed only for quarantine/sampled lots")
 
         validate_signature(db, user, payload.signature, "CREATE_SAMPLING_TASK", "lot", str(lot_id))
+        profile = get_profile_by_warehouse_type(lot["warehouse_type"])
+        test_name = payload.test_name or profile["default_test_name"]
+        specification_ref = payload.specification_ref or profile["default_specification_ref"]
 
         db.execute(
             """
             INSERT INTO sampling_tasks(lot_id, test_name, specification_ref, status, created_by, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (lot_id, payload.test_name, payload.specification_ref, "open", user.username, now_utc()),
+            (lot_id, test_name, specification_ref, "open", user.username, now_utc()),
         )
         task_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        incoming_control_notified_at = now_utc()
+        db.execute("UPDATE lots SET incoming_control_notified_at = ? WHERE id = ?", (incoming_control_notified_at, lot_id))
 
         if lot["quality_status"] == "quarantine":
             db.execute("UPDATE lots SET quality_status = ? WHERE id = ?", ("sampled", lot_id))
@@ -915,10 +1411,15 @@ def create_sampling_task(
             object_type="sampling_task",
             object_id=str(task_id),
             action_type="CREATE_SAMPLING_TASK",
-            new_value={"lot_id": lot_id, "test_name": payload.test_name, "specification_ref": payload.specification_ref},
+            new_value={"lot_id": lot_id, "test_name": test_name, "specification_ref": specification_ref, "warehouse_type": lot["warehouse_type"]},
         )
         db.commit()
-        return {"task_id": task_id, "status": "open", "lot_id": lot_id}
+        return {
+            "task_id": task_id,
+            "status": "open",
+            "lot_id": lot_id,
+            "incoming_control_notified_at": incoming_control_notified_at,
+        }
     finally:
         db.close()
 
@@ -1017,6 +1518,8 @@ def enter_qc_report(payload: QCBatchReportRequest, user: AuthUser = Depends(get_
 
         db.execute("UPDATE sampling_tasks SET status = ? WHERE id = ?", ("completed", payload.task_id))
         db.execute("UPDATE lots SET quality_status = ? WHERE id = ?", ("under_test", task["lot_id"]))
+        qc_result_received_at = now_utc()
+        db.execute("UPDATE lots SET qc_result_received_at = ? WHERE id = ?", (qc_result_received_at, task["lot_id"]))
 
         if overall_out_of_spec:
             db.execute(
@@ -1038,6 +1541,7 @@ def enter_qc_report(payload: QCBatchReportRequest, user: AuthUser = Depends(get_
                 "lot_id": task["lot_id"],
                 "parameters_count": len(payload.results),
                 "out_of_spec": overall_out_of_spec,
+                "status_after_report": "under_test",
             },
             reason="OOS/OOT" if overall_out_of_spec else None,
         )
@@ -1047,6 +1551,8 @@ def enter_qc_report(payload: QCBatchReportRequest, user: AuthUser = Depends(get_
             "lot_id": task["lot_id"],
             "out_of_spec": overall_out_of_spec,
             "parameters_count": len(payload.results),
+            "lot_next_sop_status": to_sop_status("under_test"),
+            "qc_result_received_at": qc_result_received_at,
         }
     finally:
         db.close()
@@ -1097,7 +1603,12 @@ def qa_release_decision(payload: QAReleaseRequest, user: AuthUser = Depends(get_
             reason=payload.reason,
         )
         db.commit()
-        return {"decision_id": decision_id, "lot_id": payload.lot_id, "decision": payload.decision}
+        return {
+            "decision_id": decision_id,
+            "lot_id": payload.lot_id,
+            "decision": payload.decision,
+            "decision_sop_status": to_sop_status(payload.decision),
+        }
     finally:
         db.close()
 
@@ -1108,6 +1619,7 @@ def issue_to_production(payload: IssueToProductionRequest, user: AuthUser = Depe
     db = get_db()
     try:
         lot = get_lot(db, payload.lot_id)
+        enforce_warehouse_scope(user, lot["warehouse_type"])
         validate_signature(db, user, payload.signature, "ISSUE_TO_PRODUCTION", "lot", str(payload.lot_id))
 
         override_used = False
@@ -1135,6 +1647,19 @@ def issue_to_production(payload: IssueToProductionRequest, user: AuthUser = Depe
         new_quantity = lot["quantity"] - payload.quantity
         db.execute("UPDATE lots SET quantity = ? WHERE id = ?", (new_quantity, payload.lot_id))
 
+        lot_after = db.execute("SELECT * FROM lots WHERE id = ?", (payload.lot_id,)).fetchone()
+        write_inventory_movement(
+            db,
+            user,
+            movement_type="ISSUE_TO_PRODUCTION",
+            lot=lot_after,
+            quantity_delta=-payload.quantity,
+            quantity_after=new_quantity,
+            reference_type="issue_to_production",
+            reference_id=str(payload.lot_id),
+            comment=payload.override_reason if override_used else "Выдача в производство",
+        )
+
         write_audit(
             db,
             user,
@@ -1152,6 +1677,53 @@ def issue_to_production(payload: IssueToProductionRequest, user: AuthUser = Depe
             "remaining_quantity": new_quantity,
             "override_used": override_used,
         }
+    finally:
+        db.close()
+
+
+@app.post("/warehouse/stock-adjustments")
+def adjust_stock(payload: StockAdjustmentRequest, user: AuthUser = Depends(get_current_user)) -> dict[str, Any]:
+    require_permission(user, "ADJUST_STOCK")
+    if payload.quantity_delta == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="quantity_delta cannot be 0")
+
+    db = get_db()
+    try:
+        lot = get_lot(db, payload.lot_id)
+        enforce_warehouse_scope(user, lot["warehouse_type"])
+        validate_signature(db, user, payload.signature, "ADJUST_STOCK", "lot", str(payload.lot_id))
+
+        new_quantity = lot["quantity"] + payload.quantity_delta
+        if new_quantity < 0:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Stock cannot become negative")
+
+        db.execute("UPDATE lots SET quantity = ? WHERE id = ?", (new_quantity, payload.lot_id))
+        lot_after = db.execute("SELECT * FROM lots WHERE id = ?", (payload.lot_id,)).fetchone()
+
+        write_inventory_movement(
+            db,
+            user,
+            movement_type="STOCK_ADJUSTMENT",
+            lot=lot_after,
+            quantity_delta=payload.quantity_delta,
+            quantity_after=new_quantity,
+            reference_type="stock_adjustment",
+            reference_id=str(payload.lot_id),
+            comment=payload.reason,
+        )
+
+        write_audit(
+            db,
+            user,
+            object_type="lot",
+            object_id=str(payload.lot_id),
+            action_type="STOCK_ADJUSTMENT",
+            old_value={"quantity": lot["quantity"]},
+            new_value={"quantity": new_quantity, "delta": payload.quantity_delta},
+            reason=payload.reason,
+        )
+        db.commit()
+        return {"lot_id": payload.lot_id, "quantity_before": lot["quantity"], "quantity_after": new_quantity}
     finally:
         db.close()
 

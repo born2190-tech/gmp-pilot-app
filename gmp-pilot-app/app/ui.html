@@ -39,6 +39,8 @@
     <h3>Login</h3>
     <label>Username</label><input id="loginUsername" value="warehouse_operator" />
     <label>Password</label><input id="loginPassword" type="password" value="wh123" />
+    <label>Workstation ID (складской ПК)</label><input id="loginWorkstation" value="WS-SUB-01" />
+    <div class="muted">Складские логины: `warehouse_substance` / `warehouse_packaging` / `warehouse_fg`</div>
     <button onclick="login()">Sign In</button>
   </div>
 
@@ -46,6 +48,7 @@
     <div class="bar">
       <div><b>API:</b> <span id="apiBase" class="status"></span></div>
       <div><b>User:</b> <span id="currentUser" class="status">-</span> | <b>Role:</b> <span id="currentRole" class="status">-</span></div>
+      <div><b>Warehouse Scope:</b> <span id="currentScope" class="status">-</span> | <b>WS:</b> <span id="currentWorkstation" class="status">-</span></div>
       <div><b>Selected lot:</b> <span id="selectedLot" class="status">-</span> <span id="lotStatusChip" class="chip">-</span> | <b>Selected task:</b> <span id="selectedTask" class="status">-</span></div>
       <div class="muted" id="gateHint">Система блокирует недопустимые шаги автоматически.</div>
       <button class="secondary" onclick="logout()">Logout</button>
@@ -64,6 +67,16 @@
           <label>material_code</label><input id="wh_material_code" value="API-001" />
           <label>material_name</label><input id="wh_material_name" value="Acetaminophen" />
           <label>supplier_lot</label><input id="wh_supplier_lot" value="SUP-LOT-1001" />
+          <label>warehouse_type</label>
+          <select id="wh_warehouse_type">
+            <option value="SUBSTANCE_WAREHOUSE">Склад субстанций и вспомогательных</option>
+            <option value="PACKAGING_WAREHOUSE">Склад упаковочных материалов</option>
+            <option value="FG_WAREHOUSE">Склад карантина и готовой продукции</option>
+          </select>
+          <div class="row">
+            <div><label>production_year</label><input id="wh_production_year" type="number" value="2026" /></div>
+            <div><label>expiry_date</label><input id="wh_expiry_date" type="date" value="2028-12-31" /></div>
+          </div>
           <div class="row">
             <div><label>quantity</label><input id="wh_qty" type="number" value="100.5" step="0.1" /></div>
             <div><label>unit</label><input id="wh_unit" value="kg" /></div>
@@ -80,17 +93,63 @@
           <label>Incoming control task name</label><input id="wh_test" value="Incoming Control - Full Panel" />
           <label>Specification ref</label><input id="wh_spec" value="SPEC-API-001" />
           <button id="btnCreateSampling" onclick="createSamplingTask()">Create Sampling Task</button>
-          <button class="secondary" onclick="loadLots();loadTasks();">Refresh Boards</button>
+          <button class="secondary" onclick="loadLots();loadTasks();loadMovements();">Refresh Boards</button>
         </div>
       </div>
 
       <div class="card">
         <h3>Lots Board</h3>
+        <div class="row">
+          <div>
+            <label>Filter warehouse</label>
+            <select id="flt_warehouse">
+              <option value="">All</option>
+              <option value="SUBSTANCE_WAREHOUSE">Склад субстанций</option>
+              <option value="PACKAGING_WAREHOUSE">Склад упаковочных</option>
+              <option value="FG_WAREHOUSE">Склад ГП</option>
+            </select>
+          </div>
+          <div>
+            <label>Filter status</label>
+            <select id="flt_status">
+              <option value="">All</option>
+              <option value="received">received</option>
+              <option value="quarantine">quarantine</option>
+              <option value="sampled">sampled</option>
+              <option value="under_test">under_test</option>
+              <option value="released">released</option>
+              <option value="blocked">blocked</option>
+              <option value="rejected">rejected</option>
+              <option value="expired">expired</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Search (material/lot)</label>
+            <input id="flt_q" placeholder="API-001 or LOT" />
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="secondary" onclick="loadLots()">Apply Filters</button>
+          </div>
+        </div>
         <table>
           <thead>
-            <tr><th>Lot ID</th><th>Internal Lot</th><th>Material</th><th>Status</th><th>Deviation</th><th>Qty</th><th>Location</th><th>Action</th></tr>
+            <tr><th>Lot ID</th><th>Internal Lot</th><th>Warehouse</th><th>Material</th><th>Status</th><th>Prod Year</th><th>Expiry</th><th>Notify QC</th><th>QC Result</th><th>Deviation</th><th>Qty</th><th>Location</th><th>Action</th></tr>
           </thead>
           <tbody id="lotsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>Warehouse Movements</h3>
+        <button class="secondary" onclick="loadMovements()">Refresh Movements</button>
+        <table style="margin-top:10px;">
+          <thead>
+            <tr><th>#</th><th>Time</th><th>Type</th><th>Lot</th><th>Material</th><th>Prod Year</th><th>Expiry</th><th>Delta</th><th>After</th><th>User</th></tr>
+          </thead>
+          <tbody id="movementsBody"></tbody>
         </table>
       </div>
     </div>
@@ -115,7 +174,7 @@
           <button class="secondary" onclick="loadTasks()">Refresh QC Tasks</button>
           <table style="margin-top:10px;">
             <thead>
-              <tr><th>Task ID</th><th>Lot</th><th>Task Name</th><th>Status</th><th>Created</th><th>Action</th></tr>
+              <tr><th>Task ID</th><th>Lot</th><th>Prod Year</th><th>Expiry</th><th>Task Name</th><th>Status</th><th>Created</th><th>Action</th></tr>
             </thead>
             <tbody id="tasksBody"></tbody>
           </table>
@@ -168,7 +227,8 @@
       lotId: null,
       taskId: null,
       lots: [],
-      tasks: []
+      tasks: [],
+      profilesByWarehouse: {}
     };
     document.getElementById('apiBase').textContent = apiBase;
 
@@ -223,13 +283,44 @@
       let data;
       try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
       output.textContent = JSON.stringify({ status: res.status, body: data }, null, 2);
-      if (!res.ok) throw new Error(data.detail || 'API error');
+      if (!res.ok) {
+        const msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data);
+        document.getElementById('gateHint').textContent = `Ошибка API: ${msg}`;
+        alert(`Ошибка API: ${msg}`);
+        throw new Error(msg || 'API error');
+      }
       return data;
     }
 
     function getSelectedLot() { return state.lots.find(l => l.id === state.lotId) || null; }
     function getSelectedTask() { return state.tasks.find(t => t.id === state.taskId) || null; }
     function hasOpenTaskForLot(lotId) { return state.tasks.some(t => t.lot_id === lotId && t.status === 'open'); }
+
+    function warehouseLabel(code) {
+      const profile = state.profilesByWarehouse[code];
+      return profile ? profile.display_name : code;
+    }
+
+    function rowsFromProfile(profile) {
+      if (!profile || !Array.isArray(profile.parameters) || profile.parameters.length === 0) return defaultQcRows();
+      return profile.parameters.map(p => ({
+        parameter_name: p.parameter_name,
+        value: Number(p.target_value ?? p.lower_limit ?? 0),
+        unit: p.unit ?? '%',
+        lower_limit: Number(p.lower_limit ?? 0),
+        upper_limit: Number(p.upper_limit ?? 0),
+        instrument: 'LAB-01'
+      }));
+    }
+
+    function applyProfileForLot(lot) {
+      if (!lot) return;
+      const profile = state.profilesByWarehouse[lot.warehouse_type];
+      if (!profile) return;
+      document.getElementById('wh_test').value = profile.default_test_name;
+      document.getElementById('wh_spec').value = profile.default_specification_ref;
+      renderQcRows(rowsFromProfile(profile));
+    }
 
     function syncSelection() {
       const lot = getSelectedLot();
@@ -239,7 +330,7 @@
       document.getElementById('wh_lot_id').value = state.lotId ?? '';
       document.getElementById('qa_lot_id').value = state.lotId ?? '';
       document.getElementById('qc_task_id').value = state.taskId ?? '';
-      document.getElementById('lotStatusChip').textContent = lot ? lot.quality_status : '-';
+      document.getElementById('lotStatusChip').textContent = lot ? `${lot.quality_status} / ${lot.sop_status ?? '-'}` : '-';
 
       const btnMove = document.getElementById('btnMoveQuarantine');
       const btnSampling = document.getElementById('btnCreateSampling');
@@ -261,7 +352,7 @@
         btnQa.disabled = false; qaHint.textContent = 'Lot is eligible for QA decision';
       }
 
-      document.getElementById('gateHint').textContent = `Stage gate active. Current lot status: ${lot ? lot.quality_status : 'N/A'}`;
+      document.getElementById('gateHint').textContent = `Stage gate active. Current lot status: ${lot ? (lot.sop_labels?.join(', ') || lot.sop_status || lot.quality_status) : 'N/A'}`;
     }
 
     function defaultQcRows() {
@@ -326,21 +417,40 @@
       const payload = {
         username: document.getElementById('loginUsername').value,
         password: document.getElementById('loginPassword').value,
+        workstation_id: document.getElementById('loginWorkstation').value,
       };
       const data = await api('POST', '/auth/login', payload);
       state.token = data.access_token;
       state.username = data.username;
       state.role = data.role;
+      state.warehouseScope = data.warehouse_scope || '';
 
       document.getElementById('currentUser').textContent = state.username;
       document.getElementById('currentRole').textContent = state.role;
+      document.getElementById('currentScope').textContent = data.warehouse_scope || 'ALL';
+      document.getElementById('currentWorkstation').textContent = data.workstation_id || '-';
+
+      const whSelect = document.getElementById('wh_warehouse_type');
+      if (state.warehouseScope) {
+        whSelect.value = state.warehouseScope;
+        whSelect.disabled = true;
+      } else {
+        whSelect.disabled = false;
+      }
       document.getElementById('loginCard').classList.add('hidden');
       document.getElementById('appArea').classList.remove('hidden');
+
+      const profiles = await api('GET', '/incoming-control/profiles');
+      state.profilesByWarehouse = {};
+      for (const profile of profiles.profiles || []) {
+        state.profilesByWarehouse[profile.warehouse_type] = profile;
+      }
 
       applyRoleVisibility();
       renderQcRows(defaultQcRows());
       await loadLots();
       await loadTasks();
+      await loadMovements();
     }
 
     async function logout() {
@@ -352,19 +462,31 @@
       state.taskId = null;
       state.lots = [];
       state.tasks = [];
+      state.warehouseScope = '';
       document.getElementById('loginCard').classList.remove('hidden');
       document.getElementById('appArea').classList.add('hidden');
+      document.getElementById('currentScope').textContent = '-';
+      document.getElementById('currentWorkstation').textContent = '-';
+      document.getElementById('wh_warehouse_type').disabled = false;
       output.textContent = '';
     }
 
     async function loadLots() {
-      const data = await api('GET', '/lots');
+      const qs = new URLSearchParams();
+      const wh = document.getElementById('flt_warehouse').value;
+      const st = document.getElementById('flt_status').value;
+      const q = document.getElementById('flt_q').value;
+      if (wh) qs.set('warehouse_type', wh);
+      if (st) qs.set('status_filter', st);
+      if (q) qs.set('q', q);
+      const query = qs.toString() ? `/lots?${qs.toString()}` : '/lots';
+      const data = await api('GET', query);
       state.lots = data.lots || [];
       const body = document.getElementById('lotsBody');
       body.innerHTML = '';
       for (const lot of state.lots) {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${lot.id}</td><td>${lot.internal_lot}</td><td>${lot.material_code} / ${lot.material_name}</td><td>${lot.quality_status}</td><td>${lot.has_open_deviation ? '<span class="warn">OPEN</span>' : 'none'}</td><td>${lot.quantity} ${lot.unit}</td><td>${lot.location}</td><td><button onclick="selectLot(${lot.id})">Select</button></td>`;
+        tr.innerHTML = `<td>${lot.id}</td><td>${lot.internal_lot}</td><td>${warehouseLabel(lot.warehouse_type)}</td><td>${lot.material_code} / ${lot.material_name}</td><td>${lot.quality_status}</td><td>${lot.production_year || '-'}</td><td>${lot.expiry_date || '-'}</td><td>${lot.incoming_control_notified_at || '-'}</td><td>${lot.qc_result_received_at || '-'}</td><td>${lot.has_open_deviation ? '<span class="warn">OPEN</span>' : 'none'}</td><td>${lot.quantity} ${lot.unit}</td><td>${lot.location}</td><td><button onclick="selectLot(${lot.id})">Select</button></td>`;
         body.appendChild(tr);
       }
       syncSelection();
@@ -378,20 +500,33 @@
       const openTasks = state.tasks.filter(t => t.status === 'open');
       for (const task of openTasks) {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${task.id}</td><td>${task.internal_lot} (#${task.lot_id})</td><td>${task.test_name}</td><td>${task.status}</td><td>${task.created_at}</td><td><button onclick="selectTask(${task.id}, ${task.lot_id})">Select</button></td>`;
+        tr.innerHTML = `<td>${task.id}</td><td>${task.internal_lot} (#${task.lot_id})</td><td>${task.production_year || '-'}</td><td>${task.expiry_date || '-'}</td><td>${task.test_name}</td><td>${task.status}</td><td>${task.created_at}</td><td><button onclick="selectTask(${task.id}, ${task.lot_id})">Select</button></td>`;
         body.appendChild(tr);
       }
       syncSelection();
     }
 
+    async function loadMovements() {
+      const data = await api('GET', '/inventory/movements?limit=50');
+      const body = document.getElementById('movementsBody');
+      body.innerHTML = '';
+      for (const movement of data.movements || []) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${movement.id}</td><td>${movement.timestamp_utc}</td><td>${movement.movement_type}</td><td>${movement.internal_lot} (#${movement.lot_id})</td><td>${movement.material_code}</td><td>${movement.production_year || '-'}</td><td>${movement.expiry_date || '-'}</td><td>${movement.quantity_delta} ${movement.unit}</td><td>${movement.quantity_after} ${movement.unit}</td><td>${movement.user_id}</td>`;
+        body.appendChild(tr);
+      }
+    }
+
     function selectLot(id) {
       state.lotId = id;
+      applyProfileForLot(getSelectedLot());
       syncSelection();
     }
 
     function selectTask(taskId, lotId) {
       state.taskId = taskId;
       state.lotId = lotId;
+      applyProfileForLot(getSelectedLot());
       syncSelection();
     }
 
@@ -400,6 +535,9 @@
         material_code: document.getElementById('wh_material_code').value,
         material_name: document.getElementById('wh_material_name').value,
         supplier_lot: document.getElementById('wh_supplier_lot').value,
+        warehouse_type: state.warehouseScope || document.getElementById('wh_warehouse_type').value,
+        production_year: Number(document.getElementById('wh_production_year').value),
+        expiry_date: document.getElementById('wh_expiry_date').value,
         quantity: Number(document.getElementById('wh_qty').value),
         unit: document.getElementById('wh_unit').value,
         location: document.getElementById('wh_location').value,
@@ -438,7 +576,11 @@
       state.taskId = data.task_id;
       await loadTasks();
       await loadLots();
-      openTab('qc');
+      if (roleCan(state.role, 'qc')) {
+        openTab('qc');
+      } else {
+        document.getElementById('gateHint').textContent = 'Задача отбора создана. Войдите под QC_ANALYST для выполнения QC отчёта.';
+      }
     }
 
     async function submitQcReport() {
@@ -457,7 +599,11 @@
       state.taskId = null;
       await loadTasks();
       await loadLots();
-      openTab('qa');
+      if (roleCan(state.role, 'qa')) {
+        openTab('qa');
+      } else {
+        document.getElementById('gateHint').textContent = 'QC отчёт сохранён. Войдите под QA_MANAGER для решения по выпуску.';
+      }
     }
 
     async function submitQaDecision() {
