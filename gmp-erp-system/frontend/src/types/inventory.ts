@@ -78,6 +78,7 @@ export interface LotItem {
   material_name: string
   supplier_name: string
   manufacturer_name: string
+  warehouse_id?: string
   warehouse_type: string
   location_code: string
   quantity: number

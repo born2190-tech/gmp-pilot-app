@@ -118,6 +118,7 @@ def test_receipt_posting_creates_lot_and_receipt_movement() -> None:
     assert lots.status_code == 200
     assert movements.status_code == 200
     lot = lots.json()["lots"][0]
+    assert lot["warehouse_id"] == ref["warehouse_id"]
     assert lot["manufacturer_name"] == "Validated Manufacturer"
     assert lot["production_date"] == "2026-01-15"
     assert lot["expiry_date"] == "2028-01-14"

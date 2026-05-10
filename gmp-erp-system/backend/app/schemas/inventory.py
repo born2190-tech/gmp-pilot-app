@@ -54,6 +54,7 @@ class LotItem(BaseModel):
     material_name: str
     supplier_name: str
     manufacturer_name: str
+    warehouse_id: UUID
     warehouse_type: str
     location_code: str
     quantity: float

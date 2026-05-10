@@ -46,7 +46,9 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
   }, [token])
 
   const selectedLot = lots.find((lot) => lot.id === selectedLotId)
-  const scopedLocations = selectedLot ? locations.filter((location) => location.warehouse_id && location.code !== selectedLot.location_code) : locations
+  const scopedLocations = selectedLot
+    ? locations.filter((location) => location.warehouse_id === selectedLot.warehouse_id && location.code !== selectedLot.location_code)
+    : locations
 
   async function runTransfer() {
     if (!selectedLot) return
