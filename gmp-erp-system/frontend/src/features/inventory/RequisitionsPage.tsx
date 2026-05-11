@@ -106,10 +106,11 @@ export function RequisitionsPage({ token, user }: RequisitionsPageProps) {
     setIsLoading(true)
     setError(null)
     try {
+      const canReadWarehouse = user.permissions.includes('VIEW_WAREHOUSE')
       const [reqRes, matRes, lotsRes] = await Promise.all([
         listRequisitions(token, statusFilter || undefined),
         listMaterials(token),
-        listLots(token),
+        canReadWarehouse ? listLots(token) : Promise.resolve({ lots: [] }),
       ])
       setRequisitions(reqRes.requisitions)
       setMaterials(matRes.materials)

@@ -180,4 +180,5 @@ def test_production_user_can_edit_auto_allocation_before_issue() -> None:
 
     assert updated.status_code == 200, updated.text
     allocations = updated.json()["lines"][0]["allocation_lines"]
-    assert allocations[0]["allocated_quantity"] == 70
+    edited_allocation = next(row for row in allocations if row["id"] == allocation_id)
+    assert edited_allocation["allocated_quantity"] == 70
