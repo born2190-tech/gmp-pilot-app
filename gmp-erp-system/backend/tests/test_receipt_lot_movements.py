@@ -8,7 +8,7 @@ from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.models.quality import QCReport, QCReportParameter
+from app.models.quality import QCNotification, QCNotificationLine, QCReport, QCReportParameter
 from app.services.seed import seed_foundation_data
 
 
@@ -19,6 +19,8 @@ def reset_inventory_data() -> None:
         db.query(AuditEvent).delete()
         db.query(QCReportParameter).delete()
         db.query(QCReport).delete()
+        db.query(QCNotificationLine).delete()
+        db.query(QCNotification).delete()
         db.query(InventoryMovement).delete()
         db.query(InventoryCountLine).delete()
         db.query(InventoryCountDocument).delete()
@@ -116,9 +118,11 @@ def test_receipt_posting_creates_lot_and_receipt_movement() -> None:
 
     lots = client.get("/api/inventory/lots", headers=headers)
     movements = client.get("/api/inventory/movements", headers=headers)
+    notifications = client.get("/api/quality/qc-notifications", headers=headers)
 
     assert lots.status_code == 200
     assert movements.status_code == 200
+    assert notifications.status_code == 200
     lot = lots.json()["lots"][0]
     assert lot["warehouse_id"] == ref["warehouse_id"]
     assert lot["manufacturer_name"] == "Validated Manufacturer"
@@ -127,6 +131,18 @@ def test_receipt_posting_creates_lot_and_receipt_movement() -> None:
     assert lot["incoming_control_notified_at"] is not None
     assert lot["qc_result_received_at"] is None
     assert movements.json()["movements"][0]["movement_type"] == "RECEIPT"
+    notification = notifications.json()["notifications"][0]
+    assert notification["notification_no"] == "IQC-20260510-REC-2026-0001"
+    assert notification["status"] == "created"
+    assert notification["warehouse_type"] == "SUBSTANCE_WAREHOUSE"
+    line = notification["lines"][0]
+    assert line["material_name"] == "Validated API"
+    assert line["batch_number"] == "SUP-LOT-001"
+    assert line["expiry_date"] == "2028-01-14"
+    assert line["quantity"] == 125.5
+    assert line["unit"] == "kg"
+    assert line["manufacturer_name"] == "Validated Manufacturer"
+    assert line["invoice_info"] == "REC-2026-0001 от 2026-05-10"
 
 
 def test_receipt_can_create_inline_master_data_without_supplier() -> None:

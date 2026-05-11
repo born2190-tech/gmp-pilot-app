@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
+from app.models.quality import QCNotification, QCNotificationLine
 from app.schemas.inventory import AdjustLotRequest, FGShipmentCreate, InventoryCountCreate, IssueProductionRequest, MaterialCreateInline, ReceiptCreate, ReferenceCreateInline, SignatureRequest, TransferLotRequest
 from app.services.audit import write_audit
 from app.services.permissions import require_permission, require_warehouse_type_scope
@@ -133,6 +134,10 @@ def generate_internal_lot(receipt: ReceiptDocument, line: ReceiptLine, sequence:
     return f"LOT-{receipt.received_date.strftime('%Y%m%d')}-{receipt.document_no}-{sequence:02d}"
 
 
+def generate_qc_notification_no(receipt: ReceiptDocument) -> str:
+    return f"IQC-{receipt.received_date.strftime('%Y%m%d')}-{receipt.document_no}"[:64]
+
+
 def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: SignatureRequest) -> tuple[ReceiptDocument, int]:
     require_permission(user, "POST_RECEIPT")
     receipt = get_required(db, ReceiptDocument, receipt_id, "Receipt")
@@ -147,6 +152,8 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
     receipt.posted_at = now_utc()
 
     lots_created = 0
+    notification_lines: list[tuple[Lot, ReceiptLine, Material]] = []
+    notification_time = now_utc()
     lines = db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt.id).order_by(ReceiptLine.created_at).all()
     for index, line in enumerate(lines, start=1):
         material = get_required(db, Material, line.material_id, "Material")
@@ -165,10 +172,11 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             quantity=line.quantity,
             unit=line.unit,
             quality_status="quarantine",
-            incoming_control_notified_at=now_utc(),
+            incoming_control_notified_at=notification_time,
         )
         db.add(lot)
         db.flush()
+        notification_lines.append((lot, line, material))
         db.add(
             InventoryMovement(
                 movement_type="RECEIPT",
@@ -188,6 +196,49 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             )
         )
         lots_created += 1
+
+    if warehouse.warehouse_type == "SUBSTANCE_WAREHOUSE" and notification_lines:
+        manufacturer = get_required(db, Manufacturer, receipt.manufacturer_id, "Manufacturer")
+        notification = QCNotification(
+            notification_no=generate_qc_notification_no(receipt),
+            status="created",
+            warehouse_id=receipt.warehouse_id,
+            receipt_id=receipt.id,
+            created_by=user.id,
+            notified_at=notification_time,
+        )
+        db.add(notification)
+        db.flush()
+
+        for lot, line, material in notification_lines:
+            db.add(
+                QCNotificationLine(
+                    notification_id=notification.id,
+                    lot_id=lot.id,
+                    material_name=material.name,
+                    batch_number=line.supplier_lot or lot.internal_lot,
+                    expiry_date=line.expiry_date.isoformat(),
+                    quantity=line.quantity,
+                    unit=line.unit,
+                    manufacturer_name=manufacturer.name,
+                    invoice_info=f"{receipt.document_no} от {receipt.received_date.isoformat()}",
+                )
+            )
+
+        write_audit(
+            db,
+            user,
+            object_type="qc_notification",
+            object_id=str(notification.id),
+            action_type="CREATE_QC_NOTIFICATION",
+            new_value={
+                "notification_no": notification.notification_no,
+                "receipt_document_no": receipt.document_no,
+                "warehouse_type": warehouse.warehouse_type,
+                "lines": len(notification_lines),
+            },
+            reason="Automatic incoming control notification from posted receipt",
+        )
 
     write_audit(
         db,

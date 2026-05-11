@@ -18,6 +18,7 @@ import type {
   MaterialsResponse,
   MovementsResponse,
   PostReceiptResponse,
+  QCNotificationsResponse,
   QADecisionRequest,
   QCResultRequest,
   QCReportCreate,
@@ -157,6 +158,10 @@ export function postReceipt(token: string, receiptId: string, payload: Signature
 
 export function listQcLots(token: string): Promise<QualityLotsResponse> {
   return request<QualityLotsResponse>('/api/quality/qc/lots', 'GET', { token })
+}
+
+export function listQcNotifications(token: string): Promise<QCNotificationsResponse> {
+  return request<QCNotificationsResponse>('/api/quality/qc-notifications', 'GET', { token })
 }
 
 export function listQaLots(token: string): Promise<QualityLotsResponse> {

@@ -6,7 +6,7 @@ from app.main import create_app
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession, Department, Permission, Role, User, role_permissions
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
-from app.models.quality import QCReport, QCReportParameter
+from app.models.quality import QCNotification, QCNotificationLine, QCReport, QCReportParameter
 
 
 def seed_auth_user() -> None:
@@ -16,6 +16,8 @@ def seed_auth_user() -> None:
         db.query(AuditEvent).delete()
         db.query(QCReportParameter).delete()
         db.query(QCReport).delete()
+        db.query(QCNotificationLine).delete()
+        db.query(QCNotification).delete()
         db.query(InventoryMovement).delete()
         db.query(InventoryCountLine).delete()
         db.query(InventoryCountDocument).delete()

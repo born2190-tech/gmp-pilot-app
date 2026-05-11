@@ -46,6 +46,32 @@ class QualityLotsResponse(BaseModel):
     lots: list[QualityLotItem]
 
 
+class QCNotificationLineItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    lot_id: UUID
+    material_name: str
+    batch_number: str
+    expiry_date: str
+    quantity: float
+    unit: str
+    manufacturer_name: str
+    invoice_info: str
+
+
+class QCNotificationItem(BaseModel):
+    id: UUID
+    notification_no: str
+    status: str
+    warehouse_type: str
+    notified_at: datetime
+    lines: list[QCNotificationLineItem]
+
+
+class QCNotificationsResponse(BaseModel):
+    notifications: list[QCNotificationItem]
+
+
 class QCReportParameterCreate(BaseModel):
     parameter_name: str = Field(min_length=1, max_length=255)
     specification: str = Field(min_length=1)

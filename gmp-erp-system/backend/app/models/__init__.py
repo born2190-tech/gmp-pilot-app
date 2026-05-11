@@ -3,7 +3,7 @@ from app.models.base import Base
 from app.models.identity import AuthSession, Department, Permission, Role, User, role_permissions
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Employee, Location, Manufacturer, Material, Supplier, Warehouse
-from app.models.quality import QCReport, QCReportParameter
+from app.models.quality import QCNotification, QCNotificationLine, QCReport, QCReportParameter
 
 __all__ = [
     "AuditEvent",
@@ -21,6 +21,8 @@ __all__ = [
     "Manufacturer",
     "Material",
     "Permission",
+    "QCNotification",
+    "QCNotificationLine",
     "QCReport",
     "QCReportParameter",
     "ReceiptDocument",

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,3 +34,30 @@ class QCReportParameter(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     complies: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     report: Mapped[QCReport] = relationship()
+
+
+class QCNotification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "qc_notifications"
+
+    notification_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=False)
+    receipt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_documents.id"), nullable=False)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    notified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class QCNotificationLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "qc_notification_lines"
+
+    notification_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("qc_notifications.id"), nullable=False)
+    lot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lots.id"), nullable=False)
+    material_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    batch_number: Mapped[str] = mapped_column(String(128), nullable=False)
+    expiry_date: Mapped[str] = mapped_column(String(32), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    manufacturer_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    invoice_info: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    notification: Mapped[QCNotification] = relationship()

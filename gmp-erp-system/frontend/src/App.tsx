@@ -7,6 +7,7 @@ import { LotsBoardPage } from './features/inventory/LotsBoardPage'
 import { FGShipmentsPage } from './features/inventory/FGShipmentsPage'
 import { InventoryCountPage } from './features/inventory/InventoryCountPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
+import { QCNotificationsPage } from './features/inventory/QCNotificationsPage'
 import { ReceiptDocumentPage } from './features/inventory/ReceiptDocumentPage'
 import { WarehouseOperationsPage } from './features/inventory/WarehouseOperationsPage'
 import { MasterDataPage } from './features/master-data/MasterDataPage'
@@ -96,6 +97,8 @@ export function App() {
       <FGShipmentsPage token={token} user={user} />
     ) : route === 'inventory-counts' ? (
       <InventoryCountPage token={token} user={user} />
+    ) : route === 'qc-notifications' ? (
+      <QCNotificationsPage token={token} />
     ) : route === 'receipt-documents' ? (
       <ReceiptDocumentPage token={token} username={user.username} />
     ) : route === 'master-data' ? (

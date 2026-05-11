@@ -101,6 +101,30 @@ export interface QualityLotsResponse {
   lots: LotItem[]
 }
 
+export interface QCNotificationLineItem {
+  lot_id: string
+  material_name: string
+  batch_number: string
+  expiry_date: string
+  quantity: number
+  unit: string
+  manufacturer_name: string
+  invoice_info: string
+}
+
+export interface QCNotificationItem {
+  id: string
+  notification_no: string
+  status: string
+  warehouse_type: string
+  notified_at: string
+  lines: QCNotificationLineItem[]
+}
+
+export interface QCNotificationsResponse {
+  notifications: QCNotificationItem[]
+}
+
 export interface SampleLotRequest {
   reason: string
 }

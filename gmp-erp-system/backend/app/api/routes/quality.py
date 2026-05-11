@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -8,10 +8,13 @@ from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.models.inventory import Lot
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.models.quality import QCReportParameter
+from app.models.quality import QCNotification, QCNotificationLine, QCReportParameter
 from app.schemas.inventory import SignatureRequest
 from app.schemas.quality import (
     QADecisionRequest,
+    QCNotificationItem,
+    QCNotificationLineItem,
+    QCNotificationsResponse,
     QCReportCreate,
     QCReportItem,
     QCReportParameterItem,
@@ -68,6 +71,34 @@ def qc_report_item(db: Session, report_id: UUID) -> QCReportItem:
     item = QCReportItem.model_validate(report)
     item.parameters = [QCReportParameterItem.model_validate(parameter) for parameter in parameters]
     return item
+
+
+def qc_notification_item(db: Session, notification: QCNotification) -> QCNotificationItem:
+    warehouse = db.get(Warehouse, notification.warehouse_id)
+    lines = db.query(QCNotificationLine).filter(QCNotificationLine.notification_id == notification.id).order_by(QCNotificationLine.created_at).all()
+    return QCNotificationItem(
+        id=notification.id,
+        notification_no=notification.notification_no,
+        status=notification.status,
+        warehouse_type=warehouse.warehouse_type,
+        notified_at=notification.notified_at,
+        lines=[QCNotificationLineItem.model_validate(line) for line in lines],
+    )
+
+
+@router.get("/qc-notifications", response_model=QCNotificationsResponse)
+def list_qc_notifications(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCNotificationsResponse:
+    if "VIEW_WAREHOUSE" not in current_user.permissions and "VIEW_QC" not in current_user.permissions:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission VIEW_WAREHOUSE or VIEW_QC is required")
+
+    query = db.query(QCNotification).join(Warehouse, Warehouse.id == QCNotification.warehouse_id)
+    if current_user.warehouse_scope:
+        query = query.filter(Warehouse.warehouse_type == current_user.warehouse_scope)
+    notifications = query.order_by(QCNotification.notified_at.desc()).all()
+    return QCNotificationsResponse(notifications=[qc_notification_item(db, item) for item in notifications])
 
 
 @router.get("/qc/lots", response_model=QualityLotsResponse)
