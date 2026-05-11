@@ -89,6 +89,7 @@ class LotItem(BaseModel):
     incoming_control_notified_at: datetime | None
     sampling_date: datetime | None
     qc_result_received_at: datetime | None
+    qc_report_no: str | None = None
     qa_decision_at: datetime | None
 
 

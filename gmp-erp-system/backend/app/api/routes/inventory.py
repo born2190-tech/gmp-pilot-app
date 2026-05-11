@@ -9,6 +9,7 @@ from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
+from app.models.quality import QCReport
 from app.schemas.inventory import (
     AdjustLotRequest,
     FGShipmentCreate,
@@ -36,6 +37,14 @@ router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 
 
 def lot_item_query(db: Session, lot_id: UUID) -> LotOperationResponse:
+    latest_qc_report_no = (
+        db.query(QCReport.report_no)
+        .filter(QCReport.lot_id == Lot.id, QCReport.status == "submitted")
+        .order_by(QCReport.submitted_at.desc(), QCReport.created_at.desc())
+        .limit(1)
+        .correlate(Lot)
+        .scalar_subquery()
+    )
     row = (
         db.query(
             Lot.id,
@@ -57,6 +66,7 @@ def lot_item_query(db: Session, lot_id: UUID) -> LotOperationResponse:
             Lot.incoming_control_notified_at,
             Lot.sampling_date,
             Lot.qc_result_received_at,
+            latest_qc_report_no.label("qc_report_no"),
             Lot.qa_decision_at,
         )
         .join(Material, Material.id == Lot.material_id)
@@ -247,6 +257,14 @@ def list_lots(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> LotsResponse:
     require_permission(current_user, "VIEW_WAREHOUSE")
+    latest_qc_report_no = (
+        db.query(QCReport.report_no)
+        .filter(QCReport.lot_id == Lot.id, QCReport.status == "submitted")
+        .order_by(QCReport.submitted_at.desc(), QCReport.created_at.desc())
+        .limit(1)
+        .correlate(Lot)
+        .scalar_subquery()
+    )
     query = (
         db.query(
             Lot.id,
@@ -268,6 +286,7 @@ def list_lots(
             Lot.incoming_control_notified_at,
             Lot.sampling_date,
             Lot.qc_result_received_at,
+            latest_qc_report_no.label("qc_report_no"),
             Lot.qa_decision_at,
         )
         .join(Material, Material.id == Lot.material_id)

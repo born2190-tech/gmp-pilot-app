@@ -194,6 +194,11 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
         header: t('registry.qcResultDate'),
         cell: ({ row }) => formatDate(row.original.qc_result_received_at, locale),
       },
+      {
+        accessorKey: 'qc_report_no',
+        header: t('registry.qcReportNo'),
+        cell: ({ row }) => row.original.qc_report_no || '-',
+      },
     ],
     [locale, t],
   )

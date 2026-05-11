@@ -90,6 +90,7 @@ export interface LotItem {
   incoming_control_notified_at: string | null
   sampling_date: string | null
   qc_result_received_at: string | null
+  qc_report_no: string | null
   qa_decision_at: string | null
 }
 
