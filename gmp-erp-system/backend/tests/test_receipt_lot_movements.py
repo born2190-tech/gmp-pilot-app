@@ -174,7 +174,6 @@ def test_receipt_can_create_inline_master_data_without_supplier() -> None:
                     "material": {"code": "API-INLINE-001", "name": "Inline API", "item_type": "raw_material", "default_unit": "kg"},
                     "supplier_lot": None,
                     "production_date": "2026-01-15",
-                    "production_year": 2026,
                     "expiry_date": "2028-01-14",
                     "quantity": 10,
                     "unit": "kg",
@@ -198,6 +197,7 @@ def test_receipt_can_create_inline_master_data_without_supplier() -> None:
     assert lot["supplier_lot"] == "-"
     assert lot["manufacturer_name"] == "Inline Manufacturer"
     assert lot["material_code"] == "API-INLINE-001"
+    assert lot["production_year"] == 2026
 
 
 def test_warehouse_scope_blocks_receipt_for_other_warehouse() -> None:

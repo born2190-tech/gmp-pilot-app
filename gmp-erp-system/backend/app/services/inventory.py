@@ -18,6 +18,14 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def receipt_line_production_year(line: ReceiptLine) -> int:
+    if line.production_year:
+        return line.production_year
+    if line.production_date:
+        return line.production_date.year
+    return now_utc().year
+
+
 def get_required(db: Session, model: type, object_id: UUID, label: str):
     row = db.get(model, object_id)
     if not row:
@@ -109,7 +117,7 @@ def create_receipt_draft(db: Session, user: CurrentUser, payload: ReceiptCreate)
                 material=material,
                 supplier_lot=line.supplier_lot or None,
                 production_date=line.production_date,
-                production_year=line.production_year,
+                production_year=receipt_line_production_year(line),
                 expiry_date=line.expiry_date,
                 quantity=line.quantity,
                 unit=line.unit,
@@ -165,7 +173,7 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             internal_lot=generate_internal_lot(receipt, line, index),
             item_type=material.item_type,
             production_date=line.production_date,
-            production_year=line.production_year,
+            production_year=receipt_line_production_year(line),
             expiry_date=line.expiry_date,
             warehouse_id=receipt.warehouse_id,
             location_id=line.location_id,

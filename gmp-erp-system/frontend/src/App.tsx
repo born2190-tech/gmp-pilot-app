@@ -100,7 +100,7 @@ export function App() {
     ) : route === 'qc-notifications' ? (
       <QCNotificationsPage token={token} />
     ) : route === 'receipt-documents' ? (
-      <ReceiptDocumentPage token={token} username={user.username} />
+      <ReceiptDocumentPage token={token} user={user} username={user.username} />
     ) : route === 'master-data' ? (
       <MasterDataPage token={token} user={user} />
     ) : route === 'qc-tasks' ? (

@@ -293,7 +293,7 @@ export interface ReceiptCreate {
     material?: MaterialCreate | null
     supplier_lot?: string | null
     production_date: string | null
-    production_year: number
+    production_year?: number | null
     expiry_date: string
     quantity: number
     unit: string

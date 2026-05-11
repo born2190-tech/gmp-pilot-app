@@ -19,7 +19,7 @@ class ReceiptLineCreate(BaseModel):
     material: MaterialCreateInline | None = None
     supplier_lot: str | None = None
     production_date: date | None = None
-    production_year: int = Field(ge=2000, le=2100)
+    production_year: int | None = Field(default=None, ge=2000, le=2100)
     expiry_date: date
     quantity: float = Field(gt=0)
     unit: str = Field(min_length=1)
