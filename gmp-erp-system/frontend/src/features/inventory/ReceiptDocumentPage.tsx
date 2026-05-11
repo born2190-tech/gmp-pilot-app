@@ -97,10 +97,12 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   const watchedQuantity = form.watch('quantity')
   const watchedProductionDate = form.watch('production_date')
   const watchedExpiryDate = form.watch('expiry_date')
+  const watchedSupplierLot = form.watch('supplier_lot')
   const allowedLocations = useMemo(() => locations.filter((item) => item.warehouse_id === selectedWarehouseId), [locations, selectedWarehouseId])
   const masterDataReady = warehouses.length > 0 && locations.length > 0
   const hasQuantityWarning = Number(watchedQuantity) <= 0
   const hasExpiryWarning = Boolean(watchedProductionDate && watchedExpiryDate && watchedExpiryDate < watchedProductionDate)
+  const hasSupplierLotWarning = !String(watchedSupplierLot || '').trim()
   const optionalId = (value: string | undefined) => value || null
 
   async function submit(values: ReceiptForm) {
@@ -202,7 +204,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
               )}
             </Field>
 
-            <Field label={t('receipt.supplierLot')}><input {...form.register('supplier_lot')} className="input" /></Field>
+            <Field label={t('receipt.supplierLot')}><input {...form.register('supplier_lot', { required: true })} className="input" /></Field>
 
             <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_160px]">
               <Field label={t('receipt.quantity')}><input step="0.001" type="number" {...form.register('quantity', { required: true, valueAsNumber: true })} className="input" /></Field>
@@ -210,6 +212,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
             </div>
           </div>
           {hasQuantityWarning && <p className="alert-error mt-3">{t('receipt.quantityWarning')}</p>}
+          {hasSupplierLotWarning && <p className="alert-error mt-3">{t('receipt.supplierLotWarning')}</p>}
         </SectionBlock>
 
         <SectionBlock title={t('receipt.sectionDatesAndLocation')}>
@@ -276,7 +279,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         </div>
 
         <div className="flex justify-end">
-          <Button disabled={isLoading || !masterDataReady || hasQuantityWarning || hasExpiryWarning} type="submit">{isLoading ? t('receipt.posting') : t('receipt.post')}</Button>
+          <Button disabled={isLoading || !masterDataReady || hasQuantityWarning || hasExpiryWarning || hasSupplierLotWarning} type="submit">{isLoading ? t('receipt.posting') : t('receipt.post')}</Button>
         </div>
       </form>
     </section>

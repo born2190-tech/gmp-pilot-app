@@ -174,7 +174,9 @@ export interface MovementItem {
   document_type: string
   document_id: string
   internal_lot: string
+  supplier_lot: string
   material_code: string
+  material_name: string
   quantity_delta: number
   quantity_after: number
   unit: string
@@ -319,4 +321,86 @@ export interface PostReceiptResponse {
   document_no: string
   status: string
   lots_created: number
+}
+
+// ─── Production Requisitions ───────────────────────────────────────────────
+
+export interface RequisitionAllocationLineItem {
+  id: string
+  requisition_line_id: string
+  lot_id: string
+  lot_internal_lot: string
+  lot_supplier_lot: string
+  lot_expiry_date: string
+  lot_location_code: string
+  lot_available: number
+  warehouse_type: string
+  allocated_quantity: number
+  status: string
+}
+
+export interface RequisitionLineItem {
+  id: string
+  material_id: string
+  material_code: string
+  material_name: string
+  requested_quantity: number
+  issued_quantity: number
+  unit: string
+  warehouse_type: string
+  status: string
+  allocation_lines: RequisitionAllocationLineItem[]
+}
+
+export interface RequisitionItem {
+  id: string
+  requisition_no: string
+  status: string
+  product_name: string
+  product_series: string | null
+  production_date: string | null
+  production_order_no: string | null
+  notes: string | null
+  submitted_at: string | null
+  created_at: string
+  lines: RequisitionLineItem[]
+}
+
+export interface RequisitionsResponse {
+  requisitions: RequisitionItem[]
+}
+
+export interface RequisitionLineCreate {
+  material_id: string
+  requested_quantity: number
+  unit: string
+}
+
+export interface RequisitionCreate {
+  product_name: string
+  product_series?: string | null
+  production_date: string
+  production_order_no?: string | null
+  lines: RequisitionLineCreate[]
+}
+
+export interface AllocationLineUpdate {
+  id: string
+  allocated_quantity: number
+}
+
+export interface AllocationLineAdd {
+  requisition_line_id: string
+  lot_id: string
+  allocated_quantity: number
+}
+
+export interface AllocationUpdateRequest {
+  updates?: AllocationLineUpdate[]
+  additions?: AllocationLineAdd[]
+  removals?: string[]
+}
+
+export interface IssueRequisitionRequest extends SignatureRequest {
+  reason?: string
 }

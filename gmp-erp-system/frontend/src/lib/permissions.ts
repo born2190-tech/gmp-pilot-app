@@ -10,12 +10,10 @@ export interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { labelKey: 'nav.warehouseDashboard', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'warehouse-dashboard' },
-  { labelKey: 'nav.warehouseCenter', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'warehouse-center' },
   { labelKey: 'nav.receiptDocuments', section: 'warehouse', permission: 'CREATE_RECEIPT', route: 'receipt-documents' },
   { labelKey: 'nav.lots', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'lots' },
-  { labelKey: 'nav.movements', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'movements' },
   { labelKey: 'nav.warehouseOperations', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'warehouse-operations' },
+  { labelKey: 'nav.requisitionsIncoming', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'requisitions', warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.inventoryCounts', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'inventory-counts' },
   { labelKey: 'nav.qcNotifications', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'qc-notifications', warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.fgShipments', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'fg-shipments', warehouseScopes: ['FG_WAREHOUSE'] },
@@ -24,8 +22,10 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.qcNotifications', section: 'qc', permission: 'VIEW_QC', route: 'qc-notifications' },
   { labelKey: 'nav.qaDecisions', section: 'qa', permission: 'VIEW_QA', route: 'qa-decisions' },
   { labelKey: 'nav.productionOrders', section: 'production', permission: 'VIEW_PRODUCTION', route: 'production-orders' },
+  { labelKey: 'nav.requisitions', section: 'production', permission: 'VIEW_PRODUCTION', route: 'requisitions' },
   { labelKey: 'nav.bmr', section: 'production', permission: 'EXECUTE_BMR', route: 'bmr' },
   { labelKey: 'nav.audit', section: 'quality', permission: 'VIEW_AUDIT', route: 'audit' },
+  { labelKey: 'nav.warehouseCenter', section: 'admin', permission: 'MANAGE_USERS', route: 'warehouse-center' },
   { labelKey: 'nav.admin', section: 'admin', permission: 'MANAGE_USERS', route: 'admin' },
 ]
 

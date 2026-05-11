@@ -147,3 +147,65 @@ class InventoryCountLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     count: Mapped[InventoryCountDocument] = relationship()
     lot: Mapped[Lot] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# Production Requisition (Требование/Накладная на внутреннее перемещение)
+# ---------------------------------------------------------------------------
+
+class ProductionRequisition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Header of a material requisition submitted by production to warehouse(s)."""
+    __tablename__ = "production_requisitions"
+
+    requisition_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # Overall status: draft → submitted → processing → partially_issued → issued | cancelled
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    product_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    product_series: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    production_order_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    submitted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    lines: Mapped[list["RequisitionLine"]] = relationship(back_populates="requisition", cascade="all, delete-orphan")
+
+
+class RequisitionLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One material line in a production requisition (what production needs)."""
+    __tablename__ = "requisition_lines"
+
+    requisition_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("production_requisitions.id"), nullable=False)
+    material_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("materials.id"), nullable=False)
+    requested_quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    # warehouse_type is set automatically from material lots (SUBSTANCE_WAREHOUSE / PACKAGING_WAREHOUSE)
+    warehouse_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Filled in after warehouse issues
+    issued_quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    # line status: pending | partially_issued | issued
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+
+    requisition: Mapped[ProductionRequisition] = relationship(back_populates="lines")
+    material: Mapped[Material] = relationship()
+    allocation_lines: Mapped[list["RequisitionAllocationLine"]] = relationship(
+        back_populates="requisition_line", cascade="all, delete-orphan"
+    )
+
+
+class RequisitionAllocationLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One lot slice allocated by warehouse for a requisition line (FEFO result or manual edit)."""
+    __tablename__ = "requisition_allocation_lines"
+
+    requisition_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("production_requisitions.id"), nullable=False)
+    requisition_line_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("requisition_lines.id"), nullable=False)
+    lot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lots.id"), nullable=False)
+    warehouse_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    allocated_quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    # status: draft (pending issue) | issued
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    issued_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    requisition_line: Mapped[RequisitionLine] = relationship(back_populates="allocation_lines")
+    lot: Mapped[Lot] = relationship()

@@ -217,6 +217,14 @@ def seed_foundation_data(db: Session) -> None:
     )
     get_or_create_user(
         db,
+        "shift_master",
+        "Shift Master Production",
+        "prod123",
+        roles["SHIFT_MASTER"],
+        departments["PRODUCTION"],
+    )
+    get_or_create_user(
+        db,
         "sys_admin",
         "System Administrator",
         "admin123",

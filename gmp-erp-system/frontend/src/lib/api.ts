@@ -33,9 +33,38 @@ import type {
   SuppliersResponse,
   TransferLotRequest,
   WarehousesResponse,
+  RequisitionCreate,
+  RequisitionItem,
+  RequisitionsResponse,
+  AllocationUpdateRequest,
+  IssueRequisitionRequest,
 } from '../types/inventory'
 
-type Method = 'GET' | 'POST'
+type Method = 'GET' | 'POST' | 'PATCH'
+
+export type LotsQuery = Record<string, string | number | undefined> & {
+  date_type?: 'arrival' | 'expiry'
+  date_from?: string
+  date_to?: string
+  material?: string
+  quality_status?: string
+  location?: string
+  manufacturer?: string
+  internal_lot?: string
+  supplier_lot?: string
+  search?: string
+}
+
+export type MovementsQuery = Record<string, string | number | undefined> & {
+  date_from?: string
+  date_to?: string
+  material?: string
+  internal_lot?: string
+  supplier_lot?: string
+  document?: string
+  movement_type?: string
+  search?: string
+}
 
 async function request<T>(path: string, method: Method, options?: { token?: string; body?: unknown; query?: Record<string, string | number | undefined> }): Promise<T> {
   const url = new URL(path, window.location.origin)
@@ -116,12 +145,12 @@ export function createMaterial(token: string, payload: MaterialCreate): Promise<
   return request<MaterialItem>('/api/master-data/materials', 'POST', { token, body: payload })
 }
 
-export function listLots(token: string): Promise<LotsResponse> {
-  return request<LotsResponse>('/api/inventory/lots', 'GET', { token })
+export function listLots(token: string, query?: LotsQuery): Promise<LotsResponse> {
+  return request<LotsResponse>('/api/inventory/lots', 'GET', { token, query })
 }
 
-export function listMovements(token: string): Promise<MovementsResponse> {
-  return request<MovementsResponse>('/api/inventory/movements', 'GET', { token })
+export function listMovements(token: string, query?: MovementsQuery): Promise<MovementsResponse> {
+  return request<MovementsResponse>('/api/inventory/movements', 'GET', { token, query })
 }
 
 export function transferLot(token: string, lotId: string, payload: TransferLotRequest): Promise<QualityLotsResponse['lots'][number]> {
@@ -190,4 +219,30 @@ export function submitQcReport(token: string, reportId: string, payload: Signatu
 
 export function submitQaDecision(token: string, lotId: string, payload: QADecisionRequest): Promise<QualityLotsResponse['lots'][number]> {
   return request<QualityLotsResponse['lots'][number]>(`/api/quality/lots/${lotId}/qa-decision`, 'POST', { token, body: payload })
+}
+
+// ─── Production Requisitions ─────────────────────────────────────────────────
+
+export function createRequisition(token: string, payload: RequisitionCreate): Promise<RequisitionItem> {
+  return request<RequisitionItem>('/api/requisitions', 'POST', { token, body: payload })
+}
+
+export function listRequisitions(token: string, status?: string): Promise<RequisitionsResponse> {
+  return request<RequisitionsResponse>('/api/requisitions', 'GET', { token, query: status ? { status } : undefined })
+}
+
+export function getRequisition(token: string, id: string): Promise<RequisitionItem> {
+  return request<RequisitionItem>(`/api/requisitions/${id}`, 'GET', { token })
+}
+
+export function allocateRequisition(token: string, id: string): Promise<RequisitionItem> {
+  return request<RequisitionItem>(`/api/requisitions/${id}/allocate`, 'POST', { token })
+}
+
+export function updateRequisitionAllocation(token: string, id: string, payload: AllocationUpdateRequest): Promise<RequisitionItem> {
+  return request<RequisitionItem>(`/api/requisitions/${id}/allocation`, 'PATCH', { token, body: payload })
+}
+
+export function issueRequisition(token: string, id: string, payload: IssueRequisitionRequest): Promise<RequisitionItem> {
+  return request<RequisitionItem>(`/api/requisitions/${id}/issue`, 'POST', { token, body: payload })
 }

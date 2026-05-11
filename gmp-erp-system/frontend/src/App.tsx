@@ -3,13 +3,14 @@ import { AppShell } from './components/layout/AppShell'
 import { LoginPage } from './features/auth/LoginPage'
 import { WarehouseDashboard } from './features/dashboard/WarehouseDashboard'
 import { WarehouseCenterPage } from './features/inventory/WarehouseCenterPage'
-import { LotsBoardPage } from './features/inventory/LotsBoardPage'
+import { WarehouseRegistryPage } from './features/inventory/WarehouseRegistryPage'
 import { FGShipmentsPage } from './features/inventory/FGShipmentsPage'
 import { InventoryCountPage } from './features/inventory/InventoryCountPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
 import { QCNotificationsPage } from './features/inventory/QCNotificationsPage'
 import { ReceiptDocumentPage } from './features/inventory/ReceiptDocumentPage'
 import { WarehouseOperationsPage } from './features/inventory/WarehouseOperationsPage'
+import { RequisitionsPage } from './features/inventory/RequisitionsPage'
 import { MasterDataPage } from './features/master-data/MasterDataPage'
 import { QualityBoardPage } from './features/quality/QualityBoardPage'
 import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
@@ -24,7 +25,7 @@ export function App() {
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [activeRoute, setActiveRoute] = useState('warehouse-dashboard')
+  const [activeRoute, setActiveRoute] = useState('lots')
 
   useEffect(() => {
     let ignore = false
@@ -88,11 +89,13 @@ export function App() {
     route === 'warehouse-center' ? (
       <WarehouseCenterPage token={token} />
     ) : route === 'lots' ? (
-      <LotsBoardPage token={token} />
+      <WarehouseRegistryPage token={token} />
     ) : route === 'movements' ? (
       <MovementsPage token={token} />
     ) : route === 'warehouse-operations' ? (
       <WarehouseOperationsPage token={token} user={user} />
+    ) : route === 'requisitions' ? (
+      <RequisitionsPage token={token} user={user} />
     ) : route === 'fg-shipments' ? (
       <FGShipmentsPage token={token} user={user} />
     ) : route === 'inventory-counts' ? (
@@ -112,7 +115,7 @@ export function App() {
     )
 
   return (
-    <AppShell activeRoute={route ?? 'warehouse-dashboard'} onLogout={handleLogout} onRouteChange={setActiveRoute} user={user}>
+    <AppShell activeRoute={route ?? 'lots'} onLogout={handleLogout} onRouteChange={setActiveRoute} user={user}>
       {content}
     </AppShell>
   )

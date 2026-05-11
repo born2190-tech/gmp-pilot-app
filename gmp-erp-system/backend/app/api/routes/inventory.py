@@ -1,7 +1,8 @@
+from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import String, cast, func, literal, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, get_current_user
@@ -38,10 +39,10 @@ def lot_item_query(db: Session, lot_id: UUID) -> LotOperationResponse:
     row = (
         db.query(
             Lot.id,
-            Lot.internal_lot,
-            func.coalesce(Lot.supplier_lot, "-").label("supplier_lot"),
+            Lot.internal_lot.label("internal_lot"),
+            func.coalesce(Lot.supplier_lot, literal("-")).label("supplier_lot"),
             Material.code.label("material_code"),
-            Material.name.label("material_name"),
+            func.coalesce(func.nullif(Material.name, ""), Material.code).label("material_name"),
             func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Lot.warehouse_id,
@@ -73,7 +74,7 @@ def shipment_item(db: Session, shipment: FGShipmentDocument) -> FGShipmentItem:
     rows = (
         db.query(
             FGShipmentLine.lot_id,
-            Lot.internal_lot,
+            Lot.internal_lot.label("internal_lot"),
             Material.code.label("material_code"),
             Material.name.label("material_name"),
             Lot.production_date,
@@ -108,7 +109,7 @@ def count_item(db: Session, count: InventoryCountDocument) -> InventoryCountItem
     rows = (
         db.query(
             InventoryCountLine.lot_id,
-            Lot.internal_lot,
+            Lot.internal_lot.label("internal_lot"),
             Material.code.label("material_code"),
             InventoryCountLine.system_quantity,
             InventoryCountLine.actual_quantity,
@@ -232,6 +233,16 @@ def list_inventory_counts(
 
 @router.get("/lots", response_model=LotsResponse)
 def list_lots(
+    date_type: str = Query(default="arrival", pattern="^(arrival|expiry)$"),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    material: str | None = None,
+    quality_status: str | None = None,
+    location: str | None = None,
+    manufacturer: str | None = None,
+    internal_lot: str | None = None,
+    supplier_lot: str | None = None,
+    search: str | None = None,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> LotsResponse:
@@ -239,10 +250,10 @@ def list_lots(
     query = (
         db.query(
             Lot.id,
-            Lot.internal_lot,
-            func.coalesce(Lot.supplier_lot, "-").label("supplier_lot"),
+            Lot.internal_lot.label("internal_lot"),
+            func.coalesce(Lot.supplier_lot, literal("-")).label("supplier_lot"),
             Material.code.label("material_code"),
-            Material.name.label("material_name"),
+            func.coalesce(func.nullif(Material.name, ""), Material.code).label("material_name"),
             func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Lot.warehouse_id,
@@ -268,11 +279,52 @@ def list_lots(
     )
     if current_user.warehouse_scope:
         query = query.filter(Warehouse.warehouse_type == current_user.warehouse_scope)
+
+    if material:
+        like = f"%{material.strip().lower()}%"
+        query = query.filter(or_(func.lower(Material.code).like(like), func.lower(Material.name).like(like)))
+    if quality_status:
+        query = query.filter(Lot.quality_status == quality_status)
+    if location:
+        query = query.filter(func.lower(Location.code).like(f"%{location.strip().lower()}%"))
+    if manufacturer:
+        query = query.filter(func.lower(Manufacturer.name).like(f"%{manufacturer.strip().lower()}%"))
+    if internal_lot:
+        query = query.filter(func.lower(func.coalesce(Lot.supplier_lot, Lot.internal_lot)).like(f"%{internal_lot.strip().lower()}%"))
+    if supplier_lot:
+        query = query.filter(func.lower(func.coalesce(Lot.supplier_lot, Lot.internal_lot)).like(f"%{supplier_lot.strip().lower()}%"))
+
+    date_field = Lot.expiry_date if date_type == "expiry" else func.date(Lot.incoming_control_notified_at)
+    if date_from:
+        query = query.filter(date_field >= date_from)
+    if date_to:
+        query = query.filter(date_field <= date_to)
+
+    if search:
+        like = f"%{search.strip().lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(func.coalesce(Lot.supplier_lot, Lot.internal_lot)).like(like),
+                func.lower(Material.code).like(like),
+                func.lower(Material.name).like(like),
+                func.lower(Manufacturer.name).like(like),
+                func.lower(Location.code).like(like),
+            )
+        )
+
     return LotsResponse(lots=query.all())
 
 
 @router.get("/movements", response_model=MovementsResponse)
 def list_movements(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    material: str | None = None,
+    internal_lot: str | None = None,
+    supplier_lot: str | None = None,
+    document: str | None = None,
+    movement_type: str | None = None,
+    search: str | None = None,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> MovementsResponse:
@@ -283,8 +335,10 @@ def list_movements(
             InventoryMovement.movement_type,
             InventoryMovement.document_type,
             InventoryMovement.document_id,
-            Lot.internal_lot,
+            Lot.internal_lot.label("internal_lot"),
+            func.coalesce(Lot.supplier_lot, literal("-")).label("supplier_lot"),
             Material.code.label("material_code"),
+            func.coalesce(func.nullif(Material.name, ""), Material.code).label("material_name"),
             InventoryMovement.quantity_delta,
             InventoryMovement.quantity_after,
             InventoryMovement.unit,
@@ -299,4 +353,34 @@ def list_movements(
     )
     if current_user.warehouse_scope:
         query = query.filter(Warehouse.warehouse_type == current_user.warehouse_scope)
+
+    if date_from:
+        query = query.filter(func.date(InventoryMovement.created_at) >= date_from)
+    if date_to:
+        query = query.filter(func.date(InventoryMovement.created_at) <= date_to)
+    if material:
+        like = f"%{material.strip().lower()}%"
+        query = query.filter(or_(func.lower(Material.code).like(like), func.lower(Material.name).like(like)))
+    if internal_lot:
+        query = query.filter(func.lower(func.coalesce(Lot.supplier_lot, Lot.internal_lot)).like(f"%{internal_lot.strip().lower()}%"))
+    if supplier_lot:
+        query = query.filter(func.lower(func.coalesce(Lot.supplier_lot, Lot.internal_lot)).like(f"%{supplier_lot.strip().lower()}%"))
+    if document:
+        like = f"%{document.strip().lower()}%"
+        query = query.filter(or_(func.lower(InventoryMovement.document_type).like(like), func.lower(cast(InventoryMovement.document_id, String)).like(like)))
+    if movement_type:
+        query = query.filter(InventoryMovement.movement_type == movement_type)
+    if search:
+        like = f"%{search.strip().lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(func.coalesce(Lot.supplier_lot, Lot.internal_lot)).like(like),
+                func.lower(Material.code).like(like),
+                func.lower(Material.name).like(like),
+                func.lower(InventoryMovement.document_type).like(like),
+                func.lower(func.coalesce(InventoryMovement.reason, "")).like(like),
+                func.lower(InventoryMovement.movement_type).like(like),
+            )
+        )
+
     return MovementsResponse(movements=query.all())

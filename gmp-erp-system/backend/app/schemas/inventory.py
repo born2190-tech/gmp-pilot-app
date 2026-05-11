@@ -207,7 +207,9 @@ class MovementItem(BaseModel):
     document_type: str
     document_id: UUID
     internal_lot: str
+    supplier_lot: str
     material_code: str
+    material_name: str
     quantity_delta: float
     quantity_after: float
     unit: str
@@ -218,3 +220,99 @@ class MovementItem(BaseModel):
 
 class MovementsResponse(BaseModel):
     movements: list[MovementItem]
+
+
+# ---------------------------------------------------------------------------
+# Production Requisition schemas
+# ---------------------------------------------------------------------------
+
+class RequisitionLineCreate(BaseModel):
+    material_id: UUID
+    requested_quantity: float = Field(gt=0)
+    unit: str = Field(min_length=1, max_length=32)
+
+
+class RequisitionCreate(BaseModel):
+    product_name: str = Field(min_length=1, max_length=255)
+    product_series: str | None = None
+    production_date: date | None = None
+    production_order_no: str | None = None
+    notes: str | None = None
+    lines: list[RequisitionLineCreate] = Field(min_length=1)
+
+
+class AllocationLineUpdate(BaseModel):
+    """Frontend sends updated allocation lines for one warehouse."""
+    id: UUID
+    allocated_quantity: float = Field(ge=0)
+
+
+class AllocationLineAdd(BaseModel):
+    """Add a manual allocation line."""
+    requisition_line_id: UUID
+    lot_id: UUID
+    allocated_quantity: float = Field(gt=0)
+
+
+class AllocationUpdateRequest(BaseModel):
+    updates: list[AllocationLineUpdate] = Field(default_factory=list)
+    additions: list[AllocationLineAdd] = Field(default_factory=list)
+    removals: list[UUID] = Field(default_factory=list)  # allocation line ids to remove
+
+
+class IssueRequisitionRequest(SignatureRequest):
+    """Sign and issue all draft allocation lines for this warehouse."""
+    pass
+
+
+# ---- Response models ----
+
+class AllocationLineItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    requisition_line_id: UUID
+    lot_id: UUID
+    lot_internal_lot: str
+    lot_supplier_lot: str
+    lot_expiry_date: date
+    lot_location_code: str
+    lot_available: float
+    warehouse_type: str
+    allocated_quantity: float
+    status: str
+
+
+class RequisitionLineItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    material_id: UUID
+    material_code: str
+    material_name: str
+    requested_quantity: float
+    issued_quantity: float
+    unit: str
+    warehouse_type: str
+    status: str
+    allocation_lines: list[AllocationLineItem]
+
+
+class RequisitionItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    requisition_no: str
+    status: str
+    product_name: str
+    product_series: str | None
+    production_date: date | None
+    production_order_no: str | None
+    notes: str | None
+    submitted_at: datetime | None
+    created_at: datetime
+    lines: list[RequisitionLineItem]
+
+
+class RequisitionsResponse(BaseModel):
+    requisitions: list[RequisitionItem]

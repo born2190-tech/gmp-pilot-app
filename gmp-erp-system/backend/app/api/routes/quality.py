@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, literal
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, get_current_user
@@ -33,10 +33,10 @@ def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
     row = (
         db.query(
             Lot.id,
-            Lot.internal_lot,
-            func.coalesce(Lot.supplier_lot, "-").label("supplier_lot"),
+            func.coalesce(Lot.supplier_lot, literal("")).label("internal_lot"),
+            func.coalesce(Lot.supplier_lot, literal("")).label("supplier_lot"),
             Material.code.label("material_code"),
-            Material.name.label("material_name"),
+            func.coalesce(func.nullif(Material.name, ""), Material.code).label("material_name"),
             func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Warehouse.warehouse_type,
@@ -110,10 +110,10 @@ def list_qc_lots(
     rows = (
         db.query(
             Lot.id,
-            Lot.internal_lot,
-            func.coalesce(Lot.supplier_lot, "-").label("supplier_lot"),
+            func.coalesce(Lot.supplier_lot, literal("")).label("internal_lot"),
+            func.coalesce(Lot.supplier_lot, literal("")).label("supplier_lot"),
             Material.code.label("material_code"),
-            Material.name.label("material_name"),
+            func.coalesce(func.nullif(Material.name, ""), Material.code).label("material_name"),
             func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Warehouse.warehouse_type,
@@ -150,10 +150,10 @@ def list_qa_lots(
     rows = (
         db.query(
             Lot.id,
-            Lot.internal_lot,
-            func.coalesce(Lot.supplier_lot, "-").label("supplier_lot"),
+            func.coalesce(Lot.supplier_lot, literal("")).label("internal_lot"),
+            func.coalesce(Lot.supplier_lot, literal("")).label("supplier_lot"),
             Material.code.label("material_code"),
-            Material.name.label("material_name"),
+            func.coalesce(func.nullif(Material.name, ""), Material.code).label("material_name"),
             func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Warehouse.warehouse_type,

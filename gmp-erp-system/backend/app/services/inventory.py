@@ -138,8 +138,15 @@ def create_receipt_draft(db: Session, user: CurrentUser, payload: ReceiptCreate)
     return receipt
 
 
-def generate_internal_lot(receipt: ReceiptDocument, line: ReceiptLine, sequence: int) -> str:
-    return f"LOT-{receipt.received_date.strftime('%Y%m%d')}-{receipt.document_no}-{sequence:02d}"
+def normalize_material_series(value: str | None) -> str:
+    return (value or "").strip()
+
+
+def generate_internal_lot(line: ReceiptLine) -> str:
+    series = normalize_material_series(line.supplier_lot)
+    if not series:
+        return f"LOT-{line.created_at.strftime('%Y%m%d')}-{str(line.id)[:8].upper()}"
+    return series
 
 
 def generate_qc_notification_no(receipt: ReceiptDocument) -> str:
@@ -163,14 +170,17 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
     notification_lines: list[tuple[Lot, ReceiptLine, Material]] = []
     notification_time = now_utc()
     lines = db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt.id).order_by(ReceiptLine.created_at).all()
-    for index, line in enumerate(lines, start=1):
+    for line in lines:
         material = get_required(db, Material, line.material_id, "Material")
+        series = generate_internal_lot(line)
+        if db.query(Lot.id).filter(Lot.internal_lot == series).first():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Material series already exists: {series}")
         lot = Lot(
             material_id=line.material_id,
             supplier_id=receipt.supplier_id,
             manufacturer_id=receipt.manufacturer_id,
             supplier_lot=line.supplier_lot or None,
-            internal_lot=generate_internal_lot(receipt, line, index),
+            internal_lot=series,
             item_type=material.item_type,
             production_date=line.production_date,
             production_year=receipt_line_production_year(line),

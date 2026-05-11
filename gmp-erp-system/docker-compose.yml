@@ -17,5 +17,27 @@ services:
       retries: 20
     restart: unless-stopped
 
+  backend:
+    build: ./backend
+    container_name: gmp-erp-backend
+    environment:
+      GMP_DATABASE_URL: postgresql+psycopg://gmp_user:gmp_pass@postgres:5432/gmp_erp
+      GMP_SECRET_KEY: dev-change-me
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: gmp-erp-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   gmp_erp_postgres_data:

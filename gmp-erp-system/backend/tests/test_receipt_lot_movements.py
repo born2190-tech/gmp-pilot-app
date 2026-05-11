@@ -445,3 +445,31 @@ def test_inventory_count_posts_variance_and_updates_stock_with_signature() -> No
     movements = client.get("/api/inventory/movements", headers=headers).json()["movements"]
     assert movements[0]["movement_type"] == "INVENTORY_COUNT"
     assert movements[0]["quantity_delta"] == -2.5
+
+
+def test_inventory_registry_filters_for_lots_and_movements() -> None:
+    reset_inventory_data()
+    client = TestClient(create_app())
+    lot_id, _, token = create_posted_lot(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    lots_quarantine = client.get("/api/inventory/lots", headers=headers, params={"quality_status": "quarantine"})
+    assert lots_quarantine.status_code == 200
+    lots_payload = lots_quarantine.json()["lots"]
+    assert len(lots_payload) == 1
+    assert lots_payload[0]["id"] == lot_id
+
+    internal_lot = lots_payload[0]["internal_lot"]
+    lots_by_internal = client.get("/api/inventory/lots", headers=headers, params={"internal_lot": internal_lot[-8:]})
+    assert lots_by_internal.status_code == 200
+    assert any(item["id"] == lot_id for item in lots_by_internal.json()["lots"])
+
+    movements_receipt = client.get("/api/inventory/movements", headers=headers, params={"movement_type": "RECEIPT"})
+    assert movements_receipt.status_code == 200
+    movement_payload = movements_receipt.json()["movements"]
+    assert len(movement_payload) >= 1
+    assert all(item["movement_type"] == "RECEIPT" for item in movement_payload)
+
+    movements_by_document = client.get("/api/inventory/movements", headers=headers, params={"document": "receipt_document"})
+    assert movements_by_document.status_code == 200
+    assert len(movements_by_document.json()["movements"]) >= 1
