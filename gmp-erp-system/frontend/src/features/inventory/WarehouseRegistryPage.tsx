@@ -191,8 +191,8 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
       },
       {
         accessorKey: 'qc_result_received_at',
-        header: t('registry.qcNotification'),
-        cell: ({ row }) => (row.original.incoming_control_notified_at ? formatDate(row.original.incoming_control_notified_at, locale) : '-'),
+        header: t('registry.qcResultDate'),
+        cell: ({ row }) => formatDate(row.original.qc_result_received_at, locale),
       },
     ],
     [locale, t],
