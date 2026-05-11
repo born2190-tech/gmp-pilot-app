@@ -158,7 +158,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
       {error && <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {success && <p className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p>}
 
-      <form className="max-w-5xl space-y-4" onSubmit={form.handleSubmit(submit)}>
+      <form className="mx-auto max-w-4xl space-y-6" onSubmit={form.handleSubmit(submit)}>
         <SectionBlock title={t('receipt.sectionDocument')}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t('receipt.documentNo')}><input {...form.register('document_no', { required: true })} className="input" /></Field>
@@ -174,30 +174,38 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
           </div>
         </SectionBlock>
 
-        <SectionBlock tone="primary" title={t('receipt.sectionMaterial')}>
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_220px_180px_120px]">
+        <SectionBlock
+          action={
+            <button className="text-sm font-medium text-blue-700 hover:text-blue-900" onClick={() => setMaterialMode(materialMode === 'new' ? 'existing' : 'new')} type="button">
+              {materialMode === 'new' ? t('receipt.chooseExisting') : t('receipt.createNew')}
+            </button>
+          }
+          tone="primary"
+          title={t('receipt.sectionMaterial')}
+        >
+          <div className="space-y-4">
             <Field label={t('receipt.material')}>
-              <Segment value={materialMode} onChange={(value) => setMaterialMode(value as typeof materialMode)} options={[
-                ['existing', t('receipt.existing')],
-                ['new', t('receipt.new')],
-              ]} />
               {materialMode === 'existing' && (
-                <select {...form.register('material_id', { required: materialMode === 'existing' })} className="input mt-2">
+                <select {...form.register('material_id', { required: materialMode === 'existing' })} className="input">
                   <option value="">{t('receipt.selectMaterial')}</option>
                   {materials.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
                 </select>
               )}
               {materialMode === 'new' && (
-                <div className="mt-2 grid gap-2 md:grid-cols-[140px_minmax(0,1fr)]">
+                <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)]">
                   <input {...form.register('material_code', { required: true })} className="input" placeholder={t('common.code')} />
                   <input {...form.register('material_name', { required: true })} className="input" placeholder={t('common.name')} />
                   <input {...form.register('material_type', { required: materialMode === 'new' })} className="input md:col-span-2" placeholder={t('common.type')} />
                 </div>
               )}
             </Field>
+
             <Field label={t('receipt.supplierLot')}><input {...form.register('supplier_lot')} className="input" /></Field>
-            <Field label={t('receipt.quantity')}><input step="0.001" type="number" {...form.register('quantity', { required: true, valueAsNumber: true })} className="input" /></Field>
-            <Field label={t('common.unit')}><input {...form.register('unit', { required: true })} className="input" /></Field>
+
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_160px]">
+              <Field label={t('receipt.quantity')}><input step="0.001" type="number" {...form.register('quantity', { required: true, valueAsNumber: true })} className="input" /></Field>
+              <Field label={t('common.unit')}><input {...form.register('unit', { required: true })} className="input" /></Field>
+            </div>
           </div>
           {hasQuantityWarning && <p className="alert-error mt-3">{t('receipt.quantityWarning')}</p>}
         </SectionBlock>
@@ -219,10 +227,12 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         <SectionBlock title={t('receipt.sectionOrigin')}>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t('receipt.manufacturer')}>
-              <Segment value={manufacturerMode} onChange={(value) => setManufacturerMode(value as typeof manufacturerMode)} options={[
-                ['existing', t('receipt.existing')],
-                ['new', t('receipt.new')],
-              ]} />
+              <InlineModeSwitch
+                chooseExistingLabel={t('receipt.chooseExisting')}
+                createNewLabel={t('receipt.createNew')}
+                isNew={manufacturerMode === 'new'}
+                onToggle={() => setManufacturerMode(manufacturerMode === 'new' ? 'existing' : 'new')}
+              />
               {manufacturerMode === 'existing' && (
                 <select {...form.register('manufacturer_id', { required: manufacturerMode === 'existing' })} className="input mt-2">
                   <option value="">{t('receipt.selectManufacturer')}</option>
@@ -232,18 +242,19 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
               {manufacturerMode === 'new' && <InlineReference codeName="manufacturer_code" form={form} nameName="manufacturer_name" />}
             </Field>
             <Field label={t('receipt.supplier')}>
-              <Segment value={supplierMode} onChange={(value) => setSupplierMode(value as typeof supplierMode)} options={[
-                ['existing', t('receipt.existing')],
-                ['new', t('receipt.new')],
-                ['none', t('receipt.noSupplier')],
-              ]} />
+              <div className="mb-2 flex flex-wrap gap-2">
+                <button className={`mode-button ${supplierMode === 'existing' ? 'mode-button-active' : ''}`} onClick={() => setSupplierMode('existing')} type="button">{t('receipt.existing')}</button>
+                <button className={`mode-button ${supplierMode === 'new' ? 'mode-button-active' : ''}`} onClick={() => setSupplierMode('new')} type="button">{t('receipt.new')}</button>
+                <button className={`mode-button ${supplierMode === 'none' ? 'mode-button-active' : ''}`} onClick={() => setSupplierMode('none')} type="button">{t('receipt.noSupplier')}</button>
+              </div>
               {supplierMode === 'existing' && (
-                <select {...form.register('supplier_id', { required: supplierMode === 'existing' })} className="input mt-2">
+                <select {...form.register('supplier_id', { required: supplierMode === 'existing' })} className="input">
                   <option value="">{t('receipt.selectSupplier')}</option>
                   {suppliers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
                 </select>
               )}
               {supplierMode === 'new' && <InlineReference codeName="supplier_code" form={form} nameName="supplier_name" />}
+              {supplierMode === 'none' && <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">{t('receipt.noSupplierSelected')}</p>}
             </Field>
           </div>
         </SectionBlock>
@@ -270,16 +281,19 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   )
 }
 
-function SectionBlock({ children, title, tone = 'default' }: { children: ReactNode; title: string; tone?: 'default' | 'primary' | 'signature' }) {
+function SectionBlock({ action, children, title, tone = 'default' }: { action?: ReactNode; children: ReactNode; title: string; tone?: 'default' | 'primary' | 'signature' }) {
   const toneClass =
     tone === 'primary'
-      ? 'border-blue-200 bg-blue-50/50'
+      ? 'border-blue-600 bg-[#f5f9ff]'
       : tone === 'signature'
-        ? 'border-amber-200 bg-amber-50/70'
+        ? 'border-amber-400 bg-[#fff8e1]'
         : 'border-slate-200 bg-white'
   return (
-    <section className={`rounded-md border p-4 shadow-sm ${toneClass}`}>
-      <h2 className="mb-4 text-base font-semibold text-slate-900">{title}</h2>
+    <section className={`rounded-md ${tone === 'default' ? 'border' : 'border-2'} p-6 shadow-sm ${toneClass}`}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-base font-semibold text-slate-800">{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
   )
@@ -294,19 +308,12 @@ function Field({ children, label }: { children: ReactNode; label: string }) {
   )
 }
 
-function Segment({ onChange, options, value }: { onChange: (value: string) => void; options: Array<[string, string]>; value: string }) {
+function InlineModeSwitch({ chooseExistingLabel, createNewLabel, isNew, onToggle }: { chooseExistingLabel: string; createNewLabel: string; isNew: boolean; onToggle: () => void }) {
   return (
-    <div className="grid grid-cols-3 rounded-md border border-slate-200 bg-slate-50 p-1 text-xs">
-      {options.map(([optionValue, label]) => (
-        <button
-          className={`rounded px-2 py-1 font-medium ${value === optionValue ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
-          key={optionValue}
-          onClick={() => onChange(optionValue)}
-          type="button"
-        >
-          {label}
-        </button>
-      ))}
+    <div className="mb-2 flex justify-end">
+      <button className="text-sm font-medium text-blue-700 hover:text-blue-900" onClick={onToggle} type="button">
+        {isNew ? chooseExistingLabel : createNewLabel}
+      </button>
     </div>
   )
 }
