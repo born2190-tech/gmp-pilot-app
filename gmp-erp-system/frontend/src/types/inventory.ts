@@ -258,13 +258,16 @@ export interface InventoryCountsResponse {
 
 export interface ReceiptCreate {
   document_no: string
-  supplier_id: string
-  manufacturer_id: string
+  supplier_id?: string | null
+  supplier?: SupplierCreate | null
+  manufacturer_id?: string | null
+  manufacturer?: ManufacturerCreate | null
   warehouse_id: string
   received_date: string
   lines: Array<{
-    material_id: string
-    supplier_lot: string
+    material_id?: string | null
+    material?: MaterialCreate | null
+    supplier_lot?: string | null
     production_date: string | null
     production_year: number
     expiry_date: string

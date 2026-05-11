@@ -129,6 +129,61 @@ def test_receipt_posting_creates_lot_and_receipt_movement() -> None:
     assert movements.json()["movements"][0]["movement_type"] == "RECEIPT"
 
 
+def test_receipt_can_create_inline_master_data_without_supplier() -> None:
+    reset_inventory_data()
+    db = SessionLocal()
+    try:
+        warehouse = db.query(Warehouse).filter(Warehouse.warehouse_type == "SUBSTANCE_WAREHOUSE").one()
+        location = db.query(Location).filter(Location.warehouse_id == warehouse.id, Location.code == "RECEIVING").one()
+        warehouse_id = str(warehouse.id)
+        location_id = str(location.id)
+    finally:
+        db.close()
+
+    client = TestClient(create_app())
+    token = login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    draft = client.post(
+        "/api/inventory/receipts",
+        headers=headers,
+        json={
+            "document_no": "REC-INLINE-001",
+            "supplier_id": None,
+            "manufacturer": {"code": "MFG-INLINE-001", "name": "Inline Manufacturer"},
+            "warehouse_id": warehouse_id,
+            "received_date": "2026-05-10",
+            "lines": [
+                {
+                    "material": {"code": "API-INLINE-001", "name": "Inline API", "item_type": "raw_material", "default_unit": "kg"},
+                    "supplier_lot": None,
+                    "production_date": "2026-01-15",
+                    "production_year": 2026,
+                    "expiry_date": "2028-01-14",
+                    "quantity": 10,
+                    "unit": "kg",
+                    "location_id": location_id,
+                }
+            ],
+        },
+    )
+    assert draft.status_code == 200
+
+    posted = client.post(
+        f"/api/inventory/receipts/{draft.json()['id']}/post",
+        headers=headers,
+        json={"username": "warehouse_substance", "password": "whs123", "meaning": "Post receipt", "reason": "Internal receipt"},
+    )
+    assert posted.status_code == 200
+
+    lots = client.get("/api/inventory/lots", headers=headers).json()["lots"]
+    lot = lots[0]
+    assert lot["supplier_name"] == "-"
+    assert lot["supplier_lot"] == "-"
+    assert lot["manufacturer_name"] == "Inline Manufacturer"
+    assert lot["material_code"] == "API-INLINE-001"
+
+
 def test_warehouse_scope_blocks_receipt_for_other_warehouse() -> None:
     reset_inventory_data()
     ref = create_reference_item()

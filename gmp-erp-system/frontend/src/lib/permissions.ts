@@ -6,6 +6,7 @@ export interface NavItem {
   section: string
   permission: string
   route: string
+  warehouseScopes?: string[]
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -16,7 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.movements', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'movements' },
   { labelKey: 'nav.warehouseOperations', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'warehouse-operations' },
   { labelKey: 'nav.inventoryCounts', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'inventory-counts' },
-  { labelKey: 'nav.fgShipments', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'fg-shipments' },
+  { labelKey: 'nav.fgShipments', section: 'warehouse', permission: 'VIEW_WAREHOUSE', route: 'fg-shipments', warehouseScopes: ['FG_WAREHOUSE'] },
   { labelKey: 'nav.masterData', section: 'reference', permission: 'VIEW_MASTER_DATA', route: 'master-data' },
   { labelKey: 'nav.qcTasks', section: 'qc', permission: 'VIEW_QC', route: 'qc-tasks' },
   { labelKey: 'nav.qaDecisions', section: 'qa', permission: 'VIEW_QA', route: 'qa-decisions' },
@@ -28,5 +29,5 @@ const NAV_ITEMS: NavItem[] = [
 
 export function getVisibleNavItems(user: CurrentUser): NavItem[] {
   const permissions = new Set(user.permissions)
-  return NAV_ITEMS.filter((item) => permissions.has(item.permission))
+  return NAV_ITEMS.filter((item) => permissions.has(item.permission) && (!item.warehouseScopes || !user.warehouse_scope || item.warehouseScopes.includes(user.warehouse_scope)))
 }

@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, get_current_user
@@ -30,10 +31,10 @@ def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
         db.query(
             Lot.id,
             Lot.internal_lot,
-            Lot.supplier_lot,
+            func.coalesce(Lot.supplier_lot, "-").label("supplier_lot"),
             Material.code.label("material_code"),
             Material.name.label("material_name"),
-            Supplier.name.label("supplier_name"),
+            func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Warehouse.warehouse_type,
             Location.code.label("location_code"),
@@ -49,7 +50,7 @@ def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
             Lot.qa_decision_at,
         )
         .join(Material, Material.id == Lot.material_id)
-        .join(Supplier, Supplier.id == Lot.supplier_id)
+        .outerjoin(Supplier, Supplier.id == Lot.supplier_id)
         .join(Manufacturer, Manufacturer.id == Lot.manufacturer_id)
         .join(Warehouse, Warehouse.id == Lot.warehouse_id)
         .join(Location, Location.id == Lot.location_id)
@@ -79,10 +80,10 @@ def list_qc_lots(
         db.query(
             Lot.id,
             Lot.internal_lot,
-            Lot.supplier_lot,
+            func.coalesce(Lot.supplier_lot, "-").label("supplier_lot"),
             Material.code.label("material_code"),
             Material.name.label("material_name"),
-            Supplier.name.label("supplier_name"),
+            func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Warehouse.warehouse_type,
             Location.code.label("location_code"),
@@ -98,7 +99,7 @@ def list_qc_lots(
             Lot.qa_decision_at,
         )
         .join(Material, Material.id == Lot.material_id)
-        .join(Supplier, Supplier.id == Lot.supplier_id)
+        .outerjoin(Supplier, Supplier.id == Lot.supplier_id)
         .join(Manufacturer, Manufacturer.id == Lot.manufacturer_id)
         .join(Warehouse, Warehouse.id == Lot.warehouse_id)
         .join(Location, Location.id == Lot.location_id)
@@ -119,10 +120,10 @@ def list_qa_lots(
         db.query(
             Lot.id,
             Lot.internal_lot,
-            Lot.supplier_lot,
+            func.coalesce(Lot.supplier_lot, "-").label("supplier_lot"),
             Material.code.label("material_code"),
             Material.name.label("material_name"),
-            Supplier.name.label("supplier_name"),
+            func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Warehouse.warehouse_type,
             Location.code.label("location_code"),
@@ -138,7 +139,7 @@ def list_qa_lots(
             Lot.qa_decision_at,
         )
         .join(Material, Material.id == Lot.material_id)
-        .join(Supplier, Supplier.id == Lot.supplier_id)
+        .outerjoin(Supplier, Supplier.id == Lot.supplier_id)
         .join(Manufacturer, Manufacturer.id == Lot.manufacturer_id)
         .join(Warehouse, Warehouse.id == Lot.warehouse_id)
         .join(Location, Location.id == Lot.location_id)

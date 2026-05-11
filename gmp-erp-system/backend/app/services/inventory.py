@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.schemas.inventory import AdjustLotRequest, FGShipmentCreate, InventoryCountCreate, IssueProductionRequest, ReceiptCreate, SignatureRequest, TransferLotRequest
+from app.schemas.inventory import AdjustLotRequest, FGShipmentCreate, InventoryCountCreate, IssueProductionRequest, MaterialCreateInline, ReceiptCreate, ReferenceCreateInline, SignatureRequest, TransferLotRequest
 from app.services.audit import write_audit
 from app.services.permissions import require_permission, require_warehouse_type_scope
 from app.services.signature import validate_signature
@@ -24,10 +24,60 @@ def get_required(db: Session, model: type, object_id: UUID, label: str):
     return row
 
 
+def normalize_code(code: str) -> str:
+    return code.strip().upper()
+
+
+def get_or_create_reference(db: Session, user: CurrentUser, model: type, payload: ReferenceCreateInline | None, object_type: str):
+    if not payload:
+        return None
+    code = normalize_code(payload.code)
+    row = db.query(model).filter(model.code == code).first()
+    if row:
+        return row
+    row = model(code=code, name=payload.name.strip())
+    db.add(row)
+    db.flush()
+    write_audit(
+        db,
+        user,
+        object_type=object_type,
+        object_id=str(row.id),
+        action_type="CREATE_FROM_RECEIPT",
+        new_value={"code": row.code, "name": row.name},
+        reason="Inline master data created during receipt",
+    )
+    return row
+
+
+def get_or_create_material(db: Session, user: CurrentUser, payload: MaterialCreateInline | None) -> Material | None:
+    if not payload:
+        return None
+    code = normalize_code(payload.code)
+    row = db.query(Material).filter(Material.code == code).first()
+    if row:
+        return row
+    row = Material(code=code, name=payload.name.strip(), item_type=payload.item_type.strip(), default_unit=payload.default_unit.strip())
+    db.add(row)
+    db.flush()
+    write_audit(
+        db,
+        user,
+        object_type="material",
+        object_id=str(row.id),
+        action_type="CREATE_FROM_RECEIPT",
+        new_value={"code": row.code, "name": row.name, "item_type": row.item_type, "default_unit": row.default_unit},
+        reason="Inline material created during receipt",
+    )
+    return row
+
+
 def create_receipt_draft(db: Session, user: CurrentUser, payload: ReceiptCreate) -> ReceiptDocument:
     require_permission(user, "CREATE_RECEIPT")
-    supplier = get_required(db, Supplier, payload.supplier_id, "Supplier")
-    manufacturer = get_required(db, Manufacturer, payload.manufacturer_id, "Manufacturer")
+    supplier = get_required(db, Supplier, payload.supplier_id, "Supplier") if payload.supplier_id else get_or_create_reference(db, user, Supplier, payload.supplier, "supplier")
+    manufacturer = get_required(db, Manufacturer, payload.manufacturer_id, "Manufacturer") if payload.manufacturer_id else get_or_create_reference(db, user, Manufacturer, payload.manufacturer, "manufacturer")
+    if not manufacturer:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Manufacturer is required")
     warehouse = get_required(db, Warehouse, payload.warehouse_id, "Warehouse")
     require_warehouse_type_scope(user, warehouse.warehouse_type)
 
@@ -46,7 +96,9 @@ def create_receipt_draft(db: Session, user: CurrentUser, payload: ReceiptCreate)
     db.flush()
 
     for line in payload.lines:
-        material = get_required(db, Material, line.material_id, "Material")
+        material = get_required(db, Material, line.material_id, "Material") if line.material_id else get_or_create_material(db, user, line.material)
+        if not material:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Material is required")
         location = get_required(db, Location, line.location_id, "Location")
         if location.warehouse_id != warehouse.id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Location does not belong to receipt warehouse")
@@ -54,7 +106,7 @@ def create_receipt_draft(db: Session, user: CurrentUser, payload: ReceiptCreate)
             ReceiptLine(
                 receipt=receipt,
                 material=material,
-                supplier_lot=line.supplier_lot,
+                supplier_lot=line.supplier_lot or None,
                 production_date=line.production_date,
                 production_year=line.production_year,
                 expiry_date=line.expiry_date,
@@ -102,7 +154,7 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             material_id=line.material_id,
             supplier_id=receipt.supplier_id,
             manufacturer_id=receipt.manufacturer_id,
-            supplier_lot=line.supplier_lot,
+            supplier_lot=line.supplier_lot or None,
             internal_lot=generate_internal_lot(receipt, line, index),
             item_type=material.item_type,
             production_date=line.production_date,

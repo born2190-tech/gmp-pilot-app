@@ -4,9 +4,20 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ReferenceCreateInline(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+
+
+class MaterialCreateInline(ReferenceCreateInline):
+    item_type: str = Field(min_length=1, max_length=64)
+    default_unit: str = Field(min_length=1, max_length=32)
+
+
 class ReceiptLineCreate(BaseModel):
-    material_id: UUID
-    supplier_lot: str = Field(min_length=1)
+    material_id: UUID | None = None
+    material: MaterialCreateInline | None = None
+    supplier_lot: str | None = None
     production_date: date | None = None
     production_year: int = Field(ge=2000, le=2100)
     expiry_date: date
@@ -17,8 +28,10 @@ class ReceiptLineCreate(BaseModel):
 
 class ReceiptCreate(BaseModel):
     document_no: str = Field(min_length=1)
-    supplier_id: UUID
-    manufacturer_id: UUID
+    supplier_id: UUID | None = None
+    supplier: ReferenceCreateInline | None = None
+    manufacturer_id: UUID | None = None
+    manufacturer: ReferenceCreateInline | None = None
     warehouse_id: UUID
     received_date: date
     lines: list[ReceiptLineCreate] = Field(min_length=1)

@@ -14,10 +14,17 @@ interface ReceiptDocumentPageProps {
 interface ReceiptForm {
   document_no: string
   supplier_id: string
+  supplier_code: string
+  supplier_name: string
   manufacturer_id: string
+  manufacturer_code: string
+  manufacturer_name: string
   warehouse_id: string
   received_date: string
   material_id: string
+  material_code: string
+  material_name: string
+  material_type: string
   supplier_lot: string
   production_date: string
   production_year: number
@@ -39,6 +46,9 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [supplierMode, setSupplierMode] = useState<'existing' | 'new' | 'none'>('existing')
+  const [manufacturerMode, setManufacturerMode] = useState<'existing' | 'new'>('existing')
+  const [materialMode, setMaterialMode] = useState<'existing' | 'new'>('existing')
 
   const form = useForm<ReceiptForm>({
     defaultValues: {
@@ -47,6 +57,7 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
       production_year: new Date().getFullYear(),
       quantity: 0,
       unit: 'kg',
+      material_type: 'raw_material',
       reason: t('receipt.defaultReason'),
     },
   })
@@ -67,6 +78,9 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
         setSuppliers(supplierResponse.suppliers)
         setManufacturers(manufacturerResponse.manufacturers)
         setMaterials(materialResponse.materials)
+        if (warehouseResponse.warehouses.length === 1) {
+          form.setValue('warehouse_id', warehouseResponse.warehouses[0].id)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : t('receipt.loadFailed'))
       } finally {
@@ -78,7 +92,7 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
 
   const selectedWarehouseId = form.watch('warehouse_id')
   const allowedLocations = useMemo(() => locations.filter((item) => item.warehouse_id === selectedWarehouseId), [locations, selectedWarehouseId])
-  const masterDataReady = warehouses.length > 0 && suppliers.length > 0 && manufacturers.length > 0 && materials.length > 0 && locations.length > 0
+  const masterDataReady = warehouses.length > 0 && locations.length > 0
 
   async function submit(values: ReceiptForm) {
     setError(null)
@@ -87,14 +101,17 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
     try {
       const payload: ReceiptCreate = {
         document_no: values.document_no,
-        supplier_id: values.supplier_id,
-        manufacturer_id: values.manufacturer_id,
+        supplier_id: supplierMode === 'existing' ? values.supplier_id : null,
+        supplier: supplierMode === 'new' ? { code: values.supplier_code, name: values.supplier_name } : null,
+        manufacturer_id: manufacturerMode === 'existing' ? values.manufacturer_id : null,
+        manufacturer: manufacturerMode === 'new' ? { code: values.manufacturer_code, name: values.manufacturer_name } : null,
         warehouse_id: values.warehouse_id,
         received_date: values.received_date,
         lines: [
           {
-            material_id: values.material_id,
-            supplier_lot: values.supplier_lot,
+            material_id: materialMode === 'existing' ? values.material_id : null,
+            material: materialMode === 'new' ? { code: values.material_code, name: values.material_name, item_type: values.material_type, default_unit: values.unit } : null,
+            supplier_lot: values.supplier_lot || null,
             production_date: values.production_date || null,
             production_year: Number(values.production_year),
             expiry_date: values.expiry_date,
@@ -144,24 +161,51 @@ export function ReceiptDocumentPage({ token, username }: ReceiptDocumentPageProp
           </select>
         </Field>
         <Field label={t('receipt.supplier')}>
-          <select {...form.register('supplier_id', { required: true })} className="input">
-            <option value="">{t('receipt.selectSupplier')}</option>
-            {suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
+          <Segment value={supplierMode} onChange={(value) => setSupplierMode(value as typeof supplierMode)} options={[
+            ['existing', t('receipt.existing')],
+            ['new', t('receipt.new')],
+            ['none', t('receipt.noSupplier')],
+          ]} />
+          {supplierMode === 'existing' && (
+            <select {...form.register('supplier_id', { required: supplierMode === 'existing' })} className="input mt-2">
+              <option value="">{t('receipt.selectSupplier')}</option>
+              {suppliers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+            </select>
+          )}
+          {supplierMode === 'new' && <InlineReference codeName="supplier_code" form={form} nameName="supplier_name" />}
         </Field>
         <Field label={t('receipt.manufacturer')}>
-          <select {...form.register('manufacturer_id', { required: true })} className="input">
-            <option value="">{t('receipt.selectManufacturer')}</option>
-            {manufacturers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
+          <Segment value={manufacturerMode} onChange={(value) => setManufacturerMode(value as typeof manufacturerMode)} options={[
+            ['existing', t('receipt.existing')],
+            ['new', t('receipt.new')],
+          ]} />
+          {manufacturerMode === 'existing' && (
+            <select {...form.register('manufacturer_id', { required: manufacturerMode === 'existing' })} className="input mt-2">
+              <option value="">{t('receipt.selectManufacturer')}</option>
+              {manufacturers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+            </select>
+          )}
+          {manufacturerMode === 'new' && <InlineReference codeName="manufacturer_code" form={form} nameName="manufacturer_name" />}
         </Field>
         <Field label={t('receipt.material')}>
-          <select {...form.register('material_id', { required: true })} className="input">
-            <option value="">{t('receipt.selectMaterial')}</option>
-            {materials.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-          </select>
+          <Segment value={materialMode} onChange={(value) => setMaterialMode(value as typeof materialMode)} options={[
+            ['existing', t('receipt.existing')],
+            ['new', t('receipt.new')],
+          ]} />
+          {materialMode === 'existing' && (
+            <select {...form.register('material_id', { required: materialMode === 'existing' })} className="input mt-2">
+              <option value="">{t('receipt.selectMaterial')}</option>
+              {materials.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+            </select>
+          )}
+          {materialMode === 'new' && (
+            <div className="mt-2 grid gap-2">
+              <InlineReference codeName="material_code" form={form} nameName="material_name" />
+              <input {...form.register('material_type', { required: materialMode === 'new' })} className="input" placeholder={t('common.type')} />
+            </div>
+          )}
         </Field>
-        <Field label={t('receipt.supplierLot')}><input {...form.register('supplier_lot', { required: true })} className="input" /></Field>
+        <Field label={t('receipt.supplierLot')}><input {...form.register('supplier_lot')} className="input" /></Field>
         <Field label={t('receipt.productionDate')}><input type="date" {...form.register('production_date')} className="input" /></Field>
         <Field label={t('receipt.productionYear')}><input type="number" {...form.register('production_year', { required: true, valueAsNumber: true })} className="input" /></Field>
         <Field label={t('receipt.expiryDate')}><input type="date" {...form.register('expiry_date', { required: true })} className="input" /></Field>
@@ -189,5 +233,32 @@ function Field({ children, label }: { children: ReactNode; label: string }) {
       {label}
       <div className="mt-1">{children}</div>
     </label>
+  )
+}
+
+function Segment({ onChange, options, value }: { onChange: (value: string) => void; options: Array<[string, string]>; value: string }) {
+  return (
+    <div className="grid grid-cols-3 rounded-md border border-slate-200 bg-slate-50 p-1 text-xs">
+      {options.map(([optionValue, label]) => (
+        <button
+          className={`rounded px-2 py-1 font-medium ${value === optionValue ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+          key={optionValue}
+          onClick={() => onChange(optionValue)}
+          type="button"
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function InlineReference({ codeName, form, nameName }: { codeName: keyof ReceiptForm; form: ReturnType<typeof useForm<ReceiptForm>>; nameName: keyof ReceiptForm }) {
+  const { t } = useI18n()
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2">
+      <input {...form.register(codeName, { required: true })} className="input" placeholder={t('common.code')} />
+      <input {...form.register(nameName, { required: true })} className="input" placeholder={t('common.name')} />
+    </div>
   )
 }

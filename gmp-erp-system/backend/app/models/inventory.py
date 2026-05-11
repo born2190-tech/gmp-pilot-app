@@ -14,14 +14,14 @@ class ReceiptDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     document_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
-    supplier_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False)
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=True)
     manufacturer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("manufacturers.id"), nullable=False)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=False)
     received_date: Mapped[date] = mapped_column(Date, nullable=False)
     posted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    supplier: Mapped[Supplier] = relationship()
+    supplier: Mapped[Supplier | None] = relationship()
     manufacturer: Mapped[Manufacturer] = relationship()
     warehouse: Mapped[Warehouse] = relationship()
 
@@ -31,7 +31,7 @@ class ReceiptLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     receipt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_documents.id"), nullable=False)
     material_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("materials.id"), nullable=False)
-    supplier_lot: Mapped[str] = mapped_column(String(128), nullable=False)
+    supplier_lot: Mapped[str | None] = mapped_column(String(128), nullable=True)
     production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     production_year: Mapped[int] = mapped_column(nullable=False)
     expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -48,9 +48,9 @@ class Lot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "lots"
 
     material_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("materials.id"), nullable=False)
-    supplier_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False)
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=True)
     manufacturer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("manufacturers.id"), nullable=False)
-    supplier_lot: Mapped[str] = mapped_column(String(128), nullable=False)
+    supplier_lot: Mapped[str | None] = mapped_column(String(128), nullable=True)
     internal_lot: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     item_type: Mapped[str] = mapped_column(String(64), nullable=False)
     production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -67,7 +67,7 @@ class Lot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     qa_decision_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     material: Mapped[Material] = relationship()
-    supplier: Mapped[Supplier] = relationship()
+    supplier: Mapped[Supplier | None] = relationship()
     manufacturer: Mapped[Manufacturer] = relationship()
     warehouse: Mapped[Warehouse] = relationship()
     location: Mapped[Location] = relationship()
