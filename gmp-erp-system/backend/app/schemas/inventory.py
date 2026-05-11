@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ReferenceCreateInline(BaseModel):
@@ -25,6 +25,11 @@ class ReceiptLineCreate(BaseModel):
     unit: str = Field(min_length=1)
     location_id: UUID
 
+    @field_validator("material_id", mode="before")
+    @classmethod
+    def blank_material_id_to_none(cls, value):
+        return None if value == "" else value
+
 
 class ReceiptCreate(BaseModel):
     document_no: str = Field(min_length=1)
@@ -35,6 +40,11 @@ class ReceiptCreate(BaseModel):
     warehouse_id: UUID
     received_date: date
     lines: list[ReceiptLineCreate] = Field(min_length=1)
+
+    @field_validator("supplier_id", "manufacturer_id", mode="before")
+    @classmethod
+    def blank_reference_id_to_none(cls, value):
+        return None if value == "" else value
 
 
 class ReceiptResponse(BaseModel):

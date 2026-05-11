@@ -101,6 +101,8 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   const masterDataReady = warehouses.length > 0 && locations.length > 0
   const hasQuantityWarning = Number(watchedQuantity) <= 0
   const hasExpiryWarning = Boolean(watchedProductionDate && watchedExpiryDate && watchedExpiryDate < watchedProductionDate)
+  const optionalId = (value: string | undefined) => value || null
+
   async function submit(values: ReceiptForm) {
     setError(null)
     setSuccess(null)
@@ -108,15 +110,15 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
     try {
       const payload: ReceiptCreate = {
         document_no: values.document_no,
-        supplier_id: supplierMode === 'existing' ? values.supplier_id : null,
+        supplier_id: supplierMode === 'existing' ? optionalId(values.supplier_id) : null,
         supplier: supplierMode === 'new' ? { code: values.supplier_code, name: values.supplier_name } : null,
-        manufacturer_id: manufacturerMode === 'existing' ? values.manufacturer_id : null,
+        manufacturer_id: manufacturerMode === 'existing' ? optionalId(values.manufacturer_id) : null,
         manufacturer: manufacturerMode === 'new' ? { code: values.manufacturer_code, name: values.manufacturer_name } : null,
         warehouse_id: values.warehouse_id,
         received_date: values.received_date,
         lines: [
           {
-            material_id: materialMode === 'existing' ? values.material_id : null,
+            material_id: materialMode === 'existing' ? optionalId(values.material_id) : null,
             material: materialMode === 'new' ? { code: values.material_code, name: values.material_name, item_type: values.material_type, default_unit: values.unit } : null,
             supplier_lot: values.supplier_lot || null,
             production_date: values.production_date || null,

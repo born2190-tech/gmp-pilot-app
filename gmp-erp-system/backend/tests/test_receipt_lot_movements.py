@@ -165,12 +165,14 @@ def test_receipt_can_create_inline_master_data_without_supplier() -> None:
         headers=headers,
         json={
             "document_no": "REC-INLINE-001",
-            "supplier_id": None,
+            "supplier_id": "",
+            "manufacturer_id": "",
             "manufacturer": {"code": "MFG-INLINE-001", "name": "Inline Manufacturer"},
             "warehouse_id": warehouse_id,
             "received_date": "2026-05-10",
             "lines": [
                 {
+                    "material_id": "",
                     "material": {"code": "API-INLINE-001", "name": "Inline API", "item_type": "raw_material", "default_unit": "kg"},
                     "supplier_lot": None,
                     "production_date": "2026-01-15",

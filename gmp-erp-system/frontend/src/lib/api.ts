@@ -58,7 +58,11 @@ async function request<T>(path: string, method: Method, options?: { token?: stri
     let detail = `HTTP ${response.status}`
     try {
       const payload = await response.json()
-      detail = typeof payload.detail === 'string' ? payload.detail : detail
+      if (typeof payload.detail === 'string') {
+        detail = payload.detail
+      } else if (Array.isArray(payload.detail)) {
+        detail = payload.detail.map((item: { msg?: string; type?: string }) => item.msg || item.type).filter(Boolean).join('; ') || detail
+      }
     } catch {
       detail = response.statusText || detail
     }
