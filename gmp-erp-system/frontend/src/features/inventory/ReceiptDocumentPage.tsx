@@ -96,8 +96,6 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   const selectedWarehouseId = form.watch('warehouse_id')
   const allowedLocations = useMemo(() => locations.filter((item) => item.warehouse_id === selectedWarehouseId), [locations, selectedWarehouseId])
   const masterDataReady = warehouses.length > 0 && locations.length > 0
-  const warehouseLabel = warehouses[0]?.warehouse_type === 'SUBSTANCE_WAREHOUSE' ? t('receipt.substanceWarehouse') : warehouses[0]?.name || user.warehouse_scope
-
   async function submit(values: ReceiptForm) {
     setError(null)
     setSuccess(null)
@@ -155,89 +153,93 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
       {error && <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {success && <p className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p>}
 
-      <form className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 xl:grid-cols-3" onSubmit={form.handleSubmit(submit)}>
-        <Field label={t('receipt.documentNo')}><input {...form.register('document_no', { required: true })} className="input" /></Field>
-        <Field label={t('receipt.receivedDate')}><input type="date" {...form.register('received_date', { required: true })} className="input" /></Field>
-        {user.warehouse_scope ? (
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-            <p className="text-xs uppercase text-slate-500">{t('receipt.warehouse')}</p>
-            <p className="mt-1 font-medium text-slate-900">{warehouseLabel}</p>
-          </div>
-        ) : (
-          <Field label={t('receipt.warehouse')}>
-            <select {...form.register('warehouse_id', { required: true })} className="input">
-              <option value="">{t('receipt.selectWarehouse')}</option>
-              {warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          </Field>
-        )}
-
-        <div className="xl:col-span-3 grid gap-4 rounded-md border border-slate-200 bg-slate-50 p-4 xl:grid-cols-3">
-          <Field label={t('receipt.material')}>
-            <Segment value={materialMode} onChange={(value) => setMaterialMode(value as typeof materialMode)} options={[
-              ['existing', t('receipt.existing')],
-              ['new', t('receipt.new')],
-            ]} />
-            {materialMode === 'existing' && (
-              <select {...form.register('material_id', { required: materialMode === 'existing' })} className="input mt-2">
-                <option value="">{t('receipt.selectMaterial')}</option>
-                {materials.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+      <form className="max-w-6xl space-y-4 rounded-lg border border-slate-200 bg-white p-5" onSubmit={form.handleSubmit(submit)}>
+        <section className="grid gap-4 border-b border-slate-200 pb-4 md:grid-cols-2">
+          <Field label={t('receipt.documentNo')}><input {...form.register('document_no', { required: true })} className="input" /></Field>
+          <Field label={t('receipt.receivedDate')}><input type="date" {...form.register('received_date', { required: true })} className="input" /></Field>
+          {!user.warehouse_scope && (
+            <Field label={t('receipt.warehouse')}>
+              <select {...form.register('warehouse_id', { required: true })} className="input">
+                <option value="">{t('receipt.selectWarehouse')}</option>
+                {warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
-            )}
-            {materialMode === 'new' && (
-              <div className="mt-2 grid gap-2">
-                <InlineReference codeName="material_code" form={form} nameName="material_name" />
-                <input {...form.register('material_type', { required: materialMode === 'new' })} className="input" placeholder={t('common.type')} />
-              </div>
-            )}
-          </Field>
-          <Field label={t('receipt.supplierLot')}><input {...form.register('supplier_lot')} className="input" /></Field>
-          <div className="grid grid-cols-2 gap-3">
+            </Field>
+          )}
+        </section>
+
+        <section className="space-y-4 border-b border-slate-200 pb-4">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_220px_180px_120px]">
+            <Field label={t('receipt.material')}>
+              <Segment value={materialMode} onChange={(value) => setMaterialMode(value as typeof materialMode)} options={[
+                ['existing', t('receipt.existing')],
+                ['new', t('receipt.new')],
+              ]} />
+              {materialMode === 'existing' && (
+                <select {...form.register('material_id', { required: materialMode === 'existing' })} className="input mt-2">
+                  <option value="">{t('receipt.selectMaterial')}</option>
+                  {materials.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+                </select>
+              )}
+              {materialMode === 'new' && (
+                <div className="mt-2 grid gap-2 md:grid-cols-[140px_minmax(0,1fr)]">
+                  <input {...form.register('material_code', { required: true })} className="input" placeholder={t('common.code')} />
+                  <input {...form.register('material_name', { required: true })} className="input" placeholder={t('common.name')} />
+                  <input {...form.register('material_type', { required: materialMode === 'new' })} className="input md:col-span-2" placeholder={t('common.type')} />
+                </div>
+              )}
+            </Field>
+            <Field label={t('receipt.supplierLot')}><input {...form.register('supplier_lot')} className="input" /></Field>
             <Field label={t('receipt.quantity')}><input step="0.001" type="number" {...form.register('quantity', { required: true, valueAsNumber: true })} className="input" /></Field>
             <Field label={t('common.unit')}><input {...form.register('unit', { required: true })} className="input" /></Field>
           </div>
-          <Field label={t('receipt.productionDate')}><input type="date" {...form.register('production_date')} className="input" /></Field>
-          <Field label={t('receipt.expiryDate')}><input type="date" {...form.register('expiry_date', { required: true })} className="input" /></Field>
-          <Field label={t('receipt.location')}>
-            <select {...form.register('location_id', { required: true })} className="input">
-              <option value="">{t('receipt.selectLocation')}</option>
-              {allowedLocations.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-            </select>
-          </Field>
-        </div>
 
-        <Field label={t('receipt.manufacturer')}>
-          <Segment value={manufacturerMode} onChange={(value) => setManufacturerMode(value as typeof manufacturerMode)} options={[
-            ['existing', t('receipt.existing')],
-            ['new', t('receipt.new')],
-          ]} />
-          {manufacturerMode === 'existing' && (
-            <select {...form.register('manufacturer_id', { required: manufacturerMode === 'existing' })} className="input mt-2">
-              <option value="">{t('receipt.selectManufacturer')}</option>
-              {manufacturers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-            </select>
-          )}
-          {manufacturerMode === 'new' && <InlineReference codeName="manufacturer_code" form={form} nameName="manufacturer_name" />}
-        </Field>
-        <Field label={t('receipt.supplier')}>
-          <Segment value={supplierMode} onChange={(value) => setSupplierMode(value as typeof supplierMode)} options={[
-            ['existing', t('receipt.existing')],
-            ['new', t('receipt.new')],
-            ['none', t('receipt.noSupplier')],
-          ]} />
-          {supplierMode === 'existing' && (
-            <select {...form.register('supplier_id', { required: supplierMode === 'existing' })} className="input mt-2">
-              <option value="">{t('receipt.selectSupplier')}</option>
-              {suppliers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-            </select>
-          )}
-          {supplierMode === 'new' && <InlineReference codeName="supplier_code" form={form} nameName="supplier_name" />}
-        </Field>
-        <Field label={t('receipt.signaturePassword')}><input type="password" {...form.register('signature_password', { required: true })} className="input" /></Field>
-        <Field label={t('common.reason')}><input {...form.register('reason', { required: true })} className="input" /></Field>
-        <div className="flex items-end">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label={t('receipt.productionDate')}><input type="date" {...form.register('production_date')} className="input" /></Field>
+            <Field label={t('receipt.expiryDate')}><input type="date" {...form.register('expiry_date', { required: true })} className="input" /></Field>
+            <Field label={t('receipt.location')}>
+              <select {...form.register('location_id', { required: true })} className="input">
+                <option value="">{t('receipt.selectLocation')}</option>
+                {allowedLocations.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+              </select>
+            </Field>
+          </div>
+        </section>
+
+        <section className="grid gap-4 border-b border-slate-200 pb-4 md:grid-cols-2">
+          <Field label={t('receipt.manufacturer')}>
+            <Segment value={manufacturerMode} onChange={(value) => setManufacturerMode(value as typeof manufacturerMode)} options={[
+              ['existing', t('receipt.existing')],
+              ['new', t('receipt.new')],
+            ]} />
+            {manufacturerMode === 'existing' && (
+              <select {...form.register('manufacturer_id', { required: manufacturerMode === 'existing' })} className="input mt-2">
+                <option value="">{t('receipt.selectManufacturer')}</option>
+                {manufacturers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+              </select>
+            )}
+            {manufacturerMode === 'new' && <InlineReference codeName="manufacturer_code" form={form} nameName="manufacturer_name" />}
+          </Field>
+          <Field label={t('receipt.supplier')}>
+            <Segment value={supplierMode} onChange={(value) => setSupplierMode(value as typeof supplierMode)} options={[
+              ['existing', t('receipt.existing')],
+              ['new', t('receipt.new')],
+              ['none', t('receipt.noSupplier')],
+            ]} />
+            {supplierMode === 'existing' && (
+              <select {...form.register('supplier_id', { required: supplierMode === 'existing' })} className="input mt-2">
+                <option value="">{t('receipt.selectSupplier')}</option>
+                {suppliers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+              </select>
+            )}
+            {supplierMode === 'new' && <InlineReference codeName="supplier_code" form={form} nameName="supplier_name" />}
+          </Field>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px_auto] md:items-end">
+          <Field label={t('common.reason')}><input {...form.register('reason', { required: true })} className="input" /></Field>
+          <Field label={t('receipt.eSignature')}><input type="password" {...form.register('signature_password', { required: true })} className="input" /></Field>
           <Button disabled={isLoading || !masterDataReady} type="submit">{t('receipt.post')}</Button>
-        </div>
+        </section>
       </form>
     </section>
   )
