@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { listLots } from '../../lib/api'
+import { translatedLocation } from '../../lib/display'
 import type { LotItem } from '../../types/inventory'
 import { DataTable } from '../../components/table/DataTable'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -45,7 +46,11 @@ export function LotsBoardPage({ token }: LotsBoardPageProps) {
       { accessorKey: 'manufacturer_name', header: t('lots.manufacturer') },
       { accessorKey: 'supplier_lot', header: t('lots.supplierLot') },
       { accessorKey: 'warehouse_type', header: t('lots.warehouse') },
-      { accessorKey: 'location_code', header: t('lots.location') },
+      {
+        accessorKey: 'location_code',
+        header: t('lots.location'),
+        cell: ({ row }) => translatedLocation(row.original.location_code, t),
+      },
       {
         id: 'quantity',
         header: t('lots.qty'),

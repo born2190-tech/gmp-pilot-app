@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adjustLot, issueProduction, listLocations, listLots, transferLot } from '../../lib/api'
+import { translatedLocation } from '../../lib/display'
 import { Button } from '../../components/ui/button'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
@@ -181,7 +182,7 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
         {selectedLot && (
           <div className="mt-3 grid gap-3 text-sm text-slate-700 xl:grid-cols-4">
             <p>{selectedLot.material_name}</p>
-            <p>{selectedLot.location_code}</p>
+            <p>{translatedLocation(selectedLot.location_code, t)}</p>
             <p>{selectedLot.quantity} {selectedLot.unit}</p>
             <StatusBadge status={selectedLot.quality_status} />
           </div>
@@ -197,7 +198,7 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
             <select className="input mt-1" onChange={(event) => setTargetLocationId(event.target.value)} value={targetLocationId}>
               <option value="">{t('receipt.selectLocation')}</option>
               {scopedLocations.map((location) => (
-                <option key={location.id} value={location.id}>{location.code} · {location.name}</option>
+                <option key={location.id} value={location.id}>{translatedLocation(location.code, t)}</option>
               ))}
             </select>
           </label>
@@ -295,7 +296,7 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-slate-500">{lot?.location_code ?? '—'}</td>
+                    <td className="px-3 py-2 text-slate-500">{translatedLocation(lot?.location_code, t)}</td>
                     <td className="px-3 py-2">
                       <button
                         className="text-slate-300 hover:text-red-500 disabled:opacity-30"

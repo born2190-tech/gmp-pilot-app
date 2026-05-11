@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { listFgShipments, listInventoryCounts, listLots, listMovements } from '../../lib/api'
+import { translatedLocation } from '../../lib/display'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { FGShipmentItem, InventoryCountItem, LotItem, MovementItem } from '../../types/inventory'
@@ -166,7 +167,7 @@ export function WarehouseCenterPage({ token }: WarehouseCenterPageProps) {
                     <Td strong>{lot.internal_lot}</Td>
                     <Td>{lot.material_code} · {lot.material_name}</Td>
                     <Td>{lot.warehouse_type}</Td>
-                    <Td>{lot.location_code}</Td>
+                    <Td>{translatedLocation(lot.location_code, t)}</Td>
                     <Td><StatusBadge status={lot.quality_status} /></Td>
                     <Td>{lot.quantity} {lot.unit}</Td>
                     <Td><RiskLabel risk={expiryRisk(lot.expiry_date)} text={formatDate(lot.expiry_date, locale)} /></Td>
@@ -260,7 +261,7 @@ function LotPassport({ lot }: { lot: LotItem }) {
 
       <div className="grid grid-cols-3 border-b border-slate-200 text-sm">
         <Metric label={t('lots.qty')} value={`${lot.quantity} ${lot.unit}`} />
-        <Metric label={t('lots.location')} value={lot.location_code} />
+        <Metric label={t('lots.location')} value={translatedLocation(lot.location_code, t)} />
         <Metric label={t('warehouseCenter.daysLeft')} tone={risk === 'expired' ? 'danger' : risk === 'expires_soon' ? 'warning' : 'normal'} value={daysLeft < 0 ? t('warehouseCenter.expired') : String(daysLeft)} />
       </div>
 

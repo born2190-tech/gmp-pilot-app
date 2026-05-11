@@ -8,6 +8,7 @@ import {
   listRequisitions,
   updateRequisitionAllocation,
 } from '../../lib/api'
+import { translatedLocation } from '../../lib/display'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
@@ -725,7 +726,7 @@ function RequisitionLineCard({
                   <td className="py-1.5 pr-4 text-xs text-gray-600">
                     {new Intl.DateTimeFormat('ru-RU').format(new Date(alloc.lot_expiry_date))}
                   </td>
-                  <td className="py-1.5 pr-4 text-xs text-gray-500">{alloc.lot_location_code}</td>
+                  <td className="py-1.5 pr-4 text-xs text-gray-500">{translatedLocation(alloc.lot_location_code, t)}</td>
                   <td className="py-1.5 pr-4 text-xs text-gray-500">{alloc.lot_available}</td>
                   <td className="py-1.5 pr-4">
                     {canEdit ? (

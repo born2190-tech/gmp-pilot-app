@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { createReceipt, listLocations, listManufacturers, listMaterials, listSuppliers, listWarehouses, postReceipt } from '../../lib/api'
+import { translatedLocation } from '../../lib/display'
 import type { LocationItem, ManufacturerItem, MaterialItem, ReceiptCreate, SupplierItem, WarehouseItem } from '../../types/inventory'
 import type { CurrentUser } from '../../types/auth'
 import { Button } from '../../components/ui/button'
@@ -222,7 +223,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
             <Field label={t('receipt.location')}>
               <select {...form.register('location_id', { required: true })} className="input">
                 <option value="">{t('receipt.selectLocation')}</option>
-                {allowedLocations.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+                {allowedLocations.map((item) => <option key={item.id} value={item.id}>{translatedLocation(item.code, t)}</option>)}
               </select>
             </Field>
           </div>

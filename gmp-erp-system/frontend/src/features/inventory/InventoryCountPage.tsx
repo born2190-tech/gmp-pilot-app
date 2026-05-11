@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/table/DataTable'
 import { createInventoryCount, listInventoryCounts, listLocations, listLots } from '../../lib/api'
+import { translatedLocation } from '../../lib/display'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 import type { InventoryCountItem, LocationItem, LotItem } from '../../types/inventory'
@@ -156,7 +157,7 @@ export function InventoryCountPage({ token, user }: InventoryCountPageProps) {
                 {t('lots.location')}
                 <select className="input" onChange={(event) => { setSelectedLocation(event.target.value); setDraftLines([]) }} value={selectedLocation}>
                   <option value="">{t('inventoryCount.allLocations')}</option>
-                  {locationOptions.map((location) => <option key={location.id} value={location.code}>{location.code} · {location.name}</option>)}
+                  {locationOptions.map((location) => <option key={location.id} value={location.code}>{translatedLocation(location.code, t)}</option>)}
                 </select>
               </label>
             </div>
@@ -167,7 +168,7 @@ export function InventoryCountPage({ token, user }: InventoryCountPageProps) {
                 <select className="input" onChange={(event) => addLot(event.target.value)} value="">
                   <option value="">{t('inventoryCount.selectLine')}</option>
                   {zoneLots.filter((lot) => !draftLotIds.has(lot.id)).map((lot) => (
-                    <option key={lot.id} value={lot.id}>{lot.internal_lot} · {lot.material_code} · {lot.location_code} · {lot.quantity} {lot.unit}</option>
+                    <option key={lot.id} value={lot.id}>{lot.internal_lot} · {lot.material_code} · {translatedLocation(lot.location_code, t)} · {lot.quantity} {lot.unit}</option>
                   ))}
                 </select>
               </label>
@@ -193,7 +194,7 @@ export function InventoryCountPage({ token, user }: InventoryCountPageProps) {
                     <tr className="border-t border-slate-100" key={row.lot_id}>
                       <td className="px-3 py-2 font-semibold">{row.lot.internal_lot}</td>
                       <td className="px-3 py-2">{row.lot.material_code} · {row.lot.material_name}</td>
-                      <td className="px-3 py-2">{row.lot.location_code}</td>
+                      <td className="px-3 py-2">{translatedLocation(row.lot.location_code, t)}</td>
                       <td className="px-3 py-2">{row.lot.quantity} {row.lot.unit}</td>
                       <td className="px-3 py-2"><input className="input max-w-32" min="0" onChange={(event) => updateLine(row.lot_id, event.target.value)} type="number" value={row.actual_quantity} /></td>
                       <td className={`px-3 py-2 font-medium ${row.variance === 0 ? 'text-slate-900' : row.variance > 0 ? 'text-emerald-700' : 'text-red-700'}`}>{row.variance > 0 ? '+' : ''}{row.variance}</td>

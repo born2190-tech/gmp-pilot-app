@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/table/DataTable'
 import { listLots, listMovements } from '../../lib/api'
+import { translatedLocation } from '../../lib/display'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { LotItem, MovementItem } from '../../types/inventory'
@@ -163,7 +164,11 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
         cell: ({ row }) => `${row.original.material_code} · ${row.original.material_name}`,
       },
       { accessorKey: 'manufacturer_name', header: t('registry.manufacturer') },
-      { accessorKey: 'location_code', header: t('registry.location') },
+      {
+        accessorKey: 'location_code',
+        header: t('registry.location'),
+        cell: ({ row }) => translatedLocation(row.original.location_code, t),
+      },
       {
         id: 'qty',
         header: t('registry.qty'),
