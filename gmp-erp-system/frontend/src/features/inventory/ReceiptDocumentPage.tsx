@@ -94,8 +94,13 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   }, [token])
 
   const selectedWarehouseId = form.watch('warehouse_id')
+  const watchedQuantity = form.watch('quantity')
+  const watchedProductionDate = form.watch('production_date')
+  const watchedExpiryDate = form.watch('expiry_date')
   const allowedLocations = useMemo(() => locations.filter((item) => item.warehouse_id === selectedWarehouseId), [locations, selectedWarehouseId])
   const masterDataReady = warehouses.length > 0 && locations.length > 0
+  const hasQuantityWarning = Number(watchedQuantity) <= 0
+  const hasExpiryWarning = Boolean(watchedProductionDate && watchedExpiryDate && watchedExpiryDate < watchedProductionDate)
   async function submit(values: ReceiptForm) {
     setError(null)
     setSuccess(null)
@@ -153,21 +158,23 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
       {error && <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {success && <p className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p>}
 
-      <form className="max-w-6xl space-y-4 rounded-lg border border-slate-200 bg-white p-5" onSubmit={form.handleSubmit(submit)}>
-        <section className="grid gap-4 border-b border-slate-200 pb-4 md:grid-cols-2">
-          <Field label={t('receipt.documentNo')}><input {...form.register('document_no', { required: true })} className="input" /></Field>
-          <Field label={t('receipt.receivedDate')}><input type="date" {...form.register('received_date', { required: true })} className="input" /></Field>
-          {!user.warehouse_scope && (
-            <Field label={t('receipt.warehouse')}>
-              <select {...form.register('warehouse_id', { required: true })} className="input">
-                <option value="">{t('receipt.selectWarehouse')}</option>
-                {warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-            </Field>
-          )}
-        </section>
+      <form className="max-w-5xl space-y-4" onSubmit={form.handleSubmit(submit)}>
+        <SectionBlock title={t('receipt.sectionDocument')}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label={t('receipt.documentNo')}><input {...form.register('document_no', { required: true })} className="input" /></Field>
+            <Field label={t('receipt.receivedDate')}><input type="date" {...form.register('received_date', { required: true })} className="input" /></Field>
+            {!user.warehouse_scope && (
+              <Field label={t('receipt.warehouse')}>
+                <select {...form.register('warehouse_id', { required: true })} className="input">
+                  <option value="">{t('receipt.selectWarehouse')}</option>
+                  {warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </Field>
+            )}
+          </div>
+        </SectionBlock>
 
-        <section className="space-y-4 border-b border-slate-200 pb-4">
+        <SectionBlock tone="primary" title={t('receipt.sectionMaterial')}>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_220px_180px_120px]">
             <Field label={t('receipt.material')}>
               <Segment value={materialMode} onChange={(value) => setMaterialMode(value as typeof materialMode)} options={[
@@ -192,7 +199,10 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
             <Field label={t('receipt.quantity')}><input step="0.001" type="number" {...form.register('quantity', { required: true, valueAsNumber: true })} className="input" /></Field>
             <Field label={t('common.unit')}><input {...form.register('unit', { required: true })} className="input" /></Field>
           </div>
+          {hasQuantityWarning && <p className="alert-error mt-3">{t('receipt.quantityWarning')}</p>}
+        </SectionBlock>
 
+        <SectionBlock title={t('receipt.sectionDatesAndLocation')}>
           <div className="grid gap-4 md:grid-cols-3">
             <Field label={t('receipt.productionDate')}><input type="date" {...form.register('production_date')} className="input" /></Field>
             <Field label={t('receipt.expiryDate')}><input type="date" {...form.register('expiry_date', { required: true })} className="input" /></Field>
@@ -203,44 +213,74 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
               </select>
             </Field>
           </div>
-        </section>
+          {hasExpiryWarning && <p className="alert-error mt-3">{t('receipt.expiryWarning')}</p>}
+        </SectionBlock>
 
-        <section className="grid gap-4 border-b border-slate-200 pb-4 md:grid-cols-2">
-          <Field label={t('receipt.manufacturer')}>
-            <Segment value={manufacturerMode} onChange={(value) => setManufacturerMode(value as typeof manufacturerMode)} options={[
-              ['existing', t('receipt.existing')],
-              ['new', t('receipt.new')],
-            ]} />
-            {manufacturerMode === 'existing' && (
-              <select {...form.register('manufacturer_id', { required: manufacturerMode === 'existing' })} className="input mt-2">
-                <option value="">{t('receipt.selectManufacturer')}</option>
-                {manufacturers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-              </select>
-            )}
-            {manufacturerMode === 'new' && <InlineReference codeName="manufacturer_code" form={form} nameName="manufacturer_name" />}
-          </Field>
-          <Field label={t('receipt.supplier')}>
-            <Segment value={supplierMode} onChange={(value) => setSupplierMode(value as typeof supplierMode)} options={[
-              ['existing', t('receipt.existing')],
-              ['new', t('receipt.new')],
-              ['none', t('receipt.noSupplier')],
-            ]} />
-            {supplierMode === 'existing' && (
-              <select {...form.register('supplier_id', { required: supplierMode === 'existing' })} className="input mt-2">
-                <option value="">{t('receipt.selectSupplier')}</option>
-                {suppliers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-              </select>
-            )}
-            {supplierMode === 'new' && <InlineReference codeName="supplier_code" form={form} nameName="supplier_name" />}
-          </Field>
-        </section>
+        <SectionBlock title={t('receipt.sectionOrigin')}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label={t('receipt.manufacturer')}>
+              <Segment value={manufacturerMode} onChange={(value) => setManufacturerMode(value as typeof manufacturerMode)} options={[
+                ['existing', t('receipt.existing')],
+                ['new', t('receipt.new')],
+              ]} />
+              {manufacturerMode === 'existing' && (
+                <select {...form.register('manufacturer_id', { required: manufacturerMode === 'existing' })} className="input mt-2">
+                  <option value="">{t('receipt.selectManufacturer')}</option>
+                  {manufacturers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+                </select>
+              )}
+              {manufacturerMode === 'new' && <InlineReference codeName="manufacturer_code" form={form} nameName="manufacturer_name" />}
+            </Field>
+            <Field label={t('receipt.supplier')}>
+              <Segment value={supplierMode} onChange={(value) => setSupplierMode(value as typeof supplierMode)} options={[
+                ['existing', t('receipt.existing')],
+                ['new', t('receipt.new')],
+                ['none', t('receipt.noSupplier')],
+              ]} />
+              {supplierMode === 'existing' && (
+                <select {...form.register('supplier_id', { required: supplierMode === 'existing' })} className="input mt-2">
+                  <option value="">{t('receipt.selectSupplier')}</option>
+                  {suppliers.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+                </select>
+              )}
+              {supplierMode === 'new' && <InlineReference codeName="supplier_code" form={form} nameName="supplier_name" />}
+            </Field>
+          </div>
+        </SectionBlock>
 
-        <section className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px_auto] md:items-end">
+        <SectionBlock title={t('receipt.sectionReason')}>
           <Field label={t('common.reason')}><input {...form.register('reason', { required: true })} className="input" /></Field>
+        </SectionBlock>
+
+        <SectionBlock tone="signature" title={t('receipt.eSignature')}>
+          <p className="mb-3 text-sm text-slate-600">{t('receipt.eSignatureHint')}</p>
           <Field label={t('receipt.eSignature')}><input type="password" {...form.register('signature_password', { required: true })} className="input" /></Field>
-          <Button disabled={isLoading || !masterDataReady} type="submit">{t('receipt.post')}</Button>
-        </section>
+        </SectionBlock>
+
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <p className="font-medium">{t('receipt.afterPostTitle')}</p>
+          <p className="mt-1">{t('receipt.afterPostBody')}</p>
+        </div>
+
+        <div className="flex justify-end">
+          <Button disabled={isLoading || !masterDataReady || hasQuantityWarning || hasExpiryWarning} type="submit">{isLoading ? t('receipt.posting') : t('receipt.post')}</Button>
+        </div>
       </form>
+    </section>
+  )
+}
+
+function SectionBlock({ children, title, tone = 'default' }: { children: ReactNode; title: string; tone?: 'default' | 'primary' | 'signature' }) {
+  const toneClass =
+    tone === 'primary'
+      ? 'border-blue-200 bg-blue-50/50'
+      : tone === 'signature'
+        ? 'border-amber-200 bg-amber-50/70'
+        : 'border-slate-200 bg-white'
+  return (
+    <section className={`rounded-md border p-4 shadow-sm ${toneClass}`}>
+      <h2 className="mb-4 text-base font-semibold text-slate-900">{title}</h2>
+      {children}
     </section>
   )
 }
