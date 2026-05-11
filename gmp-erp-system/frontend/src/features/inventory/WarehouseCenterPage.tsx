@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { listFgShipments, listLots, listMovements } from '../../lib/api'
+import { listFgShipments, listInventoryCounts, listLots, listMovements } from '../../lib/api'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
-import type { FGShipmentItem, LotItem, MovementItem } from '../../types/inventory'
+import type { FGShipmentItem, InventoryCountItem, LotItem, MovementItem } from '../../types/inventory'
 
 interface WarehouseCenterPageProps {
   token: string
 }
 
 type StockRisk = 'expired' | 'expires_soon' | 'ok'
+type LotStage = 'receipt' | 'qc' | 'qa' | 'available'
 
 function formatDate(value: string | null, locale: string) {
   if (!value) return '-'
@@ -29,6 +30,19 @@ function expiryRisk(expiryDate: string): StockRisk {
   return 'ok'
 }
 
+function daysUntil(expiryDate: string) {
+  return Math.ceil((new Date(expiryDate).getTime() - new Date().getTime()) / 86_400_000)
+}
+
+function lotStages(lot: LotItem): Record<LotStage, boolean> {
+  return {
+    receipt: Boolean(lot.incoming_control_notified_at),
+    qc: Boolean(lot.qc_result_received_at),
+    qa: Boolean(lot.qa_decision_at),
+    available: lot.quality_status === 'released',
+  }
+}
+
 function uniqueValues<T>(items: T[], selector: (item: T) => string) {
   return Array.from(new Set(items.map(selector).filter(Boolean))).sort()
 }
@@ -38,6 +52,7 @@ export function WarehouseCenterPage({ token }: WarehouseCenterPageProps) {
   const [lots, setLots] = useState<LotItem[]>([])
   const [movements, setMovements] = useState<MovementItem[]>([])
   const [shipments, setShipments] = useState<FGShipmentItem[]>([])
+  const [counts, setCounts] = useState<InventoryCountItem[]>([])
   const [selectedLotId, setSelectedLotId] = useState('')
   const [search, setSearch] = useState('')
   const [warehouse, setWarehouse] = useState('')
@@ -50,10 +65,11 @@ export function WarehouseCenterPage({ token }: WarehouseCenterPageProps) {
     setIsLoading(true)
     setError(null)
     try {
-      const [lotsResponse, movementsResponse, shipmentsResponse] = await Promise.all([listLots(token), listMovements(token), listFgShipments(token)])
+      const [lotsResponse, movementsResponse, shipmentsResponse, countsResponse] = await Promise.all([listLots(token), listMovements(token), listFgShipments(token), listInventoryCounts(token)])
       setLots(lotsResponse.lots)
       setMovements(movementsResponse.movements)
       setShipments(shipmentsResponse.shipments)
+      setCounts(countsResponse.counts)
       setSelectedLotId((current) => current || lotsResponse.lots[0]?.id || '')
     } catch (err) {
       setError(err instanceof Error ? err.message : t('warehouseCenter.loadFailed'))
@@ -82,6 +98,7 @@ export function WarehouseCenterPage({ token }: WarehouseCenterPageProps) {
   const selectedLot = filteredLots.find((lot) => lot.id === selectedLotId) || filteredLots[0] || lots.find((lot) => lot.id === selectedLotId)
   const selectedMovements = selectedLot ? movements.filter((movement) => movement.internal_lot === selectedLot.internal_lot).slice(0, 8) : []
   const selectedShipments = selectedLot ? shipments.filter((shipment) => shipment.lines.some((line) => line.lot_id === selectedLot.id)) : []
+  const selectedCounts = selectedLot ? counts.filter((count) => count.lines.some((line) => line.lot_id === selectedLot.id)) : []
   const totalQty = filteredLots.reduce((sum, lot) => sum + lot.quantity, 0)
   const releasedQty = filteredLots.filter((lot) => lot.quality_status === 'released').reduce((sum, lot) => sum + lot.quantity, 0)
   const blockedLots = filteredLots.filter((lot) => ['quarantine', 'sampled', 'under_test', 'blocked', 'rejected', 'expired'].includes(lot.quality_status)).length
@@ -121,7 +138,7 @@ export function WarehouseCenterPage({ token }: WarehouseCenterPageProps) {
         </div>
       </div>
 
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_460px]">
         <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
           <div className="border-b border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900">{t('warehouseCenter.stockRegister')}</div>
           <div className="max-h-[620px] overflow-auto">
@@ -142,7 +159,7 @@ export function WarehouseCenterPage({ token }: WarehouseCenterPageProps) {
               <tbody>
                 {filteredLots.map((lot) => (
                   <tr
-                    className={`h-10 cursor-pointer border-b border-slate-100 hover:bg-blue-50 ${selectedLot?.id === lot.id ? 'bg-blue-50' : ''}`}
+                    className={`h-10 cursor-pointer border-b border-slate-100 hover:bg-blue-50 ${selectedLot?.id === lot.id ? 'bg-blue-50 shadow-[inset_3px_0_0_#2563eb]' : ''}`}
                     key={lot.id}
                     onClick={() => setSelectedLotId(lot.id)}
                   >
@@ -167,27 +184,8 @@ export function WarehouseCenterPage({ token }: WarehouseCenterPageProps) {
         <aside className="space-y-4">
           {selectedLot ? (
             <>
-              <div className="rounded-md border border-slate-200 bg-white p-4">
-                <p className="text-xs uppercase text-slate-500">{t('warehouseCenter.lotPassport')}</p>
-                <div className="mt-1 flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-950">{selectedLot.internal_lot}</h2>
-                  <StatusBadge status={selectedLot.quality_status} />
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                  <Fact label={t('lots.material')} value={`${selectedLot.material_code} · ${selectedLot.material_name}`} wide />
-                  <Fact label={t('lots.manufacturer')} value={selectedLot.manufacturer_name} wide />
-                  <Fact label={t('lots.supplierLot')} value={selectedLot.supplier_lot} />
-                  <Fact label={t('lots.qty')} value={`${selectedLot.quantity} ${selectedLot.unit}`} />
-                  <Fact label={t('lots.warehouse')} value={selectedLot.warehouse_type} />
-                  <Fact label={t('lots.location')} value={selectedLot.location_code} />
-                  <Fact label={t('receipt.productionDate')} value={formatDate(selectedLot.production_date, locale)} />
-                  <Fact label={t('lots.expiry')} value={formatDate(selectedLot.expiry_date, locale)} />
-                  <Fact label={t('lots.qcNotified')} value={formatDate(selectedLot.incoming_control_notified_at, locale)} />
-                  <Fact label={t('lots.qcResult')} value={formatDate(selectedLot.qc_result_received_at, locale)} />
-                </div>
-              </div>
-
-              <TracePanel movements={selectedMovements} shipments={selectedShipments} />
+              <LotPassport lot={selectedLot} />
+              <TracePanel counts={selectedCounts} movements={selectedMovements} shipments={selectedShipments} />
             </>
           ) : (
             <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-500">{t('warehouseCenter.selectLot')}</div>
@@ -241,6 +239,71 @@ function Fact({ label, value, wide = false }: { label: string; value: string; wi
   )
 }
 
+function LotPassport({ lot }: { lot: LotItem }) {
+  const { locale, t } = useI18n()
+  const stages = lotStages(lot)
+  const daysLeft = daysUntil(lot.expiry_date)
+  const risk = expiryRisk(lot.expiry_date)
+
+  return (
+    <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase text-slate-500">{t('warehouseCenter.lotPassport')}</p>
+            <h2 className="mt-1 text-xl font-semibold text-slate-950">{lot.internal_lot}</h2>
+            <p className="mt-1 text-sm text-slate-600">{lot.material_code} · {lot.material_name}</p>
+          </div>
+          <StatusBadge status={lot.quality_status} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 border-b border-slate-200 text-sm">
+        <Metric label={t('lots.qty')} value={`${lot.quantity} ${lot.unit}`} />
+        <Metric label={t('lots.location')} value={lot.location_code} />
+        <Metric label={t('warehouseCenter.daysLeft')} tone={risk === 'expired' ? 'danger' : risk === 'expires_soon' ? 'warning' : 'normal'} value={daysLeft < 0 ? t('warehouseCenter.expired') : String(daysLeft)} />
+      </div>
+
+      <div className="p-4">
+        <div className="grid grid-cols-4 gap-2">
+          <Stage done={stages.receipt} label={t('warehouseCenter.stage.receipt')} />
+          <Stage done={stages.qc} label={t('warehouseCenter.stage.qc')} />
+          <Stage done={stages.qa} label={t('warehouseCenter.stage.qa')} />
+          <Stage done={stages.available} label={t('warehouseCenter.stage.available')} />
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <Fact label={t('lots.manufacturer')} value={lot.manufacturer_name} wide />
+          <Fact label={t('lots.supplierLot')} value={lot.supplier_lot} />
+          <Fact label={t('lots.warehouse')} value={lot.warehouse_type} />
+          <Fact label={t('receipt.productionDate')} value={formatDate(lot.production_date, locale)} />
+          <Fact label={t('lots.expiry')} value={formatDate(lot.expiry_date, locale)} />
+          <Fact label={t('lots.qcNotified')} value={formatDate(lot.incoming_control_notified_at, locale)} />
+          <Fact label={t('lots.qcResult')} value={formatDate(lot.qc_result_received_at, locale)} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Metric({ label, tone = 'normal', value }: { label: string; tone?: 'normal' | 'warning' | 'danger'; value: string }) {
+  const valueClass = tone === 'danger' ? 'text-red-700' : tone === 'warning' ? 'text-amber-700' : 'text-slate-950'
+  return (
+    <div className="border-r border-slate-200 px-3 py-3 last:border-r-0">
+      <p className="text-xs uppercase text-slate-500">{label}</p>
+      <p className={`mt-1 text-base font-semibold ${valueClass}`}>{value}</p>
+    </div>
+  )
+}
+
+function Stage({ done, label }: { done: boolean; label: string }) {
+  return (
+    <div className={`rounded-md border px-2 py-2 text-center text-xs font-medium ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+      {label}
+    </div>
+  )
+}
+
 function RiskLabel({ risk, text }: { risk: StockRisk; text: string }) {
   const className =
     risk === 'expired'
@@ -251,36 +314,54 @@ function RiskLabel({ risk, text }: { risk: StockRisk; text: string }) {
   return <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ring-1 ${className}`}>{text}</span>
 }
 
-function TracePanel({ movements, shipments }: { movements: MovementItem[]; shipments: FGShipmentItem[] }) {
+function TracePanel({ counts, movements, shipments }: { counts: InventoryCountItem[]; movements: MovementItem[]; shipments: FGShipmentItem[] }) {
   const { locale, t } = useI18n()
+  const events = [
+    ...movements.map((movement) => ({
+      id: movement.id,
+      at: movement.created_at,
+      title: movement.movement_type,
+      body: `${movement.quantity_delta > 0 ? '+' : ''}${movement.quantity_delta} ${movement.unit} · ${t('movements.qtyAfter')}: ${movement.quantity_after}`,
+      note: movement.reason,
+      tone: movement.quantity_delta < 0 ? 'danger' : movement.quantity_delta > 0 ? 'success' : 'neutral',
+    })),
+    ...counts.map((count) => {
+      const line = count.lines[0]
+      return {
+        id: count.id,
+        at: count.posted_at,
+        title: `${t('nav.inventoryCounts')} ${count.document_no}`,
+        body: line ? `${line.actual_quantity} ${line.unit} (${line.variance > 0 ? '+' : ''}${line.variance})` : count.warehouse_type,
+        note: formatDate(count.count_date, locale),
+        tone: 'warning',
+      }
+    }),
+    ...shipments.map((shipment) => ({
+      id: shipment.id,
+      at: shipment.posted_at,
+      title: shipment.document_no,
+      body: shipment.customer_name,
+      note: shipment.waybill_no || formatDate(shipment.shipment_date, locale),
+      tone: 'info',
+    })),
+  ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 10)
+
   return (
     <div className="rounded-md border border-slate-200 bg-white p-4">
       <p className="text-xs uppercase text-slate-500">{t('warehouseCenter.traceability')}</p>
       <h3 className="mt-1 text-base font-semibold text-slate-950">{t('warehouseCenter.history')}</h3>
       <div className="mt-3 space-y-3">
-        {movements.map((movement) => (
-          <div className="border-l-2 border-slate-300 pl-3 text-sm" key={movement.id}>
+        {events.map((event) => (
+          <div className={`border-l-2 pl-3 text-sm ${event.tone === 'danger' ? 'border-red-500' : event.tone === 'success' ? 'border-emerald-500' : event.tone === 'warning' ? 'border-amber-500' : event.tone === 'info' ? 'border-blue-500' : 'border-slate-300'}`} key={event.id}>
             <div className="flex justify-between gap-3">
-              <p className="font-medium text-slate-900">{movement.movement_type}</p>
-              <p className="text-xs text-slate-500">{formatDateTime(movement.created_at, locale)}</p>
+              <p className="font-medium text-slate-900">{event.title}</p>
+              <p className="text-xs text-slate-500">{formatDateTime(event.at, locale)}</p>
             </div>
-            <p className="text-slate-700">
-              {movement.quantity_delta > 0 ? '+' : ''}{movement.quantity_delta} {movement.unit} · {t('movements.qtyAfter')}: {movement.quantity_after}
-            </p>
-            {movement.reason && <p className="text-xs text-slate-500">{movement.reason}</p>}
+            <p className="text-slate-700">{event.body}</p>
+            {event.note && <p className="text-xs text-slate-500">{event.note}</p>}
           </div>
         ))}
-        {shipments.map((shipment) => (
-          <div className="border-l-2 border-blue-500 pl-3 text-sm" key={shipment.id}>
-            <div className="flex justify-between gap-3">
-              <p className="font-medium text-slate-900">{shipment.document_no}</p>
-              <p className="text-xs text-slate-500">{formatDate(shipment.shipment_date, locale)}</p>
-            </div>
-            <p className="text-slate-700">{shipment.customer_name}</p>
-            {shipment.waybill_no && <p className="text-xs text-slate-500">{shipment.waybill_no}</p>}
-          </div>
-        ))}
-        {movements.length === 0 && shipments.length === 0 && <p className="text-sm text-slate-500">{t('warehouseCenter.noHistory')}</p>}
+        {events.length === 0 && <p className="text-sm text-slate-500">{t('warehouseCenter.noHistory')}</p>}
       </div>
     </div>
   )
