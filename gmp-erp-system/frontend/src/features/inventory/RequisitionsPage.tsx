@@ -296,6 +296,7 @@ export function RequisitionsPage({ token, user }: RequisitionsPageProps) {
 
   const canIssue =
     selectedReq !== null &&
+    user.permissions.includes('POST_RECEIPT') &&
     ['submitted', 'processing', 'partially_issued'].includes(selectedReq.status)
 
   const canCreate = user.permissions.includes('VIEW_PRODUCTION')
