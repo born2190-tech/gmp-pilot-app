@@ -105,8 +105,12 @@ def _replace_draft_allocations_for_line(
         RequisitionAllocationLine.status == "draft",
     ).delete()
 
+    remaining_quantity = round(line.requested_quantity - _line_issued_total(db, line.id), 6)
+    if remaining_quantity <= 0:
+        return 0.0
+
     allocated_total = 0.0
-    for lot, qty in _fefo_allocate(db, line.material_id, line.requested_quantity, line.warehouse_type):
+    for lot, qty in _fefo_allocate(db, line.material_id, remaining_quantity, line.warehouse_type):
         db.add(RequisitionAllocationLine(
             requisition_id=req.id,
             requisition_line_id=line.id,
@@ -117,6 +121,37 @@ def _replace_draft_allocations_for_line(
         ))
         allocated_total = round(allocated_total + qty, 6)
     return allocated_total
+
+
+def _line_issued_total(db: Session, requisition_line_id: uuid.UUID) -> float:
+    return round(
+        db.query(func.sum(RequisitionAllocationLine.allocated_quantity))
+        .filter(
+            RequisitionAllocationLine.requisition_line_id == requisition_line_id,
+            RequisitionAllocationLine.status == "issued",
+        )
+        .scalar() or 0.0,
+        6,
+    )
+
+
+def _recalculate_requisition_status(db: Session, req: ProductionRequisition) -> None:
+    lines = db.query(RequisitionLine).filter(RequisitionLine.requisition_id == req.id).all()
+    for line in lines:
+        line.issued_quantity = _line_issued_total(db, line.id)
+        if line.issued_quantity >= line.requested_quantity:
+            line.status = "issued"
+        elif line.issued_quantity > 0:
+            line.status = "partially_issued"
+        else:
+            line.status = "pending"
+
+    if lines and all(line.status == "issued" for line in lines):
+        req.status = "issued"
+    elif any(line.status in ("issued", "partially_issued") for line in lines):
+        req.status = "partially_issued"
+    elif req.status == "submitted" or any(line.allocation_lines for line in lines):
+        req.status = "processing"
 
 
 # ---------------------------------------------------------------------------
@@ -212,10 +247,12 @@ def auto_allocate(db: Session, user: CurrentUser, requisition_id: uuid.UUID) -> 
     for line in lines:
         if warehouse_scope and line.warehouse_type != warehouse_scope:
             continue
+        if _line_issued_total(db, line.id) >= line.requested_quantity:
+            line.status = "issued"
+            continue
         _replace_draft_allocations_for_line(db, req, line)
 
-    if req.status == "submitted":
-        req.status = "processing"
+    _recalculate_requisition_status(db, req)
 
     write_audit(
         db, user,
@@ -375,31 +412,8 @@ def issue_requisition(db: Session, user: CurrentUser, requisition_id: uuid.UUID,
         alloc.issued_by = user.id
         alloc.issued_at = issued_time
 
-    # Update requisition line issued quantities and statuses
-    lines = db.query(RequisitionLine).filter(RequisitionLine.requisition_id == req.id).all()
-    for line in lines:
-        if warehouse_scope and line.warehouse_type != warehouse_scope:
-            continue
-        issued_total = (
-            db.query(func.sum(RequisitionAllocationLine.allocated_quantity))
-            .filter(
-                RequisitionAllocationLine.requisition_line_id == line.id,
-                RequisitionAllocationLine.status == "issued",
-            )
-            .scalar() or 0.0
-        )
-        line.issued_quantity = round(issued_total, 6)
-        if line.issued_quantity >= line.requested_quantity:
-            line.status = "issued"
-        elif line.issued_quantity > 0:
-            line.status = "partially_issued"
-
-    # Update requisition overall status
-    all_lines = db.query(RequisitionLine).filter(RequisitionLine.requisition_id == req.id).all()
-    if all(ln.status == "issued" for ln in all_lines):
-        req.status = "issued"
-    elif any(ln.status in ("issued", "partially_issued") for ln in all_lines):
-        req.status = "partially_issued"
+    db.flush()
+    _recalculate_requisition_status(db, req)
 
     write_audit(
         db, user,
