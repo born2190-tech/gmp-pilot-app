@@ -676,7 +676,7 @@ function MaterialDetailPanel({
           allowNone
           createLabel={t('receipt.createNew')}
           emptyText={t('receipt.selectSupplier')}
-          label={`${t('receipt.supplier')} (${t('receipt.noSupplier').toLowerCase()})`}
+          label={t('receipt.supplier')}
           mode={line.supplier_mode}
           newCode={line.supplier_code}
           newName={line.supplier_name}
@@ -755,10 +755,23 @@ function DetailReference({
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="text-xs font-medium text-slate-600">{label}</span>
-        <button className="inline-flex h-6 items-center gap-1 rounded px-2 text-xs font-medium text-blue-700 hover:bg-blue-50" onClick={() => (mode === 'new' ? onModeChange('existing') : onCreateNew())} type="button">
-          <Plus className="h-3 w-3" />
-          {mode === 'new' ? t('receipt.chooseExisting') : createLabel}
-        </button>
+        <div className="flex items-center gap-2">
+          {(mode === 'new' || mode === 'none') ? (
+            <button className="inline-flex h-6 items-center rounded px-2 text-xs font-medium text-blue-700 hover:bg-blue-50" onClick={() => onModeChange('existing')} type="button">
+              {t('receipt.chooseExisting')}
+            </button>
+          ) : (
+            <button className="inline-flex h-6 items-center gap-1 rounded px-2 text-xs font-medium text-blue-700 hover:bg-blue-50" onClick={onCreateNew} type="button">
+              <Plus className="h-3 w-3" />
+              {createLabel}
+            </button>
+          )}
+          {allowNone && mode !== 'none' && (
+            <button className="inline-flex h-6 items-center rounded border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => onModeChange('none')} type="button">
+              {t('receipt.noSupplier')}
+            </button>
+          )}
+        </div>
       </div>
 
       {mode === 'existing' && (
@@ -776,12 +789,7 @@ function DetailReference({
           {referenceType === 'material' && <p className="mt-1 text-xs text-slate-500">{typeValue || 'raw_material'}</p>}
         </div>
       )}
-      {allowNone && (
-        <button className="mt-2 text-xs font-medium text-slate-600 hover:text-slate-900" onClick={() => onModeChange('none')} type="button">
-          {t('receipt.noSupplier')}
-        </button>
-      )}
-      {mode === 'none' && <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">{t('receipt.noSupplierSelected')}</p>}
+      {mode === 'none' && <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">{t('receipt.noSupplierSelected')}</p>}
       {selectedText && <p className="mt-2 break-words text-xs text-slate-600">{selectedText}</p>}
       {mode === 'new' && newName && <p className="mt-2 break-words text-xs text-slate-600">{newName}</p>}
     </div>
