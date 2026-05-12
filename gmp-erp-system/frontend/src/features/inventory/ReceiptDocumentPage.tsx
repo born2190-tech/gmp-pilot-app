@@ -282,24 +282,42 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
           action={<Button type="button" variant="secondary" onClick={addLine}>+ {t('receipt.addLine')}</Button>}
           title={t('receipt.lines')}
         >
-          <div className="space-y-4">
-            {lines.map((line, index) => (
-              <LineCard
-                allowedLocations={allowedLocations}
-                errors={lineErrors[index]}
-                index={index}
-                key={line.id}
-                line={line}
-                manufacturers={manufacturers}
-                materials={materials}
-                onChangeMaterial={changeMaterial}
-                onRemove={removeLine}
-                onUpdate={updateLine}
-                removeDisabled={lines.length === 1}
-                suppliers={suppliers}
-                t={t}
-              />
-            ))}
+          <div className="overflow-x-auto rounded-md border border-slate-200">
+            <table className="w-full min-w-[1640px] border-collapse bg-white text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+                  <th className="w-[300px] px-3 py-2">{t('receipt.material')}</th>
+                  <th className="w-[190px] px-3 py-2">{t('receipt.supplierLot')}</th>
+                  <th className="w-[250px] px-3 py-2">{t('receipt.manufacturer')}</th>
+                  <th className="w-[260px] px-3 py-2">{t('receipt.supplier')}</th>
+                  <th className="w-[132px] px-3 py-2">{t('receipt.productionDate')}</th>
+                  <th className="w-[132px] px-3 py-2">{t('receipt.expiryDate')}</th>
+                  <th className="w-[112px] px-3 py-2">{t('receipt.quantity')}</th>
+                  <th className="w-[86px] px-3 py-2">{t('common.unit')}</th>
+                  <th className="w-[170px] px-3 py-2">{t('receipt.location')}</th>
+                  <th className="w-[56px] px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((line, index) => (
+                  <LineTableRow
+                    allowedLocations={allowedLocations}
+                    errors={lineErrors[index]}
+                    index={index}
+                    key={line.id}
+                    line={line}
+                    manufacturers={manufacturers}
+                    materials={materials}
+                    onChangeMaterial={changeMaterial}
+                    onRemove={removeLine}
+                    onUpdate={updateLine}
+                    removeDisabled={lines.length === 1}
+                    suppliers={suppliers}
+                    t={t}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
         </SectionBlock>
 
@@ -330,7 +348,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   )
 }
 
-function LineCard({
+function LineTableRow({
   allowedLocations,
   errors,
   index,
@@ -357,17 +375,11 @@ function LineCard({
   suppliers: SupplierItem[]
   t: ReturnType<typeof useI18n>['t']
 }) {
+  const hasErrors = errors.length > 0
   return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-slate-900">{t('receipt.lineTitle', { count: index + 1 })}</h3>
-        <button className="text-sm font-medium text-red-600 hover:text-red-700 disabled:text-slate-300" disabled={removeDisabled} onClick={() => onRemove(line.id)} type="button">
-          {t('receipt.removeLine')}
-        </button>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(280px,1.2fr)_minmax(260px,1fr)_minmax(260px,1fr)]">
-        <Panel title={t('receipt.material')}>
+    <>
+      <tr className={`border-b border-slate-100 align-top ${hasErrors ? 'bg-red-50/40' : ''}`}>
+        <td className="px-3 py-3">
           <ModeButtons
             options={[
               { label: t('receipt.existing'), active: line.material_mode === 'existing', onClick: () => onUpdate(line.id, { material_mode: 'existing' }) },
@@ -389,74 +401,71 @@ function LineCard({
               <input className="input" placeholder={t('common.type')} value={line.material_type} onChange={(event) => onUpdate(line.id, { material_type: event.target.value })} />
             </div>
           )}
-          <div className="mt-3 grid grid-cols-[minmax(0,1fr)_110px_90px] gap-2">
-            <input className="input" placeholder={t('receipt.supplierLot')} value={line.supplier_lot} onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })} />
-            <input className="input" min="0" placeholder={t('receipt.quantity')} step="0.001" type="number" value={line.quantity} onChange={(event) => onUpdate(line.id, { quantity: event.target.value })} />
-            <input className="input" placeholder={t('common.unit')} value={line.unit} onChange={(event) => onUpdate(line.id, { unit: event.target.value })} />
-          </div>
-        </Panel>
-
-        <Panel title={t('receipt.sectionOrigin')}>
-          <div className="grid gap-3">
-            <OriginPicker
-              emptyText={t('receipt.selectManufacturer')}
-              isRequired
-              label={t('receipt.manufacturer')}
-              mode={line.manufacturer_mode}
-              modeOptions={['existing', 'new']}
-              onModeChange={(mode) => onUpdate(line.id, { manufacturer_mode: mode as 'existing' | 'new' })}
-              onNewCodeChange={(value) => onUpdate(line.id, { manufacturer_code: value })}
-              onNewNameChange={(value) => onUpdate(line.id, { manufacturer_name: value })}
-              onSelect={(value) => onUpdate(line.id, { manufacturer_id: value })}
-              references={manufacturers}
-              t={t}
-              value={line.manufacturer_id}
-              newCode={line.manufacturer_code}
-              newName={line.manufacturer_name}
-            />
-            <OriginPicker
-              emptyText={t('receipt.selectSupplier')}
-              label={t('receipt.supplier')}
-              mode={line.supplier_mode}
-              modeOptions={['existing', 'new', 'none']}
-              onModeChange={(mode) => onUpdate(line.id, { supplier_mode: mode as 'existing' | 'new' | 'none' })}
-              onNewCodeChange={(value) => onUpdate(line.id, { supplier_code: value })}
-              onNewNameChange={(value) => onUpdate(line.id, { supplier_name: value })}
-              onSelect={(value) => onUpdate(line.id, { supplier_id: value })}
-              references={suppliers}
-              t={t}
-              value={line.supplier_id}
-              newCode={line.supplier_code}
-              newName={line.supplier_name}
-            />
-          </div>
-        </Panel>
-
-        <Panel title={t('receipt.sectionDatesAndLocation')}>
-          <div className="grid gap-3">
-            <div className="grid grid-cols-2 gap-2">
-              <Field label={t('receipt.productionDate')}><input className="input" type="date" value={line.production_date} onChange={(event) => onUpdate(line.id, { production_date: event.target.value })} /></Field>
-              <Field label={t('receipt.expiryDate')}><input className="input" type="date" value={line.expiry_date} onChange={(event) => onUpdate(line.id, { expiry_date: event.target.value })} /></Field>
-            </div>
-            <Field label={t('receipt.location')}>
-              <select className="input" value={line.location_id} onChange={(event) => onUpdate(line.id, { location_id: event.target.value })}>
-                <option value="">{t('receipt.selectLocation')}</option>
-                {allowedLocations.map((item) => <option key={item.id} value={item.id}>{translatedLocation(item.code, t)}</option>)}
-              </select>
-            </Field>
-          </div>
-        </Panel>
-      </div>
-
-      {errors.length > 0 && <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errors.join('; ')}</p>}
-    </div>
+        </td>
+        <td className="px-3 py-3">
+          <input className="input font-mono" placeholder="LOT-..." value={line.supplier_lot} onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })} />
+        </td>
+        <td className="px-3 py-3">
+          <OriginPicker
+            emptyText={t('receipt.selectManufacturer')}
+            mode={line.manufacturer_mode}
+            modeOptions={['existing', 'new']}
+            onModeChange={(mode) => onUpdate(line.id, { manufacturer_mode: mode as 'existing' | 'new' })}
+            onNewCodeChange={(value) => onUpdate(line.id, { manufacturer_code: value })}
+            onNewNameChange={(value) => onUpdate(line.id, { manufacturer_name: value })}
+            onSelect={(value) => onUpdate(line.id, { manufacturer_id: value })}
+            references={manufacturers}
+            t={t}
+            value={line.manufacturer_id}
+            newCode={line.manufacturer_code}
+            newName={line.manufacturer_name}
+          />
+        </td>
+        <td className="px-3 py-3">
+          <OriginPicker
+            emptyText={t('receipt.selectSupplier')}
+            mode={line.supplier_mode}
+            modeOptions={['existing', 'new', 'none']}
+            onModeChange={(mode) => onUpdate(line.id, { supplier_mode: mode as 'existing' | 'new' | 'none' })}
+            onNewCodeChange={(value) => onUpdate(line.id, { supplier_code: value })}
+            onNewNameChange={(value) => onUpdate(line.id, { supplier_name: value })}
+            onSelect={(value) => onUpdate(line.id, { supplier_id: value })}
+            references={suppliers}
+            t={t}
+            value={line.supplier_id}
+            newCode={line.supplier_code}
+            newName={line.supplier_name}
+          />
+        </td>
+        <td className="px-3 py-3"><input className="input px-2" type="date" value={line.production_date} onChange={(event) => onUpdate(line.id, { production_date: event.target.value })} /></td>
+        <td className="px-3 py-3"><input className="input px-2" type="date" value={line.expiry_date} onChange={(event) => onUpdate(line.id, { expiry_date: event.target.value })} /></td>
+        <td className="px-3 py-3"><input className="input" min="0" step="0.001" type="number" value={line.quantity} onChange={(event) => onUpdate(line.id, { quantity: event.target.value })} /></td>
+        <td className="px-3 py-3"><input className="input px-2" value={line.unit} onChange={(event) => onUpdate(line.id, { unit: event.target.value })} /></td>
+        <td className="px-3 py-3">
+          <select className="input" value={line.location_id} onChange={(event) => onUpdate(line.id, { location_id: event.target.value })}>
+            <option value="">{t('receipt.selectLocation')}</option>
+            {allowedLocations.map((item) => <option key={item.id} value={item.id}>{translatedLocation(item.code, t)}</option>)}
+          </select>
+        </td>
+        <td className="px-3 py-3 text-right">
+          <button className="rounded-md px-2 py-1 text-lg leading-none text-red-500 hover:bg-red-50 disabled:text-slate-300" disabled={removeDisabled} onClick={() => onRemove(line.id)} type="button" title={t('receipt.removeLine')}>
+            ×
+          </button>
+        </td>
+      </tr>
+      {hasErrors && (
+        <tr className="border-b border-slate-100 bg-red-50/40">
+          <td className="px-3 pb-3 text-xs text-red-700" colSpan={10}>
+            {t('receipt.lineTitle', { count: index + 1 })}: {errors.join('; ')}
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 
 function OriginPicker({
   emptyText,
-  isRequired = false,
-  label,
   mode,
   modeOptions,
   newCode,
@@ -470,8 +479,6 @@ function OriginPicker({
   value,
 }: {
   emptyText: string
-  isRequired?: boolean
-  label: string
   mode: 'existing' | 'new' | 'none'
   modeOptions: Array<'existing' | 'new' | 'none'>
   newCode: string
@@ -485,8 +492,7 @@ function OriginPicker({
   value: string
 }) {
   return (
-    <div>
-      <p className="mb-1 text-xs font-medium uppercase text-slate-500">{label}{isRequired ? ' *' : ''}</p>
+    <div className="min-w-0">
       <ModeButtons
         options={modeOptions.map((item) => ({
           label: item === 'existing' ? t('receipt.existing') : item === 'new' ? t('receipt.new') : t('receipt.noSupplier'),
@@ -495,13 +501,13 @@ function OriginPicker({
         }))}
       />
       {mode === 'existing' && (
-        <select className="input" value={value} onChange={(event) => onSelect(event.target.value)}>
+        <select className="input truncate text-left" value={value} onChange={(event) => onSelect(event.target.value)}>
           <option value="">{emptyText}</option>
           {references.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
         </select>
       )}
       {mode === 'new' && (
-        <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-2">
           <input className="input" placeholder={t('common.code')} value={newCode} onChange={(event) => onNewCodeChange(event.target.value)} />
           <input className="input" placeholder={t('common.name')} value={newName} onChange={(event) => onNewNameChange(event.target.value)} />
         </div>
@@ -551,15 +557,6 @@ function SectionBlock({ action, children, title, tone = 'default' }: { action?: 
   )
 }
 
-function Panel({ children, title }: { children: ReactNode; title: string }) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-white p-3">
-      <h4 className="mb-3 text-xs font-semibold uppercase text-slate-500">{title}</h4>
-      {children}
-    </div>
-  )
-}
-
 function Field({ children, label }: { children: ReactNode; label: string }) {
   return (
     <label className="block text-sm font-medium text-slate-700">
@@ -571,9 +568,9 @@ function Field({ children, label }: { children: ReactNode; label: string }) {
 
 function ModeButtons({ options }: { options: Array<{ active: boolean; label: string; onClick: () => void }> }) {
   return (
-    <div className="mb-2 flex flex-wrap gap-1">
+    <div className="mb-2 flex flex-nowrap gap-1">
       {options.map((option) => (
-        <button className={`mode-button ${option.active ? 'mode-button-active' : ''}`} key={option.label} onClick={option.onClick} type="button">
+        <button className={`mode-button whitespace-nowrap px-2 py-1 text-xs ${option.active ? 'mode-button-active' : ''}`} key={option.label} onClick={option.onClick} type="button">
           {option.label}
         </button>
       ))}
