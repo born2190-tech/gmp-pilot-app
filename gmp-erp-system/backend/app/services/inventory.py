@@ -83,38 +83,46 @@ def get_or_create_material(db: Session, user: CurrentUser, payload: MaterialCrea
 
 def create_receipt_draft(db: Session, user: CurrentUser, payload: ReceiptCreate) -> ReceiptDocument:
     require_permission(user, "CREATE_RECEIPT")
-    supplier = get_required(db, Supplier, payload.supplier_id, "Supplier") if payload.supplier_id else get_or_create_reference(db, user, Supplier, payload.supplier, "supplier")
-    manufacturer = get_required(db, Manufacturer, payload.manufacturer_id, "Manufacturer") if payload.manufacturer_id else get_or_create_reference(db, user, Manufacturer, payload.manufacturer, "manufacturer")
-    if not manufacturer:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Manufacturer is required")
     warehouse = get_required(db, Warehouse, payload.warehouse_id, "Warehouse")
     require_warehouse_type_scope(user, warehouse.warehouse_type)
 
     if db.query(ReceiptDocument).filter(ReceiptDocument.document_no == payload.document_no).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Receipt document number already exists")
 
+    prepared_lines = []
+    for line in payload.lines:
+        material = get_required(db, Material, line.material_id, "Material") if line.material_id else get_or_create_material(db, user, line.material)
+        if not material:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Material is required")
+        supplier = get_required(db, Supplier, line.supplier_id, "Supplier") if line.supplier_id else get_or_create_reference(db, user, Supplier, line.supplier, "supplier")
+        manufacturer = get_required(db, Manufacturer, line.manufacturer_id, "Manufacturer") if line.manufacturer_id else get_or_create_reference(db, user, Manufacturer, line.manufacturer, "manufacturer")
+        if not manufacturer:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Manufacturer is required for each receipt line")
+        location = get_required(db, Location, line.location_id, "Location")
+        if location.warehouse_id != warehouse.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Location does not belong to receipt warehouse")
+        prepared_lines.append((line, material, supplier, manufacturer, location))
+
+    document_supplier = prepared_lines[0][2]
+    document_manufacturer = prepared_lines[0][3]
     receipt = ReceiptDocument(
         document_no=payload.document_no,
         status="draft",
-        supplier=supplier,
-        manufacturer=manufacturer,
+        supplier=document_supplier,
+        manufacturer=document_manufacturer,
         warehouse=warehouse,
         received_date=payload.received_date,
     )
     db.add(receipt)
     db.flush()
 
-    for line in payload.lines:
-        material = get_required(db, Material, line.material_id, "Material") if line.material_id else get_or_create_material(db, user, line.material)
-        if not material:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Material is required")
-        location = get_required(db, Location, line.location_id, "Location")
-        if location.warehouse_id != warehouse.id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Location does not belong to receipt warehouse")
+    for line, material, supplier, manufacturer, location in prepared_lines:
         db.add(
             ReceiptLine(
                 receipt=receipt,
                 material=material,
+                supplier=supplier,
+                manufacturer=manufacturer,
                 supplier_lot=line.supplier_lot or None,
                 production_date=line.production_date,
                 production_year=receipt_line_production_year(line),
@@ -167,7 +175,7 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
     receipt.posted_at = now_utc()
 
     lots_created = 0
-    notification_lines: list[tuple[Lot, ReceiptLine, Material]] = []
+    notification_lines: list[tuple[Lot, ReceiptLine, Material, Manufacturer]] = []
     notification_time = now_utc()
     lines = db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt.id).order_by(ReceiptLine.created_at).all()
     for line in lines:
@@ -177,8 +185,8 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Material series already exists: {series}")
         lot = Lot(
             material_id=line.material_id,
-            supplier_id=receipt.supplier_id,
-            manufacturer_id=receipt.manufacturer_id,
+            supplier_id=line.supplier_id,
+            manufacturer_id=line.manufacturer_id,
             supplier_lot=line.supplier_lot or None,
             internal_lot=series,
             item_type=material.item_type,
@@ -194,7 +202,8 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
         )
         db.add(lot)
         db.flush()
-        notification_lines.append((lot, line, material))
+        manufacturer = get_required(db, Manufacturer, line.manufacturer_id, "Manufacturer")
+        notification_lines.append((lot, line, material, manufacturer))
         db.add(
             InventoryMovement(
                 movement_type="RECEIPT",
@@ -216,7 +225,6 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
         lots_created += 1
 
     if warehouse.warehouse_type == "SUBSTANCE_WAREHOUSE" and notification_lines:
-        manufacturer = get_required(db, Manufacturer, receipt.manufacturer_id, "Manufacturer")
         notification = QCNotification(
             notification_no=generate_qc_notification_no(receipt),
             status="created",
@@ -228,7 +236,7 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
         db.add(notification)
         db.flush()
 
-        for lot, line, material in notification_lines:
+        for lot, line, material, manufacturer in notification_lines:
             db.add(
                 QCNotificationLine(
                     notification_id=notification.id,

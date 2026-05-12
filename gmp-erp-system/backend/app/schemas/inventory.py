@@ -17,6 +17,10 @@ class MaterialCreateInline(ReferenceCreateInline):
 class ReceiptLineCreate(BaseModel):
     material_id: UUID | None = None
     material: MaterialCreateInline | None = None
+    supplier_id: UUID | None = None
+    supplier: ReferenceCreateInline | None = None
+    manufacturer_id: UUID | None = None
+    manufacturer: ReferenceCreateInline | None = None
     supplier_lot: str | None = None
     production_date: date | None = None
     production_year: int | None = Field(default=None, ge=2000, le=2100)
@@ -25,9 +29,9 @@ class ReceiptLineCreate(BaseModel):
     unit: str = Field(min_length=1)
     location_id: UUID
 
-    @field_validator("material_id", mode="before")
+    @field_validator("material_id", "supplier_id", "manufacturer_id", mode="before")
     @classmethod
-    def blank_material_id_to_none(cls, value):
+    def blank_id_to_none(cls, value):
         return None if value == "" else value
 
 

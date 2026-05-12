@@ -31,6 +31,8 @@ class ReceiptLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     receipt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_documents.id"), nullable=False)
     material_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("materials.id"), nullable=False)
+    supplier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=True)
+    manufacturer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("manufacturers.id"), nullable=False)
     supplier_lot: Mapped[str | None] = mapped_column(String(128), nullable=True)
     production_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     production_year: Mapped[int] = mapped_column(nullable=False)
@@ -41,6 +43,8 @@ class ReceiptLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     receipt: Mapped[ReceiptDocument] = relationship()
     material: Mapped[Material] = relationship()
+    supplier: Mapped[Supplier | None] = relationship()
+    manufacturer: Mapped[Manufacturer] = relationship()
     location: Mapped[Location] = relationship()
 
 
