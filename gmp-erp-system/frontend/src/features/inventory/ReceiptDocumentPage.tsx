@@ -51,6 +51,13 @@ interface PostedSummary {
   lotsCreated: number
 }
 
+type ReferenceDialogType = 'material' | 'manufacturer' | 'supplier'
+
+interface CreateReferenceDialogState {
+  lineId: string
+  type: ReferenceDialogType
+}
+
 const newLine = (locationId = ''): ReceiptLineForm => ({
   id: crypto.randomUUID(),
   material_mode: 'existing',
@@ -86,6 +93,8 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   const [error, setError] = useState<string | null>(null)
   const [postedSummary, setPostedSummary] = useState<PostedSummary | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [createReferenceDialog, setCreateReferenceDialog] = useState<CreateReferenceDialogState | null>(null)
+  const [referenceDraft, setReferenceDraft] = useState({ code: '', name: '', item_type: 'raw_material' })
 
   const form = useForm<ReceiptForm>({
     defaultValues: {
@@ -179,6 +188,48 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
       }
       return next
     })
+  }
+
+  function openCreateReferenceDialog(type: ReferenceDialogType, lineId: string) {
+    setReferenceDraft({ code: '', name: '', item_type: 'raw_material' })
+    setCreateReferenceDialog({ type, lineId })
+  }
+
+  function closeCreateReferenceDialog() {
+    setCreateReferenceDialog(null)
+  }
+
+  function saveCreatedReference() {
+    if (!createReferenceDialog || !referenceDraft.code.trim() || !referenceDraft.name.trim()) {
+      return
+    }
+    const { lineId, type } = createReferenceDialog
+    if (type === 'material') {
+      updateLine(lineId, {
+        material_mode: 'new',
+        material_id: '',
+        material_code: referenceDraft.code,
+        material_name: referenceDraft.name,
+        material_type: referenceDraft.item_type || 'raw_material',
+      })
+    }
+    if (type === 'manufacturer') {
+      updateLine(lineId, {
+        manufacturer_mode: 'new',
+        manufacturer_id: '',
+        manufacturer_code: referenceDraft.code,
+        manufacturer_name: referenceDraft.name,
+      })
+    }
+    if (type === 'supplier') {
+      updateLine(lineId, {
+        supplier_mode: 'new',
+        supplier_id: '',
+        supplier_code: referenceDraft.code,
+        supplier_name: referenceDraft.name,
+      })
+    }
+    closeCreateReferenceDialog()
   }
 
   function resetDocument() {
@@ -341,6 +392,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
                     manufacturers={manufacturers}
                     materials={materials}
                     onChangeMaterial={changeMaterial}
+                    onCreateNew={openCreateReferenceDialog}
                     onUpdate={updateLine}
                     suppliers={suppliers}
                     t={t}
@@ -386,6 +438,15 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
           <Button disabled={isLoading || !masterDataReady || hasLineErrors} type="submit">{isLoading ? t('receipt.posting') : t('receipt.post')}</Button>
         </div>
       </form>
+      <CreateReferenceDialog
+        draft={referenceDraft}
+        onChange={setReferenceDraft}
+        onClose={closeCreateReferenceDialog}
+        onSave={saveCreatedReference}
+        open={Boolean(createReferenceDialog)}
+        t={t}
+        type={createReferenceDialog?.type ?? 'material'}
+      />
     </section>
   )
 }
@@ -469,6 +530,7 @@ function MaterialDetailPanel({
   manufacturers,
   materials,
   onChangeMaterial,
+  onCreateNew,
   onUpdate,
   suppliers,
   t,
@@ -478,6 +540,7 @@ function MaterialDetailPanel({
   manufacturers: ManufacturerItem[]
   materials: MaterialItem[]
   onChangeMaterial: (lineId: string, materialId: string) => void
+  onCreateNew: (type: ReferenceDialogType, lineId: string) => void
   onUpdate: (lineId: string, patch: Partial<ReceiptLineForm>) => void
   suppliers: SupplierItem[]
   t: ReturnType<typeof useI18n>['t']
@@ -493,14 +556,13 @@ function MaterialDetailPanel({
           newCode={line.material_code}
           newName={line.material_name}
           onModeChange={(mode) => onUpdate(line.id, { material_mode: mode as 'existing' | 'new', material_id: mode === 'new' ? '' : line.material_id })}
-          onNewCodeChange={(value) => onUpdate(line.id, { material_code: value })}
-          onNewNameChange={(value) => onUpdate(line.id, { material_name: value })}
+          onCreateNew={() => onCreateNew('material', line.id)}
           onSelect={(value) => onChangeMaterial(line.id, value)}
           references={materials}
+          referenceType="material"
           selectedValue={line.material_id}
           t={t}
           typeValue={line.material_type}
-          onTypeChange={(value) => onUpdate(line.id, { material_type: value })}
         />
 
         <Separator />
@@ -520,9 +582,9 @@ function MaterialDetailPanel({
           newCode={line.manufacturer_code}
           newName={line.manufacturer_name}
           onModeChange={(mode) => onUpdate(line.id, { manufacturer_mode: mode as 'existing' | 'new', manufacturer_id: mode === 'new' ? '' : line.manufacturer_id })}
-          onNewCodeChange={(value) => onUpdate(line.id, { manufacturer_code: value })}
-          onNewNameChange={(value) => onUpdate(line.id, { manufacturer_name: value })}
+          onCreateNew={() => onCreateNew('manufacturer', line.id)}
           onSelect={(value) => onUpdate(line.id, { manufacturer_id: value })}
+          referenceType="manufacturer"
           references={manufacturers}
           selectedValue={line.manufacturer_id}
           t={t}
@@ -539,9 +601,9 @@ function MaterialDetailPanel({
           newCode={line.supplier_code}
           newName={line.supplier_name}
           onModeChange={(mode) => onUpdate(line.id, { supplier_mode: mode as 'existing' | 'new' | 'none', supplier_id: mode === 'new' ? '' : line.supplier_id })}
-          onNewCodeChange={(value) => onUpdate(line.id, { supplier_code: value })}
-          onNewNameChange={(value) => onUpdate(line.id, { supplier_name: value })}
+          onCreateNew={() => onCreateNew('supplier', line.id)}
           onSelect={(value) => onUpdate(line.id, { supplier_id: value })}
+          referenceType="supplier"
           references={suppliers}
           selectedValue={line.supplier_id}
           t={t}
@@ -582,11 +644,10 @@ function DetailReference({
   mode,
   newCode,
   newName,
+  onCreateNew,
   onModeChange,
-  onNewCodeChange,
-  onNewNameChange,
   onSelect,
-  onTypeChange,
+  referenceType,
   references,
   selectedValue,
   t,
@@ -599,11 +660,10 @@ function DetailReference({
   mode: 'existing' | 'new' | 'none'
   newCode: string
   newName: string
+  onCreateNew: () => void
   onModeChange: (mode: 'existing' | 'new' | 'none') => void
-  onNewCodeChange: (value: string) => void
-  onNewNameChange: (value: string) => void
   onSelect: (value: string) => void
-  onTypeChange?: (value: string) => void
+  referenceType: ReferenceDialogType
   references: Array<MaterialItem | SupplierItem | ManufacturerItem>
   selectedValue: string
   t: ReturnType<typeof useI18n>['t']
@@ -615,7 +675,7 @@ function DetailReference({
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="text-xs font-medium text-slate-600">{label}</span>
-        <button className="inline-flex h-6 items-center gap-1 rounded px-2 text-xs font-medium text-blue-700 hover:bg-blue-50" onClick={() => onModeChange(mode === 'new' ? 'existing' : 'new')} type="button">
+        <button className="inline-flex h-6 items-center gap-1 rounded px-2 text-xs font-medium text-blue-700 hover:bg-blue-50" onClick={() => (mode === 'new' ? onModeChange('existing') : onCreateNew())} type="button">
           <Plus className="h-3 w-3" />
           {mode === 'new' ? t('receipt.chooseExisting') : createLabel}
         </button>
@@ -631,10 +691,9 @@ function DetailReference({
         </div>
       )}
       {mode === 'new' && (
-        <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-2">
-          <input className="input bg-white" placeholder={t('common.code')} value={newCode} onChange={(event) => onNewCodeChange(event.target.value)} />
-          <input className="input bg-white" placeholder={t('common.name')} value={newName} onChange={(event) => onNewNameChange(event.target.value)} />
-          {onTypeChange && <input className="input col-span-2 bg-white" placeholder={t('common.type')} value={typeValue ?? ''} onChange={(event) => onTypeChange(event.target.value)} />}
+        <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+          <p className="font-medium text-slate-900">{newCode} · {newName}</p>
+          {referenceType === 'material' && <p className="mt-1 text-xs text-slate-500">{typeValue || 'raw_material'}</p>}
         </div>
       )}
       {allowNone && (
@@ -645,6 +704,60 @@ function DetailReference({
       {mode === 'none' && <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">{t('receipt.noSupplierSelected')}</p>}
       {selectedText && <p className="mt-2 break-words text-xs text-slate-600">{selectedText}</p>}
       {mode === 'new' && newName && <p className="mt-2 break-words text-xs text-slate-600">{newName}</p>}
+    </div>
+  )
+}
+
+function CreateReferenceDialog({
+  draft,
+  onChange,
+  onClose,
+  onSave,
+  open,
+  t,
+  type,
+}: {
+  draft: { code: string; name: string; item_type: string }
+  onChange: (draft: { code: string; name: string; item_type: string }) => void
+  onClose: () => void
+  onSave: () => void
+  open: boolean
+  t: ReturnType<typeof useI18n>['t']
+  type: ReferenceDialogType
+}) {
+  if (!open) return null
+  const titles: Record<ReferenceDialogType, string> = {
+    material: t('receipt.createMaterial'),
+    manufacturer: t('receipt.createManufacturer'),
+    supplier: t('receipt.createSupplier'),
+  }
+  const canSave = Boolean(draft.code.trim() && draft.name.trim())
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+      <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white shadow-xl">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <h2 className="text-lg font-semibold text-slate-950">{titles[type]}</h2>
+        </div>
+        <div className="space-y-4 px-6 py-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label={t('common.code')}>
+              <input className="input bg-slate-50" placeholder={t('common.code')} value={draft.code} onChange={(event) => onChange({ ...draft, code: event.target.value })} />
+            </Field>
+            <Field label={t('common.name')}>
+              <input className="input bg-slate-50" placeholder={t('common.name')} value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} />
+            </Field>
+          </div>
+          {type === 'material' && (
+            <Field label={t('common.type')}>
+              <input className="input bg-slate-50" placeholder="raw_material" value={draft.item_type} onChange={(event) => onChange({ ...draft, item_type: event.target.value })} />
+            </Field>
+          )}
+        </div>
+        <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+          <Button type="button" variant="secondary" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button type="button" disabled={!canSave} onClick={onSave}>{t('receipt.create')}</Button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -670,272 +783,6 @@ function displayReference(mode: 'existing' | 'new' | 'none', id: string, name: s
   }
   const reference = references.find((item) => item.id === id)
   return reference ? `${reference.code} · ${reference.name}` : ''
-}
-
-function LineTableRow({
-  allowedLocations,
-  errors,
-  index,
-  line,
-  manufacturers,
-  materials,
-  onChangeMaterial,
-  onRemove,
-  onUpdate,
-  removeDisabled,
-  suppliers,
-  t,
-}: {
-  allowedLocations: LocationItem[]
-  errors: string[]
-  index: number
-  line: ReceiptLineForm
-  manufacturers: ManufacturerItem[]
-  materials: MaterialItem[]
-  onChangeMaterial: (lineId: string, materialId: string) => void
-  onRemove: (lineId: string) => void
-  onUpdate: (lineId: string, patch: Partial<ReceiptLineForm>) => void
-  removeDisabled: boolean
-  suppliers: SupplierItem[]
-  t: ReturnType<typeof useI18n>['t']
-}) {
-  const hasErrors = errors.length > 0
-  const hasNewReference = line.material_mode === 'new' || line.manufacturer_mode === 'new' || line.supplier_mode === 'new'
-  const selectedLocation = allowedLocations.find((item) => item.id === line.location_id)
-  return (
-    <>
-      <tr className={`border-b border-slate-100 align-top ${hasErrors ? 'bg-red-50/50' : 'hover:bg-slate-50/70'}`}>
-        <td className="px-3 py-3">
-          <MaterialPicker
-            line={line}
-            materials={materials}
-            onChangeMaterial={onChangeMaterial}
-            onUpdate={onUpdate}
-            t={t}
-          />
-        </td>
-        <td className="px-3 py-3">
-          <input
-            className="input font-mono transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[360px] focus:bg-white focus:shadow-lg"
-            placeholder="LOT-2026-..."
-            title={line.supplier_lot}
-            value={line.supplier_lot}
-            onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })}
-          />
-        </td>
-        <td className="px-3 py-3">
-          <OriginPicker
-            emptyText={t('receipt.selectManufacturer')}
-            mode={line.manufacturer_mode}
-            modeOptions={['existing', 'new']}
-            onModeChange={(mode) => onUpdate(line.id, { manufacturer_mode: mode as 'existing' | 'new' })}
-            onNewCodeChange={(value) => onUpdate(line.id, { manufacturer_code: value })}
-            onNewNameChange={(value) => onUpdate(line.id, { manufacturer_name: value })}
-            onSelect={(value) => onUpdate(line.id, { manufacturer_id: value })}
-            references={manufacturers}
-            t={t}
-            value={line.manufacturer_id}
-            newCode={line.manufacturer_code}
-            newName={line.manufacturer_name}
-          />
-        </td>
-        <td className="px-3 py-3">
-          <OriginPicker
-            emptyText={t('receipt.selectSupplier')}
-            mode={line.supplier_mode}
-            modeOptions={['existing', 'new', 'none']}
-            onModeChange={(mode) => onUpdate(line.id, { supplier_mode: mode as 'existing' | 'new' | 'none' })}
-            onNewCodeChange={(value) => onUpdate(line.id, { supplier_code: value })}
-            onNewNameChange={(value) => onUpdate(line.id, { supplier_name: value })}
-            onSelect={(value) => onUpdate(line.id, { supplier_id: value })}
-            references={suppliers}
-            t={t}
-            value={line.supplier_id}
-            newCode={line.supplier_code}
-            newName={line.supplier_name}
-          />
-        </td>
-        <td className="px-3 py-3"><input className="input px-2" title={line.production_date} type="date" value={line.production_date} onChange={(event) => onUpdate(line.id, { production_date: event.target.value })} /></td>
-        <td className="px-3 py-3"><input className="input px-2" title={line.expiry_date} type="date" value={line.expiry_date} onChange={(event) => onUpdate(line.id, { expiry_date: event.target.value })} /></td>
-        <td className="px-3 py-3"><input className="input" min="0" step="0.001" title={line.quantity} type="number" value={line.quantity} onChange={(event) => onUpdate(line.id, { quantity: event.target.value })} /></td>
-        <td className="px-3 py-3"><input className="input px-2 transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[120px] focus:bg-white focus:shadow-lg" title={line.unit} value={line.unit} onChange={(event) => onUpdate(line.id, { unit: event.target.value })} /></td>
-        <td className="px-3 py-3">
-          <select
-            className="input truncate transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[260px] focus:bg-white focus:shadow-lg"
-            title={selectedLocation ? translatedLocation(selectedLocation.code, t) : ''}
-            value={line.location_id}
-            onChange={(event) => onUpdate(line.id, { location_id: event.target.value })}
-          >
-            <option value="">{t('receipt.selectLocation')}</option>
-            {allowedLocations.map((item) => <option key={item.id} value={item.id}>{translatedLocation(item.code, t)}</option>)}
-          </select>
-        </td>
-        <td className="px-3 py-3 text-right">
-          <button className="rounded-md px-2 py-1 text-lg leading-none text-red-500 hover:bg-red-50 disabled:text-slate-300" disabled={removeDisabled} onClick={() => onRemove(line.id)} type="button" title={t('receipt.removeLine')}>
-            ×
-          </button>
-        </td>
-      </tr>
-      {hasErrors && (
-        <tr className="border-b border-slate-100 bg-red-50/50">
-          <td className="px-3 pb-3 text-xs text-red-700" colSpan={10}>
-            {t('receipt.lineTitle', { count: index + 1 })}: {errors.join('; ')}
-          </td>
-        </tr>
-      )}
-      {hasNewReference && (
-        <tr className="border-b border-slate-100 bg-slate-50/80">
-          <td className="px-3 py-3" colSpan={10}>
-            <NewReferenceDetails line={line} onUpdate={onUpdate} t={t} />
-          </td>
-        </tr>
-      )}
-    </>
-  )
-}
-
-function MaterialPicker({ line, materials, onChangeMaterial, onUpdate, t }: {
-  line: ReceiptLineForm
-  materials: MaterialItem[]
-  onChangeMaterial: (lineId: string, materialId: string) => void
-  onUpdate: (lineId: string, patch: Partial<ReceiptLineForm>) => void
-  t: ReturnType<typeof useI18n>['t']
-}) {
-  const value = line.material_mode === 'new' ? '__new__' : line.material_id
-  const selectedMaterial = materials.find((item) => item.id === line.material_id)
-  const materialTitle = selectedMaterial ? `${selectedMaterial.code} · ${selectedMaterial.name}` : line.material_name
-  return (
-    <div className="grid gap-2">
-      <select
-        className="input truncate transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[420px] focus:bg-white focus:shadow-lg"
-        title={materialTitle}
-        value={value}
-        onChange={(event) => {
-          if (event.target.value === '__new__') {
-            onUpdate(line.id, { material_mode: 'new', material_id: '' })
-          } else {
-            onUpdate(line.id, { material_mode: 'existing' })
-            onChangeMaterial(line.id, event.target.value)
-          }
-        }}
-      >
-        <option value="">{t('receipt.selectMaterial')}</option>
-        {materials.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-        <option value="__new__">{t('receipt.createNew')}</option>
-      </select>
-    </div>
-  )
-}
-
-function OriginPicker({
-  emptyText,
-  mode,
-  modeOptions,
-  newCode,
-  newName,
-  onModeChange,
-  onNewCodeChange,
-  onNewNameChange,
-  onSelect,
-  references,
-  t,
-  value,
-}: {
-  emptyText: string
-  mode: 'existing' | 'new' | 'none'
-  modeOptions: Array<'existing' | 'new' | 'none'>
-  newCode: string
-  newName: string
-  onModeChange: (mode: 'existing' | 'new' | 'none') => void
-  onNewCodeChange: (value: string) => void
-  onNewNameChange: (value: string) => void
-  onSelect: (value: string) => void
-  references: Array<SupplierItem | ManufacturerItem>
-  t: ReturnType<typeof useI18n>['t']
-  value: string
-}) {
-  const selectedReference = references.find((item) => item.id === value)
-  const referenceTitle = selectedReference ? `${selectedReference.code} · ${selectedReference.name}` : newName
-  return (
-    <div className="min-w-0">
-      {mode === 'existing' && (
-        <select
-          className="input truncate text-left transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[420px] focus:bg-white focus:shadow-lg"
-          title={referenceTitle}
-          value={value}
-          onChange={(event) => {
-            if (event.target.value === '__new__') {
-              onModeChange('new')
-              return
-            }
-            if (event.target.value === '__none__') {
-              onModeChange('none')
-              return
-            }
-            onSelect(event.target.value)
-          }}
-        >
-          <option value="">{emptyText}</option>
-          {references.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-          <option value="__new__">{t('receipt.createNew')}</option>
-          {modeOptions.includes('none') && <option value="__none__">{t('receipt.noSupplier')}</option>}
-        </select>
-      )}
-      {mode === 'new' && (
-        <div className="grid gap-2">
-          <select className="input truncate" value="__new__" onChange={(event) => event.target.value === '' && onModeChange('existing')}>
-            <option value="__new__">{t('receipt.createNew')}</option>
-            <option value="">{emptyText}</option>
-          </select>
-        </div>
-      )}
-      {mode === 'none' && (
-        <select className="input truncate" title={t('receipt.noSupplierSelected')} value="__none__" onChange={(event) => event.target.value === '' && onModeChange('existing')}>
-          <option value="__none__">{t('receipt.noSupplier')}</option>
-          <option value="">{emptyText}</option>
-        </select>
-      )}
-    </div>
-  )
-}
-
-function NewReferenceDetails({ line, onUpdate, t }: {
-  line: ReceiptLineForm
-  onUpdate: (lineId: string, patch: Partial<ReceiptLineForm>) => void
-  t: ReturnType<typeof useI18n>['t']
-}) {
-  return (
-    <div className="grid gap-3 xl:grid-cols-3">
-      {line.material_mode === 'new' && (
-        <div className="rounded-md border border-slate-200 bg-white p-3">
-          <p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('receipt.material')}</p>
-          <div className="grid grid-cols-[120px_minmax(240px,1fr)] gap-2">
-            <input className="input" placeholder={t('common.code')} title={line.material_code} value={line.material_code} onChange={(event) => onUpdate(line.id, { material_code: event.target.value })} />
-            <input className="input" placeholder={t('common.name')} title={line.material_name} value={line.material_name} onChange={(event) => onUpdate(line.id, { material_name: event.target.value })} />
-            <input className="input col-span-2" placeholder={t('common.type')} title={line.material_type} value={line.material_type} onChange={(event) => onUpdate(line.id, { material_type: event.target.value })} />
-          </div>
-        </div>
-      )}
-      {line.manufacturer_mode === 'new' && (
-        <div className="rounded-md border border-slate-200 bg-white p-3">
-          <p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('receipt.manufacturer')}</p>
-          <div className="grid grid-cols-[120px_minmax(260px,1fr)] gap-2">
-            <input className="input" placeholder={t('common.code')} title={line.manufacturer_code} value={line.manufacturer_code} onChange={(event) => onUpdate(line.id, { manufacturer_code: event.target.value })} />
-            <input className="input" placeholder={t('common.name')} title={line.manufacturer_name} value={line.manufacturer_name} onChange={(event) => onUpdate(line.id, { manufacturer_name: event.target.value })} />
-          </div>
-        </div>
-      )}
-      {line.supplier_mode === 'new' && (
-        <div className="rounded-md border border-slate-200 bg-white p-3">
-          <p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('receipt.supplier')}</p>
-          <div className="grid grid-cols-[120px_minmax(260px,1fr)] gap-2">
-            <input className="input" placeholder={t('common.code')} title={line.supplier_code} value={line.supplier_code} onChange={(event) => onUpdate(line.id, { supplier_code: event.target.value })} />
-            <input className="input" placeholder={t('common.name')} title={line.supplier_name} value={line.supplier_name} onChange={(event) => onUpdate(line.id, { supplier_name: event.target.value })} />
-          </div>
-        </div>
-      )}
-    </div>
-  )
 }
 
 function validateLine(line: ReceiptLineForm, t: ReturnType<typeof useI18n>['t']) {
