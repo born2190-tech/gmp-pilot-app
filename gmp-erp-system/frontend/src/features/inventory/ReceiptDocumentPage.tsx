@@ -384,6 +384,7 @@ function LineTableRow({
   t: ReturnType<typeof useI18n>['t']
 }) {
   const hasErrors = errors.length > 0
+  const selectedLocation = allowedLocations.find((item) => item.id === line.location_id)
   return (
     <>
       <tr className={`border-b border-slate-100 align-top ${hasErrors ? 'bg-red-50/50' : 'hover:bg-slate-50/70'}`}>
@@ -397,7 +398,13 @@ function LineTableRow({
           />
         </td>
         <td className="px-3 py-3">
-          <input className="input font-mono" placeholder="LOT-2026-..." value={line.supplier_lot} onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })} />
+          <input
+            className="input font-mono transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[360px] focus:bg-white focus:shadow-lg"
+            placeholder="LOT-2026-..."
+            title={line.supplier_lot}
+            value={line.supplier_lot}
+            onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })}
+          />
         </td>
         <td className="px-3 py-3">
           <OriginPicker
@@ -431,12 +438,17 @@ function LineTableRow({
             newName={line.supplier_name}
           />
         </td>
-        <td className="px-3 py-3"><input className="input px-2" type="date" value={line.production_date} onChange={(event) => onUpdate(line.id, { production_date: event.target.value })} /></td>
-        <td className="px-3 py-3"><input className="input px-2" type="date" value={line.expiry_date} onChange={(event) => onUpdate(line.id, { expiry_date: event.target.value })} /></td>
-        <td className="px-3 py-3"><input className="input" min="0" step="0.001" type="number" value={line.quantity} onChange={(event) => onUpdate(line.id, { quantity: event.target.value })} /></td>
-        <td className="px-3 py-3"><input className="input px-2" value={line.unit} onChange={(event) => onUpdate(line.id, { unit: event.target.value })} /></td>
+        <td className="px-3 py-3"><input className="input px-2" title={line.production_date} type="date" value={line.production_date} onChange={(event) => onUpdate(line.id, { production_date: event.target.value })} /></td>
+        <td className="px-3 py-3"><input className="input px-2" title={line.expiry_date} type="date" value={line.expiry_date} onChange={(event) => onUpdate(line.id, { expiry_date: event.target.value })} /></td>
+        <td className="px-3 py-3"><input className="input" min="0" step="0.001" title={line.quantity} type="number" value={line.quantity} onChange={(event) => onUpdate(line.id, { quantity: event.target.value })} /></td>
+        <td className="px-3 py-3"><input className="input px-2 transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[120px] focus:bg-white focus:shadow-lg" title={line.unit} value={line.unit} onChange={(event) => onUpdate(line.id, { unit: event.target.value })} /></td>
         <td className="px-3 py-3">
-          <select className="input" value={line.location_id} onChange={(event) => onUpdate(line.id, { location_id: event.target.value })}>
+          <select
+            className="input truncate transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[260px] focus:bg-white focus:shadow-lg"
+            title={selectedLocation ? translatedLocation(selectedLocation.code, t) : ''}
+            value={line.location_id}
+            onChange={(event) => onUpdate(line.id, { location_id: event.target.value })}
+          >
             <option value="">{t('receipt.selectLocation')}</option>
             {allowedLocations.map((item) => <option key={item.id} value={item.id}>{translatedLocation(item.code, t)}</option>)}
           </select>
@@ -466,10 +478,13 @@ function MaterialPicker({ line, materials, onChangeMaterial, onUpdate, t }: {
   t: ReturnType<typeof useI18n>['t']
 }) {
   const value = line.material_mode === 'new' ? '__new__' : line.material_id
+  const selectedMaterial = materials.find((item) => item.id === line.material_id)
+  const materialTitle = selectedMaterial ? `${selectedMaterial.code} · ${selectedMaterial.name}` : line.material_name
   return (
     <div className="grid gap-2">
       <select
-        className="input"
+        className="input truncate transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[420px] focus:bg-white focus:shadow-lg"
+        title={materialTitle}
         value={value}
         onChange={(event) => {
           if (event.target.value === '__new__') {
@@ -486,9 +501,9 @@ function MaterialPicker({ line, materials, onChangeMaterial, onUpdate, t }: {
       </select>
       {line.material_mode === 'new' && (
         <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2">
-          <input className="input" placeholder={t('common.code')} value={line.material_code} onChange={(event) => onUpdate(line.id, { material_code: event.target.value })} />
-          <input className="input" placeholder={t('common.name')} value={line.material_name} onChange={(event) => onUpdate(line.id, { material_name: event.target.value })} />
-          <input className="input col-span-2" placeholder={t('common.type')} value={line.material_type} onChange={(event) => onUpdate(line.id, { material_type: event.target.value })} />
+          <input className="input" placeholder={t('common.code')} title={line.material_code} value={line.material_code} onChange={(event) => onUpdate(line.id, { material_code: event.target.value })} />
+          <input className="input transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[320px] focus:bg-white focus:shadow-lg" placeholder={t('common.name')} title={line.material_name} value={line.material_name} onChange={(event) => onUpdate(line.id, { material_name: event.target.value })} />
+          <input className="input col-span-2 transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[360px] focus:bg-white focus:shadow-lg" placeholder={t('common.type')} title={line.material_type} value={line.material_type} onChange={(event) => onUpdate(line.id, { material_type: event.target.value })} />
         </div>
       )}
     </div>
@@ -522,11 +537,14 @@ function OriginPicker({
   t: ReturnType<typeof useI18n>['t']
   value: string
 }) {
+  const selectedReference = references.find((item) => item.id === value)
+  const referenceTitle = selectedReference ? `${selectedReference.code} · ${selectedReference.name}` : newName
   return (
     <div className="min-w-0">
       {mode === 'existing' && (
         <select
-          className="input truncate text-left"
+          className="input truncate text-left transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[420px] focus:bg-white focus:shadow-lg"
+          title={referenceTitle}
           value={value}
           onChange={(event) => {
             if (event.target.value === '__new__') {
@@ -548,18 +566,18 @@ function OriginPicker({
       )}
       {mode === 'new' && (
         <div className="grid gap-2">
-          <select className="input" value="__new__" onChange={(event) => event.target.value === '' && onModeChange('existing')}>
+          <select className="input truncate" value="__new__" onChange={(event) => event.target.value === '' && onModeChange('existing')}>
             <option value="__new__">{t('receipt.createNew')}</option>
             <option value="">{emptyText}</option>
           </select>
           <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2">
-          <input className="input" placeholder={t('common.code')} value={newCode} onChange={(event) => onNewCodeChange(event.target.value)} />
-          <input className="input" placeholder={t('common.name')} value={newName} onChange={(event) => onNewNameChange(event.target.value)} />
+          <input className="input" placeholder={t('common.code')} title={newCode} value={newCode} onChange={(event) => onNewCodeChange(event.target.value)} />
+          <input className="input transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[320px] focus:bg-white focus:shadow-lg" placeholder={t('common.name')} title={newName} value={newName} onChange={(event) => onNewNameChange(event.target.value)} />
           </div>
         </div>
       )}
       {mode === 'none' && (
-        <select className="input" value="__none__" onChange={(event) => event.target.value === '' && onModeChange('existing')}>
+        <select className="input truncate" title={t('receipt.noSupplierSelected')} value="__none__" onChange={(event) => event.target.value === '' && onModeChange('existing')}>
           <option value="__none__">{t('receipt.noSupplier')}</option>
           <option value="">{emptyText}</option>
         </select>
