@@ -90,6 +90,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   const [materials, setMaterials] = useState<MaterialItem[]>([])
   const [lines, setLines] = useState<ReceiptLineForm[]>([newLine()])
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
+  const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [postedSummary, setPostedSummary] = useState<PostedSummary | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -186,6 +187,23 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
       if (selectedLineId === lineId) {
         setSelectedLineId(next[0]?.id ?? null)
       }
+      setExpandedLineIds((currentExpanded) => {
+        const nextExpanded = new Set(currentExpanded)
+        nextExpanded.delete(lineId)
+        return nextExpanded
+      })
+      return next
+    })
+  }
+
+  function toggleLineExpanded(lineId: string) {
+    setExpandedLineIds((current) => {
+      const next = new Set(current)
+      if (next.has(lineId)) {
+        next.delete(lineId)
+      } else {
+        next.add(lineId)
+      }
       return next
     })
   }
@@ -242,6 +260,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
     })
     setLines([newLine(defaultLocationId)])
     setSelectedLineId(null)
+    setExpandedLineIds(new Set())
     setPostedSummary(null)
     setError(null)
   }
@@ -369,14 +388,18 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
                     {lines.map((line, index) => (
                       <MaterialLineItem
                         errors={lineErrors[index]}
+                        isExpanded={expandedLineIds.has(line.id)}
                         isSelected={selectedLine?.id === line.id}
                         key={line.id}
                         line={line}
                         manufacturerName={displayReference(line.manufacturer_mode, line.manufacturer_id, line.manufacturer_name, manufacturers)}
                         materialName={displayMaterial(line, materials)}
+                        locationName={displayLocation(line.location_id, allowedLocations, t)}
                         onRemove={removeLine}
                         onSelect={() => setSelectedLineId(line.id)}
+                        onToggleExpand={() => toggleLineExpanded(line.id)}
                         removeDisabled={lines.length === 1}
+                        supplierName={displayReference(line.supplier_mode, line.supplier_id, line.supplier_name, suppliers)}
                         t={t}
                       />
                     ))}
@@ -453,74 +476,117 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
 
 function MaterialLineItem({
   errors,
+  isExpanded,
   isSelected,
   line,
+  locationName,
   manufacturerName,
   materialName,
   onRemove,
   onSelect,
+  onToggleExpand,
   removeDisabled,
+  supplierName,
   t,
 }: {
   errors: string[]
+  isExpanded: boolean
   isSelected: boolean
   line: ReceiptLineForm
+  locationName: string
   manufacturerName: string
   materialName: string
   onRemove: (lineId: string) => void
   onSelect: () => void
+  onToggleExpand: () => void
   removeDisabled: boolean
+  supplierName: string
   t: ReturnType<typeof useI18n>['t']
 }) {
   const hasErrors = errors.length > 0
   return (
-    <tr className={`cursor-pointer border-b border-slate-100 transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-slate-50'}`} onClick={onSelect}>
-      <td className="px-3 py-2.5">
-        {isSelected ? <ChevronDown className="h-4 w-4 text-blue-600" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
-      </td>
-      <td className="px-3 py-2.5">
-        <div className="flex min-w-0 items-start gap-2">
-          {hasErrors && <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
-          <div className="min-w-0">
-            <div className="max-w-[280px] truncate text-sm text-slate-900" title={materialName}>
-              {materialName || <span className="italic text-slate-400">{t('receipt.materialRequired')}</span>}
-            </div>
-            {manufacturerName && (
-              <div className="max-w-[280px] truncate text-xs text-slate-500" title={manufacturerName}>
-                {manufacturerName}
-              </div>
-            )}
-          </div>
-        </div>
-      </td>
-      <td className="px-3 py-2.5">
-        <div className="max-w-[180px] truncate font-mono text-sm text-slate-800" title={line.supplier_lot}>
-          {line.supplier_lot || <span className="font-sans italic text-slate-400">—</span>}
-        </div>
-      </td>
-      <td className="px-3 py-2.5">
-        <span className="text-sm text-slate-800">{Number(line.quantity) > 0 ? `${line.quantity} ${line.unit}` : <span className="italic text-slate-400">—</span>}</span>
-      </td>
-      <td className="px-3 py-2.5">
-        <span className="text-sm text-slate-800">{line.expiry_date || <span className="italic text-slate-400">—</span>}</span>
-      </td>
-      <td className="px-3 py-2.5">
-        {isSelected && <div className="ml-auto h-8 w-1 rounded-full bg-blue-600" />}
-        {!removeDisabled && (
+    <>
+      <tr className={`cursor-pointer border-b border-slate-100 transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-slate-50'}`} onClick={onSelect}>
+        <td className="px-3 py-2.5">
           <button
-            className="ml-auto rounded px-1 text-red-500 hover:bg-red-50"
+            className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
             onClick={(event) => {
               event.stopPropagation()
-              onRemove(line.id)
+              onToggleExpand()
             }}
-            title={t('receipt.removeLine')}
+            title={isExpanded ? t('common.collapse') : t('common.expand')}
             type="button"
           >
-            ×
+            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
-        )}
-      </td>
-    </tr>
+        </td>
+        <td className="px-3 py-2.5">
+          <div className="flex min-w-0 items-start gap-2">
+            {hasErrors && <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
+            <div className="min-w-0">
+              <div className="max-w-[280px] truncate text-sm text-slate-900" title={materialName}>
+                {materialName || <span className="italic text-slate-400">{t('receipt.materialRequired')}</span>}
+              </div>
+              {manufacturerName && (
+                <div className="max-w-[280px] truncate text-xs text-slate-500" title={manufacturerName}>
+                  {manufacturerName}
+                </div>
+              )}
+            </div>
+          </div>
+        </td>
+        <td className="px-3 py-2.5">
+          <div className="max-w-[180px] truncate font-mono text-sm text-slate-800" title={line.supplier_lot}>
+            {line.supplier_lot || <span className="font-sans italic text-slate-400">—</span>}
+          </div>
+        </td>
+        <td className="px-3 py-2.5">
+          <span className="text-sm text-slate-800">{Number(line.quantity) > 0 ? `${line.quantity} ${line.unit}` : <span className="italic text-slate-400">—</span>}</span>
+        </td>
+        <td className="px-3 py-2.5">
+          <span className="text-sm text-slate-800">{line.expiry_date || <span className="italic text-slate-400">—</span>}</span>
+        </td>
+        <td className="px-3 py-2.5">
+          {isSelected && <div className="ml-auto h-8 w-1 rounded-full bg-blue-600" />}
+          {!removeDisabled && (
+            <button
+              className="ml-auto rounded px-1 text-red-500 hover:bg-red-50"
+              onClick={(event) => {
+                event.stopPropagation()
+                onRemove(line.id)
+              }}
+              title={t('receipt.removeLine')}
+              type="button"
+            >
+              ×
+            </button>
+          )}
+        </td>
+      </tr>
+
+      {isExpanded && (
+        <tr className={`border-b border-slate-100 ${isSelected ? 'bg-blue-50' : 'bg-slate-50'}`}>
+          <td className="px-3 py-3" colSpan={6}>
+            <div className="grid gap-x-6 gap-y-2 pl-8 text-xs md:grid-cols-3">
+              <ExpandedValue label={t('receipt.manufacturer')} value={manufacturerName} />
+              <ExpandedValue label={t('receipt.supplier')} value={supplierName || t('receipt.noSupplier')} />
+              <ExpandedValue label={t('receipt.location')} value={locationName} />
+              <ExpandedValue label={t('receipt.productionDate')} value={line.production_date} />
+              <ExpandedValue label={t('receipt.supplierLot')} value={line.supplier_lot} mono />
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+function ExpandedValue({ label, mono = false, value }: { label: string; mono?: boolean; value: string }) {
+  return (
+    <div className="min-w-0">
+      <span className="text-slate-500">{label}: </span>
+      <span className={`break-words font-medium text-slate-800 ${mono ? 'font-mono' : ''}`}>{value || '—'}</span>
+    </div>
   )
 }
 
@@ -783,6 +849,11 @@ function displayReference(mode: 'existing' | 'new' | 'none', id: string, name: s
   }
   const reference = references.find((item) => item.id === id)
   return reference ? `${reference.code} · ${reference.name}` : ''
+}
+
+function displayLocation(locationId: string, locations: LocationItem[], t: ReturnType<typeof useI18n>['t']) {
+  const location = locations.find((item) => item.id === locationId)
+  return location ? translatedLocation(location.code, t) : ''
 }
 
 function validateLine(line: ReceiptLineForm, t: ReturnType<typeof useI18n>['t']) {
