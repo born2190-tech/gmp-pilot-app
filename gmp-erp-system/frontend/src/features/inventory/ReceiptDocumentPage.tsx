@@ -384,6 +384,7 @@ function LineTableRow({
   t: ReturnType<typeof useI18n>['t']
 }) {
   const hasErrors = errors.length > 0
+  const hasNewReference = line.material_mode === 'new' || line.manufacturer_mode === 'new' || line.supplier_mode === 'new'
   const selectedLocation = allowedLocations.find((item) => item.id === line.location_id)
   return (
     <>
@@ -466,6 +467,13 @@ function LineTableRow({
           </td>
         </tr>
       )}
+      {hasNewReference && (
+        <tr className="border-b border-slate-100 bg-slate-50/80">
+          <td className="px-3 py-3" colSpan={10}>
+            <NewReferenceDetails line={line} onUpdate={onUpdate} t={t} />
+          </td>
+        </tr>
+      )}
     </>
   )
 }
@@ -499,13 +507,6 @@ function MaterialPicker({ line, materials, onChangeMaterial, onUpdate, t }: {
         {materials.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
         <option value="__new__">{t('receipt.createNew')}</option>
       </select>
-      {line.material_mode === 'new' && (
-        <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2">
-          <input className="input" placeholder={t('common.code')} title={line.material_code} value={line.material_code} onChange={(event) => onUpdate(line.id, { material_code: event.target.value })} />
-          <input className="input transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[320px] focus:bg-white focus:shadow-lg" placeholder={t('common.name')} title={line.material_name} value={line.material_name} onChange={(event) => onUpdate(line.id, { material_name: event.target.value })} />
-          <input className="input col-span-2 transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[360px] focus:bg-white focus:shadow-lg" placeholder={t('common.type')} title={line.material_type} value={line.material_type} onChange={(event) => onUpdate(line.id, { material_type: event.target.value })} />
-        </div>
-      )}
     </div>
   )
 }
@@ -570,10 +571,6 @@ function OriginPicker({
             <option value="__new__">{t('receipt.createNew')}</option>
             <option value="">{emptyText}</option>
           </select>
-          <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2">
-          <input className="input" placeholder={t('common.code')} title={newCode} value={newCode} onChange={(event) => onNewCodeChange(event.target.value)} />
-          <input className="input transition-[width,box-shadow] focus:relative focus:z-30 focus:w-[320px] focus:bg-white focus:shadow-lg" placeholder={t('common.name')} title={newName} value={newName} onChange={(event) => onNewNameChange(event.target.value)} />
-          </div>
         </div>
       )}
       {mode === 'none' && (
@@ -581,6 +578,45 @@ function OriginPicker({
           <option value="__none__">{t('receipt.noSupplier')}</option>
           <option value="">{emptyText}</option>
         </select>
+      )}
+    </div>
+  )
+}
+
+function NewReferenceDetails({ line, onUpdate, t }: {
+  line: ReceiptLineForm
+  onUpdate: (lineId: string, patch: Partial<ReceiptLineForm>) => void
+  t: ReturnType<typeof useI18n>['t']
+}) {
+  return (
+    <div className="grid gap-3 xl:grid-cols-3">
+      {line.material_mode === 'new' && (
+        <div className="rounded-md border border-slate-200 bg-white p-3">
+          <p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('receipt.material')}</p>
+          <div className="grid grid-cols-[120px_minmax(240px,1fr)] gap-2">
+            <input className="input" placeholder={t('common.code')} title={line.material_code} value={line.material_code} onChange={(event) => onUpdate(line.id, { material_code: event.target.value })} />
+            <input className="input" placeholder={t('common.name')} title={line.material_name} value={line.material_name} onChange={(event) => onUpdate(line.id, { material_name: event.target.value })} />
+            <input className="input col-span-2" placeholder={t('common.type')} title={line.material_type} value={line.material_type} onChange={(event) => onUpdate(line.id, { material_type: event.target.value })} />
+          </div>
+        </div>
+      )}
+      {line.manufacturer_mode === 'new' && (
+        <div className="rounded-md border border-slate-200 bg-white p-3">
+          <p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('receipt.manufacturer')}</p>
+          <div className="grid grid-cols-[120px_minmax(260px,1fr)] gap-2">
+            <input className="input" placeholder={t('common.code')} title={line.manufacturer_code} value={line.manufacturer_code} onChange={(event) => onUpdate(line.id, { manufacturer_code: event.target.value })} />
+            <input className="input" placeholder={t('common.name')} title={line.manufacturer_name} value={line.manufacturer_name} onChange={(event) => onUpdate(line.id, { manufacturer_name: event.target.value })} />
+          </div>
+        </div>
+      )}
+      {line.supplier_mode === 'new' && (
+        <div className="rounded-md border border-slate-200 bg-white p-3">
+          <p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('receipt.supplier')}</p>
+          <div className="grid grid-cols-[120px_minmax(260px,1fr)] gap-2">
+            <input className="input" placeholder={t('common.code')} title={line.supplier_code} value={line.supplier_code} onChange={(event) => onUpdate(line.id, { supplier_code: event.target.value })} />
+            <input className="input" placeholder={t('common.name')} title={line.supplier_name} value={line.supplier_name} onChange={(event) => onUpdate(line.id, { supplier_name: event.target.value })} />
+          </div>
+        </div>
       )}
     </div>
   )
