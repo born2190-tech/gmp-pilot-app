@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
+import { Info } from 'lucide-react'
 import { createReceipt, listLocations, listManufacturers, listMaterials, listSuppliers, listWarehouses, postReceipt } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
 import type { CurrentUser } from '../../types/auth'
@@ -271,6 +272,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
                 </select>
               </Field>
             )}
+            <Field label={t('common.reason')}><input {...form.register('reason', { required: true })} className="input" /></Field>
           </div>
         </SectionBlock>
 
@@ -317,23 +319,33 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
           </div>
         </SectionBlock>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
-          <SectionBlock tone="signature" title={t('receipt.eSignature')}>
-            <p className="mb-3 text-sm text-slate-600">{t('receipt.eSignatureHint')}</p>
-            <Field label={t('receipt.eSignature')}><input type="password" {...form.register('signature_password', { required: true })} className="input" /></Field>
-            <Field label={t('common.reason')}><input {...form.register('reason', { required: true })} className="input" /></Field>
-          </SectionBlock>
+        <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-base font-semibold text-slate-800">{t('receipt.summaryTitle')}</h2>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-3 text-sm">
+              <SummaryInline label={t('receipt.summaryLines')} value={String(lines.length)} />
+              <SummaryInline label={t('receipt.summaryLots')} value={String(lines.length)} />
+              <SummaryInline label={t('receipt.summaryWarehouse')} value={selectedWarehouse?.name ?? '—'} />
+            </div>
+            <div className="space-y-3 text-sm">
+              <SummaryInline label={t('receipt.summaryStatus')} value={<span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">{t('status.quarantine')}</span>} />
+              <SummaryInline label={t('receipt.summaryQc')} value={<span className="text-slate-600">{t('receipt.summaryQcText')}</span>} />
+            </div>
+          </div>
+        </section>
 
-          <SectionBlock title={t('receipt.summaryTitle')}>
-            <dl className="space-y-3 text-sm">
-              <SummaryRow label={t('receipt.summaryLines')} value={String(lines.length)} />
-              <SummaryRow label={t('receipt.summaryLots')} value={String(lines.length)} />
-              <SummaryRow label={t('receipt.summaryWarehouse')} value={selectedWarehouse?.name ?? '—'} />
-              <SummaryRow label={t('receipt.summaryStatus')} value={t('status.quarantine')} />
-              <SummaryRow label={t('receipt.summaryQc')} value={t('receipt.summaryQcText')} />
-            </dl>
-          </SectionBlock>
-        </div>
+        <section className="rounded-md border-2 border-amber-300 bg-amber-50/60 p-5 shadow-sm">
+          <div className="mb-4 flex items-start gap-3">
+            <Info className="mt-0.5 text-amber-600" size={20} />
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">{t('receipt.eSignature')}</h2>
+              <p className="mt-1 text-sm text-slate-600">{t('receipt.eSignatureHint')}</p>
+            </div>
+          </div>
+          <Field label={t('receipt.eSignaturePin')}>
+            <input type="password" {...form.register('signature_password', { required: true })} className="input max-w-xl bg-white" />
+          </Field>
+        </section>
 
         <div className="flex flex-wrap justify-end gap-3">
           <Button type="button" variant="secondary" onClick={resetDocument}>{t('common.cancel')}</Button>
@@ -605,11 +617,11 @@ function Field({ children, label }: { children: ReactNode; label: string }) {
   )
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function SummaryInline({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right font-medium text-slate-900">{value}</dd>
+    <div className="flex items-center gap-2">
+      <span className="text-slate-500">{label}:</span>
+      <span className="font-medium text-slate-900">{value}</span>
     </div>
   )
 }
