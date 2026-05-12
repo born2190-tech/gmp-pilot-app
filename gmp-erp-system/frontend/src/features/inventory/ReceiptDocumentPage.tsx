@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
-import { Info } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronRight, Info, Plus, Search } from 'lucide-react'
 import { createReceipt, listLocations, listManufacturers, listMaterials, listSuppliers, listWarehouses, postReceipt } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
 import type { CurrentUser } from '../../types/auth'
@@ -82,6 +82,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   const [manufacturers, setManufacturers] = useState<ManufacturerItem[]>([])
   const [materials, setMaterials] = useState<MaterialItem[]>([])
   const [lines, setLines] = useState<ReceiptLineForm[]>([newLine()])
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [postedSummary, setPostedSummary] = useState<PostedSummary | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -141,9 +142,16 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
     setLines((current) => current.map((line) => (line.location_id ? line : { ...line, location_id: defaultLocationId })))
   }, [defaultLocationId])
 
+  useEffect(() => {
+    if (!selectedLineId && lines.length > 0) {
+      setSelectedLineId(lines[0].id)
+    }
+  }, [lines, selectedLineId])
+
   const masterDataReady = warehouses.length > 0 && locations.length > 0
   const lineErrors = lines.map((line) => validateLine(line, t))
   const hasLineErrors = lineErrors.some((items) => items.length > 0)
+  const selectedLine = lines.find((line) => line.id === selectedLineId) ?? lines[0]
 
   function updateLine(id: string, patch: Partial<ReceiptLineForm>) {
     setLines((current) => current.map((line) => (line.id === id ? { ...line, ...patch } : line)))
@@ -155,11 +163,22 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   }
 
   function addLine() {
-    setLines((current) => [...current, newLine(defaultLocationId)])
+    const line = newLine(defaultLocationId)
+    setLines((current) => [...current, line])
+    setSelectedLineId(line.id)
   }
 
   function removeLine(lineId: string) {
-    setLines((current) => (current.length === 1 ? current : current.filter((line) => line.id !== lineId)))
+    setLines((current) => {
+      if (current.length === 1) {
+        return current
+      }
+      const next = current.filter((line) => line.id !== lineId)
+      if (selectedLineId === lineId) {
+        setSelectedLineId(next[0]?.id ?? null)
+      }
+      return next
+    })
   }
 
   function resetDocument() {
@@ -171,6 +190,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
       signature_password: '',
     })
     setLines([newLine(defaultLocationId)])
+    setSelectedLineId(null)
     setPostedSummary(null)
     setError(null)
   }
@@ -280,42 +300,56 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
           action={<Button type="button" variant="secondary" onClick={addLine}>+ {t('receipt.addLine')}</Button>}
           title={t('receipt.lines')}
         >
-          <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
-            <table className="w-full min-w-[1660px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
-                  <th className="w-[280px] px-3 py-3">{t('receipt.material')}</th>
-                  <th className="w-[220px] px-3 py-3">{t('receipt.supplierLot')}</th>
-                  <th className="w-[255px] px-3 py-3">{t('receipt.manufacturer')}</th>
-                  <th className="w-[275px] px-3 py-3">{t('receipt.supplier')}</th>
-                  <th className="w-[136px] px-3 py-3">{t('receipt.productionDate')}</th>
-                  <th className="w-[136px] px-3 py-3">{t('receipt.expiryDate')}</th>
-                  <th className="w-[112px] px-3 py-3">{t('receipt.quantity')}</th>
-                  <th className="w-[82px] px-3 py-3">{t('common.unit')}</th>
-                  <th className="w-[165px] px-3 py-3">{t('receipt.location')}</th>
-                  <th className="w-[52px] px-3 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line, index) => (
-                  <LineTableRow
+          <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+            <div className="flex h-[480px]">
+              <div className="w-[60%] overflow-auto border-r border-slate-200">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-left text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="w-8 px-3 py-2.5"></th>
+                      <th className="px-3 py-2.5">{t('receipt.material')}</th>
+                      <th className="px-3 py-2.5">{t('receipt.supplierLot')}</th>
+                      <th className="w-24 px-3 py-2.5">{t('receipt.quantity')}</th>
+                      <th className="px-3 py-2.5">{t('receipt.expiryDate')}</th>
+                      <th className="w-8 px-3 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((line, index) => (
+                      <MaterialLineItem
+                        errors={lineErrors[index]}
+                        isSelected={selectedLine?.id === line.id}
+                        key={line.id}
+                        line={line}
+                        manufacturerName={displayReference(line.manufacturer_mode, line.manufacturer_id, line.manufacturer_name, manufacturers)}
+                        materialName={displayMaterial(line, materials)}
+                        onRemove={removeLine}
+                        onSelect={() => setSelectedLineId(line.id)}
+                        removeDisabled={lines.length === 1}
+                        t={t}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="w-[40%] bg-slate-50">
+                {selectedLine ? (
+                  <MaterialDetailPanel
                     allowedLocations={allowedLocations}
-                    errors={lineErrors[index]}
-                    index={index}
-                    key={line.id}
-                    line={line}
+                    line={selectedLine}
                     manufacturers={manufacturers}
                     materials={materials}
                     onChangeMaterial={changeMaterial}
-                    onRemove={removeLine}
                     onUpdate={updateLine}
-                    removeDisabled={lines.length === 1}
                     suppliers={suppliers}
                     t={t}
                   />
-                ))}
-              </tbody>
-            </table>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-slate-400">{t('receipt.selectMaterial')}</div>
+                )}
+              </div>
+            </div>
           </div>
         </SectionBlock>
 
@@ -354,6 +388,288 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
       </form>
     </section>
   )
+}
+
+function MaterialLineItem({
+  errors,
+  isSelected,
+  line,
+  manufacturerName,
+  materialName,
+  onRemove,
+  onSelect,
+  removeDisabled,
+  t,
+}: {
+  errors: string[]
+  isSelected: boolean
+  line: ReceiptLineForm
+  manufacturerName: string
+  materialName: string
+  onRemove: (lineId: string) => void
+  onSelect: () => void
+  removeDisabled: boolean
+  t: ReturnType<typeof useI18n>['t']
+}) {
+  const hasErrors = errors.length > 0
+  return (
+    <tr className={`cursor-pointer border-b border-slate-100 transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-slate-50'}`} onClick={onSelect}>
+      <td className="px-3 py-2.5">
+        {isSelected ? <ChevronDown className="h-4 w-4 text-blue-600" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="flex min-w-0 items-start gap-2">
+          {hasErrors && <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
+          <div className="min-w-0">
+            <div className="max-w-[280px] truncate text-sm text-slate-900" title={materialName}>
+              {materialName || <span className="italic text-slate-400">{t('receipt.materialRequired')}</span>}
+            </div>
+            {manufacturerName && (
+              <div className="max-w-[280px] truncate text-xs text-slate-500" title={manufacturerName}>
+                {manufacturerName}
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="max-w-[180px] truncate font-mono text-sm text-slate-800" title={line.supplier_lot}>
+          {line.supplier_lot || <span className="font-sans italic text-slate-400">—</span>}
+        </div>
+      </td>
+      <td className="px-3 py-2.5">
+        <span className="text-sm text-slate-800">{Number(line.quantity) > 0 ? `${line.quantity} ${line.unit}` : <span className="italic text-slate-400">—</span>}</span>
+      </td>
+      <td className="px-3 py-2.5">
+        <span className="text-sm text-slate-800">{line.expiry_date || <span className="italic text-slate-400">—</span>}</span>
+      </td>
+      <td className="px-3 py-2.5">
+        {isSelected && <div className="ml-auto h-8 w-1 rounded-full bg-blue-600" />}
+        {!removeDisabled && (
+          <button
+            className="ml-auto rounded px-1 text-red-500 hover:bg-red-50"
+            onClick={(event) => {
+              event.stopPropagation()
+              onRemove(line.id)
+            }}
+            title={t('receipt.removeLine')}
+            type="button"
+          >
+            ×
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+function MaterialDetailPanel({
+  allowedLocations,
+  line,
+  manufacturers,
+  materials,
+  onChangeMaterial,
+  onUpdate,
+  suppliers,
+  t,
+}: {
+  allowedLocations: LocationItem[]
+  line: ReceiptLineForm
+  manufacturers: ManufacturerItem[]
+  materials: MaterialItem[]
+  onChangeMaterial: (lineId: string, materialId: string) => void
+  onUpdate: (lineId: string, patch: Partial<ReceiptLineForm>) => void
+  suppliers: SupplierItem[]
+  t: ReturnType<typeof useI18n>['t']
+}) {
+  return (
+    <div className="h-full overflow-auto p-5">
+      <div className="space-y-5">
+        <DetailReference
+          createLabel={t('receipt.createNew')}
+          emptyText={t('receipt.selectMaterial')}
+          label={t('receipt.material')}
+          mode={line.material_mode}
+          newCode={line.material_code}
+          newName={line.material_name}
+          onModeChange={(mode) => onUpdate(line.id, { material_mode: mode as 'existing' | 'new', material_id: mode === 'new' ? '' : line.material_id })}
+          onNewCodeChange={(value) => onUpdate(line.id, { material_code: value })}
+          onNewNameChange={(value) => onUpdate(line.id, { material_name: value })}
+          onSelect={(value) => onChangeMaterial(line.id, value)}
+          references={materials}
+          selectedValue={line.material_id}
+          t={t}
+          typeValue={line.material_type}
+          onTypeChange={(value) => onUpdate(line.id, { material_type: value })}
+        />
+
+        <Separator />
+
+        <Field label={t('receipt.supplierLot')}>
+          <input className="input bg-white font-mono" placeholder="Введите серию" title={line.supplier_lot} value={line.supplier_lot} onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })} />
+          {line.supplier_lot && <p className="mt-2 break-words text-xs text-slate-600">{line.supplier_lot}</p>}
+        </Field>
+
+        <Separator />
+
+        <DetailReference
+          createLabel={t('receipt.createNew')}
+          emptyText={t('receipt.selectManufacturer')}
+          label={t('receipt.manufacturer')}
+          mode={line.manufacturer_mode}
+          newCode={line.manufacturer_code}
+          newName={line.manufacturer_name}
+          onModeChange={(mode) => onUpdate(line.id, { manufacturer_mode: mode as 'existing' | 'new', manufacturer_id: mode === 'new' ? '' : line.manufacturer_id })}
+          onNewCodeChange={(value) => onUpdate(line.id, { manufacturer_code: value })}
+          onNewNameChange={(value) => onUpdate(line.id, { manufacturer_name: value })}
+          onSelect={(value) => onUpdate(line.id, { manufacturer_id: value })}
+          references={manufacturers}
+          selectedValue={line.manufacturer_id}
+          t={t}
+        />
+
+        <Separator />
+
+        <DetailReference
+          allowNone
+          createLabel={t('receipt.createNew')}
+          emptyText={t('receipt.selectSupplier')}
+          label={`${t('receipt.supplier')} (${t('receipt.noSupplier').toLowerCase()})`}
+          mode={line.supplier_mode}
+          newCode={line.supplier_code}
+          newName={line.supplier_name}
+          onModeChange={(mode) => onUpdate(line.id, { supplier_mode: mode as 'existing' | 'new' | 'none', supplier_id: mode === 'new' ? '' : line.supplier_id })}
+          onNewCodeChange={(value) => onUpdate(line.id, { supplier_code: value })}
+          onNewNameChange={(value) => onUpdate(line.id, { supplier_name: value })}
+          onSelect={(value) => onUpdate(line.id, { supplier_id: value })}
+          references={suppliers}
+          selectedValue={line.supplier_id}
+          t={t}
+        />
+
+        <Separator />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t('receipt.productionDate')}><input className="input bg-white" type="date" value={line.production_date} onChange={(event) => onUpdate(line.id, { production_date: event.target.value })} /></Field>
+          <Field label={t('receipt.expiryDate')}><input className="input bg-white" type="date" value={line.expiry_date} onChange={(event) => onUpdate(line.id, { expiry_date: event.target.value })} /></Field>
+        </div>
+
+        <Separator />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t('receipt.quantity')}><input className="input bg-white" min="0" step="0.001" type="number" value={line.quantity} onChange={(event) => onUpdate(line.id, { quantity: event.target.value })} /></Field>
+          <Field label={t('common.unit')}><input className="input bg-white" value={line.unit} onChange={(event) => onUpdate(line.id, { unit: event.target.value })} /></Field>
+        </div>
+
+        <Separator />
+
+        <Field label={t('receipt.location')}>
+          <select className="input bg-white" value={line.location_id} onChange={(event) => onUpdate(line.id, { location_id: event.target.value })}>
+            <option value="">{t('receipt.selectLocation')}</option>
+            {allowedLocations.map((item) => <option key={item.id} value={item.id}>{translatedLocation(item.code, t)}</option>)}
+          </select>
+        </Field>
+      </div>
+    </div>
+  )
+}
+
+function DetailReference({
+  allowNone = false,
+  createLabel,
+  emptyText,
+  label,
+  mode,
+  newCode,
+  newName,
+  onModeChange,
+  onNewCodeChange,
+  onNewNameChange,
+  onSelect,
+  onTypeChange,
+  references,
+  selectedValue,
+  t,
+  typeValue,
+}: {
+  allowNone?: boolean
+  createLabel: string
+  emptyText: string
+  label: string
+  mode: 'existing' | 'new' | 'none'
+  newCode: string
+  newName: string
+  onModeChange: (mode: 'existing' | 'new' | 'none') => void
+  onNewCodeChange: (value: string) => void
+  onNewNameChange: (value: string) => void
+  onSelect: (value: string) => void
+  onTypeChange?: (value: string) => void
+  references: Array<MaterialItem | SupplierItem | ManufacturerItem>
+  selectedValue: string
+  t: ReturnType<typeof useI18n>['t']
+  typeValue?: string
+}) {
+  const selected = references.find((item) => item.id === selectedValue)
+  const selectedText = selected ? `${selected.code} · ${selected.name}` : ''
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-xs font-medium text-slate-600">{label}</span>
+        <button className="inline-flex h-6 items-center gap-1 rounded px-2 text-xs font-medium text-blue-700 hover:bg-blue-50" onClick={() => onModeChange(mode === 'new' ? 'existing' : 'new')} type="button">
+          <Plus className="h-3 w-3" />
+          {mode === 'new' ? t('receipt.chooseExisting') : createLabel}
+        </button>
+      </div>
+
+      {mode === 'existing' && (
+        <div className="relative">
+          <select className="input bg-white pr-8" value={selectedValue} onChange={(event) => onSelect(event.target.value)}>
+            <option value="">{emptyText}</option>
+            {references.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
+          </select>
+          <Search className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        </div>
+      )}
+      {mode === 'new' && (
+        <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-2">
+          <input className="input bg-white" placeholder={t('common.code')} value={newCode} onChange={(event) => onNewCodeChange(event.target.value)} />
+          <input className="input bg-white" placeholder={t('common.name')} value={newName} onChange={(event) => onNewNameChange(event.target.value)} />
+          {onTypeChange && <input className="input col-span-2 bg-white" placeholder={t('common.type')} value={typeValue ?? ''} onChange={(event) => onTypeChange(event.target.value)} />}
+        </div>
+      )}
+      {allowNone && (
+        <button className="mt-2 text-xs font-medium text-slate-600 hover:text-slate-900" onClick={() => onModeChange('none')} type="button">
+          {t('receipt.noSupplier')}
+        </button>
+      )}
+      {mode === 'none' && <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">{t('receipt.noSupplierSelected')}</p>}
+      {selectedText && <p className="mt-2 break-words text-xs text-slate-600">{selectedText}</p>}
+      {mode === 'new' && newName && <p className="mt-2 break-words text-xs text-slate-600">{newName}</p>}
+    </div>
+  )
+}
+
+function Separator() {
+  return <div className="h-px bg-slate-200" />
+}
+
+function displayMaterial(line: ReceiptLineForm, materials: MaterialItem[]) {
+  if (line.material_mode === 'new') {
+    return line.material_name || line.material_code
+  }
+  const material = materials.find((item) => item.id === line.material_id)
+  return material ? `${material.code} · ${material.name}` : ''
+}
+
+function displayReference(mode: 'existing' | 'new' | 'none', id: string, name: string, references: Array<SupplierItem | ManufacturerItem>) {
+  if (mode === 'none') {
+    return ''
+  }
+  if (mode === 'new') {
+    return name
+  }
+  const reference = references.find((item) => item.id === id)
+  return reference ? `${reference.code} · ${reference.name}` : ''
 }
 
 function LineTableRow({
