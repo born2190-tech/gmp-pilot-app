@@ -399,7 +399,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
                         onSelect={() => setSelectedLineId(line.id)}
                         onToggleExpand={() => toggleLineExpanded(line.id)}
                         removeDisabled={lines.length === 1}
-                        supplierName={displayReference(line.supplier_mode, line.supplier_id, line.supplier_name, suppliers)}
+                        supplierName={displaySupplier(line, suppliers, t)}
                         t={t}
                       />
                     ))}
@@ -522,7 +522,11 @@ function MaterialLineItem({
         </td>
         <td className="px-3 py-2.5">
           <div className="flex min-w-0 items-start gap-2">
-            {hasErrors && <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />}
+            {hasErrors && (
+              <span className="mt-0.5 flex-shrink-0" title={errors.join('; ')}>
+                <AlertCircle className="h-4 w-4 text-red-500" />
+              </span>
+            )}
             <div className="min-w-0">
               <div className="max-w-[280px] truncate text-sm text-slate-900" title={materialName}>
                 {materialName || <span className="italic text-slate-400">{t('receipt.materialRequired')}</span>}
@@ -530,6 +534,11 @@ function MaterialLineItem({
               {manufacturerName && (
                 <div className="max-w-[280px] truncate text-xs text-slate-500" title={manufacturerName}>
                   {manufacturerName}
+                </div>
+              )}
+              {hasErrors && (
+                <div className="mt-1 max-w-[320px] truncate text-xs text-red-600" title={errors.join('; ')}>
+                  {errors[0]}
                 </div>
               )}
             </div>
@@ -567,9 +576,14 @@ function MaterialLineItem({
       {isExpanded && (
         <tr className={`border-b border-slate-100 ${isSelected ? 'bg-blue-50' : 'bg-slate-50'}`}>
           <td className="px-3 py-3" colSpan={6}>
+            {hasErrors && (
+              <div className="mb-3 ml-8 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {errors.join('; ')}
+              </div>
+            )}
             <div className="grid gap-x-6 gap-y-2 pl-8 text-xs md:grid-cols-3">
               <ExpandedValue label={t('receipt.manufacturer')} value={manufacturerName} />
-              <ExpandedValue label={t('receipt.supplier')} value={supplierName || t('receipt.noSupplier')} />
+              <ExpandedValue label={t('receipt.supplier')} value={supplierName} />
               <ExpandedValue label={t('receipt.location')} value={locationName} />
               <ExpandedValue label={t('receipt.productionDate')} value={line.production_date} />
               <ExpandedValue label={t('receipt.supplierLot')} value={line.supplier_lot} mono />
@@ -666,7 +680,7 @@ function MaterialDetailPanel({
           mode={line.supplier_mode}
           newCode={line.supplier_code}
           newName={line.supplier_name}
-          onModeChange={(mode) => onUpdate(line.id, { supplier_mode: mode as 'existing' | 'new' | 'none', supplier_id: mode === 'new' ? '' : line.supplier_id })}
+          onModeChange={(mode) => onUpdate(line.id, { supplier_mode: mode as 'existing' | 'new' | 'none', supplier_id: mode === 'existing' ? line.supplier_id : '' })}
           onCreateNew={() => onCreateNew('supplier', line.id)}
           onSelect={(value) => onUpdate(line.id, { supplier_id: value })}
           referenceType="supplier"
@@ -849,6 +863,13 @@ function displayReference(mode: 'existing' | 'new' | 'none', id: string, name: s
   }
   const reference = references.find((item) => item.id === id)
   return reference ? `${reference.code} · ${reference.name}` : ''
+}
+
+function displaySupplier(line: ReceiptLineForm, suppliers: SupplierItem[], t: ReturnType<typeof useI18n>['t']) {
+  if (line.supplier_mode === 'none') {
+    return t('receipt.noSupplier')
+  }
+  return displayReference(line.supplier_mode, line.supplier_id, line.supplier_name, suppliers)
 }
 
 function displayLocation(locationId: string, locations: LocationItem[], t: ReturnType<typeof useI18n>['t']) {
