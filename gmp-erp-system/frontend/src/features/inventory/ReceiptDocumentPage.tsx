@@ -236,10 +236,12 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
             </span>
           </div>
         </div>
-        <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-          <p className="text-xs uppercase text-slate-500">{t('receipt.warehouse')}</p>
-          <p className="font-medium text-slate-950">{selectedWarehouse?.name ?? t('receipt.selectWarehouse')}</p>
-        </div>
+        {!user.warehouse_scope && (
+          <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            <p className="text-xs uppercase text-slate-500">{t('receipt.warehouse')}</p>
+            <p className="font-medium text-slate-950">{selectedWarehouse?.name ?? t('receipt.selectWarehouse')}</p>
+          </div>
+        )}
       </div>
 
       {!masterDataReady && <Alert tone="warning">{t('receipt.masterDataIncomplete')}</Alert>}
@@ -268,12 +270,6 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
                   {warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </Field>
-            )}
-            {user.warehouse_scope && (
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-xs uppercase text-slate-500">{t('receipt.warehouse')}</p>
-                <p className="text-sm font-medium text-slate-950">{selectedWarehouse?.name ?? t('receipt.substanceWarehouse')}</p>
-              </div>
             )}
           </div>
         </SectionBlock>
