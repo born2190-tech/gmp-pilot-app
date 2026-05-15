@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef, Row, SortingFn } from '@tanstack/react-table'
 import { DataTable } from '../../components/table/DataTable'
 import { listLots, listMovements } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
@@ -66,6 +66,21 @@ function uniqueValues(values: string[]) {
 function formatSeries(value: string) {
   const series = String(value || '').trim()
   return series || '-'
+}
+
+// Sort strings by Russian alphabet (А-Я, Ё after Е), case-insensitive, with
+// natural numeric ordering so "Серия 2" precedes "Серия 10".
+// Default TanStack sort uses raw Unicode code points → Cyrillic ends up after
+// Latin and Ё lands far from Е.
+const ruCollator = new Intl.Collator('ru', { sensitivity: 'base', numeric: true })
+function ruStringSort<T>(rowA: Row<T>, rowB: Row<T>, columnId: string): number {
+  const a = String(rowA.getValue(columnId) ?? '').trim()
+  const b = String(rowB.getValue(columnId) ?? '').trim()
+  // Empty values to the bottom regardless of direction.
+  if (!a && !b) return 0
+  if (!a) return 1
+  if (!b) return -1
+  return ruCollator.compare(a, b)
 }
 
 function movementTypeToTranslationKey(movementType: string) {
@@ -157,13 +172,21 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
         accessorKey: 'internal_lot',
         header: t('registry.internalLot'),
         cell: ({ row }) => formatSeries(row.original.internal_lot),
+        sortingFn: ruStringSort as SortingFn<LotItem>,
+        sortUndefined: 'last',
       },
       {
         id: 'material',
         header: t('registry.material'),
+        accessorFn: (row) => `${row.material_code} · ${row.material_name}`,
         cell: ({ row }) => `${row.original.material_code} · ${row.original.material_name}`,
+        sortingFn: ruStringSort as SortingFn<LotItem>,
       },
-      { accessorKey: 'manufacturer_name', header: t('registry.manufacturer') },
+      {
+        accessorKey: 'manufacturer_name',
+        header: t('registry.manufacturer'),
+        sortingFn: ruStringSort as SortingFn<LotItem>,
+      },
       {
         accessorKey: 'location_code',
         header: t('registry.location'),
@@ -230,13 +253,15 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
         accessorKey: 'material_name',
         header: t('common.name'),
         cell: ({ row }) => row.original.material_name?.trim() || '-',
+        sortingFn: ruStringSort as SortingFn<MovementItem>,
       },
       {
         accessorKey: 'internal_lot',
         header: t('registry.internalLot'),
         cell: ({ row }) => formatSeries(row.original.internal_lot),
+        sortingFn: ruStringSort as SortingFn<MovementItem>,
       },
-      { accessorKey: 'material_code', header: t('common.code') },
+      { accessorKey: 'material_code', header: t('common.code'), sortingFn: ruStringSort as SortingFn<MovementItem> },
       {
         id: 'delta',
         header: t('registry.delta'),
