@@ -26,11 +26,42 @@ def get_lot(db: Session, lot_id: UUID) -> Lot:
     return lot
 
 
+def _require_verified_notification(db: Session, lot: Lot) -> None:
+    """Block QC start until the Ф-14 notification for this lot is verified.
+
+    Only enforced for the substance warehouse — packaging and FG flows use
+    different incoming-control procedures and don't have a Ф-14.
+    """
+    warehouse = db.get(Warehouse, lot.warehouse_id)
+    if not warehouse or warehouse.warehouse_type != "SUBSTANCE_WAREHOUSE":
+        return
+    has_verified = (
+        db.query(QCNotificationLine.id)
+        .join(QCNotification, QCNotification.id == QCNotificationLine.notification_id)
+        .filter(QCNotificationLine.lot_id == lot.id, QCNotification.status == "verified")
+        .first()
+    )
+    if not has_verified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "QC analysis can be started only after the wet-ink-signed Ф-14 "
+                "notification has been uploaded by ДКК and verified by ДОК."
+            ),
+        )
+
+
 def sample_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: SampleLotRequest) -> Lot:
     require_permission(user, "ENTER_QC_RESULT")
     lot = get_lot(db, lot_id)
     if lot.quality_status != "quarantine":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only quarantine lots can be sampled")
+
+    # GMP gate (hybrid stage, СОП-209): a lot from the substance warehouse
+    # can only be sampled after a Ф-14 notification has been printed, signed
+    # in wet ink and the scan verified by ДОК. Without a verified scan the
+    # chain of custody is broken and QC analysis must not start.
+    _require_verified_notification(db, lot)
 
     old_status = lot.quality_status
     lot.quality_status = "sampled"

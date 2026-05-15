@@ -1,21 +1,32 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  CheckCircle2,
   ChevronDown,
   ClipboardCheck,
   Eye,
+  FileCheck2,
   Inbox,
   Printer,
   RefreshCw,
   Search,
+  Upload,
 } from 'lucide-react'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
-import { downloadQcNotificationPdf, listQcNotifications } from '../../lib/api'
-import type { QCNotificationItem } from '../../types/inventory'
+import {
+  downloadQcNotificationPdf,
+  downloadQcNotificationScan,
+  listQcNotifications,
+  listQcNotificationScans,
+  uploadQcNotificationScan,
+} from '../../lib/api'
+import type { CurrentUser } from '../../types/auth'
+import type { QCNotificationItem, QCNotificationScanItem } from '../../types/inventory'
 
 interface QCNotificationsPageProps {
   token: string
+  user: CurrentUser
 }
 
 function formatDateTime(value: string, locale: string) {
@@ -33,8 +44,9 @@ function warehouseLabel(type: string, t: Translate): string {
   return type
 }
 
-export function QCNotificationsPage({ token }: QCNotificationsPageProps) {
+export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
   const { locale, t } = useI18n()
+  const canUpload = user.permissions.includes('UPLOAD_QC_SCAN')
   const [notifications, setNotifications] = useState<QCNotificationItem[]>([])
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -294,6 +306,8 @@ export function QCNotificationsPage({ token }: QCNotificationsPageProps) {
                             notification={n}
                             locale={locale}
                             t={t}
+                            token={token}
+                            canUpload={canUpload}
                             onPrint={() => handlePrint(n.id)}
                             onView={() => handleView(n.id)}
                           />
@@ -314,11 +328,13 @@ interface ExpandedFormProps {
   notification: QCNotificationItem
   locale: string
   t: Translate
+  token: string
+  canUpload: boolean
   onPrint: () => void
   onView: () => void
 }
 
-function ExpandedForm({ notification: n, locale, t, onPrint, onView }: ExpandedFormProps) {
+function ExpandedForm({ notification: n, locale, t, token, canUpload, onPrint, onView }: ExpandedFormProps) {
   return (
     <div className="px-5 py-5">
       <div className="relative rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -427,6 +443,8 @@ function ExpandedForm({ notification: n, locale, t, onPrint, onView }: ExpandedF
           </div>
         </div>
 
+        <ScansSection notification={n} t={t} locale={locale} token={token} canUpload={canUpload} />
+
         <div className="mt-2 flex items-center justify-between border-t border-slate-200 px-5 py-3 text-[11px] text-slate-500">
           <span>{t('qcNotifications.formFootnote')}</span>
           <span className="font-mono">DOC-ID {n.id.toUpperCase()}</span>
@@ -450,5 +468,196 @@ function MetaCell({ label, value, mono }: MetaCellProps) {
         {value}
       </dd>
     </div>
+  )
+}
+
+// ─── Scans section (ДКК upload + visibility for everyone with QC/QA access) ──
+
+interface ScansSectionProps {
+  notification: QCNotificationItem
+  locale: string
+  t: Translate
+  token: string
+  canUpload: boolean
+}
+
+function ScansSection({ notification, locale, t, token, canUpload }: ScansSectionProps) {
+  const [scans, setScans] = useState<QCNotificationScanItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const reload = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await listQcNotificationScans(token, notification.id)
+      setScans(response.scans)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('qcNotifications.scans.loadFailed'))
+    } finally {
+      setLoading(false)
+    }
+  }, [notification.id, t, token])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  async function handleFile(file: File | null) {
+    if (!file) return
+    if (file.type !== 'application/pdf') {
+      setError(t('qcNotifications.scans.onlyPdf'))
+      return
+    }
+    setUploading(true)
+    setError(null)
+    try {
+      await uploadQcNotificationScan(token, notification.id, file)
+      await reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('qcNotifications.scans.uploadFailed'))
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  async function viewScan(scanId: string) {
+    try {
+      const blob = await downloadQcNotificationScan(token, scanId)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('qcNotifications.scans.loadFailed'))
+    }
+  }
+
+  const verifiedScan = scans.find((scan) => scan.status === 'verified')
+  const pendingScan = scans.find((scan) => scan.status === 'pending_verification')
+
+  return (
+    <div className="border-t border-slate-200 px-5 pb-3 pt-4">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileCheck2 size={16} className="text-slate-600" />
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-slate-700">
+            {t('qcNotifications.scans.title')}
+          </h3>
+          {verifiedScan ? (
+            <span className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <CheckCircle2 size={12} />
+              {t('qcNotifications.scans.verified')}
+            </span>
+          ) : pendingScan ? (
+            <span className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+              <AlertTriangle size={12} />
+              {t('qcNotifications.scans.pendingVerification')}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+              {t('qcNotifications.scans.notUploaded')}
+            </span>
+          )}
+        </div>
+        {canUpload && (
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
+            />
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <Upload size={13} />
+              {uploading ? t('qcNotifications.scans.uploading') : t('qcNotifications.scans.upload')}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {canUpload && (
+        <p className="mb-2 text-[11px] text-slate-500">{t('qcNotifications.scans.uploadHint')}</p>
+      )}
+
+      {error && (
+        <div className="mb-2 flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12px] text-rose-800">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="py-2 text-[12px] text-slate-500">{t('common.loadingRecords')}</p>
+      ) : scans.length === 0 ? (
+        <p className="py-2 text-[12px] text-slate-500">{t('qcNotifications.scans.empty')}</p>
+      ) : (
+        <div className="overflow-hidden rounded-md border border-slate-200">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                <th className="w-12 px-3 py-2 text-center">v</th>
+                <th className="px-3 py-2">{t('qcNotifications.scans.uploadedAt')}</th>
+                <th className="px-3 py-2">{t('common.status')}</th>
+                <th className="px-3 py-2">{t('qcNotifications.scans.fileSize')}</th>
+                <th className="px-3 py-2">{t('qcNotifications.scans.verifiedAt')}</th>
+                <th className="px-3 py-2 text-right">{t('common.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scans.map((scan) => (
+                <tr key={scan.id} className="border-b border-slate-100 last:border-b-0">
+                  <td className="px-3 py-2 text-center font-mono tabular-nums text-slate-500">{scan.version}</td>
+                  <td className="px-3 py-2 tabular-nums text-slate-700">{formatDateTime(scan.uploaded_at, locale)}</td>
+                  <td className="px-3 py-2">
+                    <ScanStatusBadge status={scan.status} t={t} />
+                  </td>
+                  <td className="px-3 py-2 font-mono tabular-nums text-slate-600">{(scan.file_size / 1024).toFixed(1)} KB</td>
+                  <td className="px-3 py-2 tabular-nums text-slate-700">
+                    {scan.verified_at ? formatDateTime(scan.verified_at, locale) : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => viewScan(scan.id)}
+                      className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <Eye size={12} />
+                      {t('qcNotifications.scans.view')}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ScanStatusBadge({ status, t }: { status: string; t: Translate }) {
+  const styles: Record<string, string> = {
+    pending_verification: 'border-amber-200 bg-amber-50 text-amber-700',
+    verified: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    rejected: 'border-rose-200 bg-rose-50 text-rose-700',
+  }
+  const labels: Record<string, string> = {
+    pending_verification: t('qcNotifications.scans.statusPending'),
+    verified: t('qcNotifications.scans.statusVerified'),
+    rejected: t('qcNotifications.scans.statusRejected'),
+  }
+  return (
+    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${styles[status] ?? styles.pending_verification}`}>
+      {labels[status] ?? status}
+    </span>
   )
 }

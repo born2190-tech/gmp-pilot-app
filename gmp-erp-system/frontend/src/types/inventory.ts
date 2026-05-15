@@ -132,6 +132,67 @@ export interface QCNotificationCreate {
   reason?: string | null
 }
 
+export interface QCNotificationScanItem {
+  id: string
+  notification_id: string
+  version: number
+  file_size: number
+  mime_type: string
+  sha256_hash: string
+  status: 'pending_verification' | 'verified' | 'rejected'
+  uploaded_at: string
+  uploaded_by: string
+  verified_at: string | null
+  verified_by: string | null
+  signature_warehouse_ok: boolean | null
+  signature_qc_ok: boolean | null
+  signature_manager_ok: boolean | null
+  remarks: string | null
+}
+
+export interface QCNotificationScansResponse {
+  notification_id: string
+  notification_no: string
+  notification_status: string
+  scans: QCNotificationScanItem[]
+}
+
+export interface QCScanVerifyRequest {
+  signature_warehouse_ok: boolean
+  signature_qc_ok: boolean
+  signature_manager_ok: boolean
+  remarks?: string | null
+  username: string
+  password: string
+  meaning: string
+  reason?: string | null
+}
+
+export interface QCScanRejectRequest {
+  remarks: string
+  username: string
+  password: string
+  meaning: string
+  reason?: string | null
+}
+
+export interface QCPendingScanItem {
+  scan_id: string
+  notification_id: string
+  notification_no: string
+  warehouse_type: string
+  notified_at: string
+  uploaded_at: string
+  uploaded_by: string
+  uploaded_by_name: string | null
+  version: number
+  lines_count: number
+}
+
+export interface QCPendingScansResponse {
+  scans: QCPendingScanItem[]
+}
+
 export interface SampleLotRequest {
   reason: string
 }

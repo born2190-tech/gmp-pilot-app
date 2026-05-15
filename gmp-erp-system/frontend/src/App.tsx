@@ -13,6 +13,7 @@ import { WarehouseOperationsPage } from './features/inventory/WarehouseOperation
 import { RequisitionsPage } from './features/inventory/RequisitionsPage'
 import { MasterDataPage } from './features/master-data/MasterDataPage'
 import { QualityBoardPage } from './features/quality/QualityBoardPage'
+import { QCScanVerificationPage } from './features/quality/QCScanVerificationPage'
 import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
 import { login, logout, me } from './lib/api'
 import { getVisibleNavItems } from './lib/permissions'
@@ -101,7 +102,7 @@ export function App() {
     ) : route === 'inventory-counts' ? (
       <InventoryCountPage token={token} user={user} />
     ) : route === 'qc-notifications' ? (
-      <QCNotificationsPage token={token} />
+      <QCNotificationsPage token={token} user={user} />
     ) : route === 'receipt-documents' ? (
       <ReceiptDocumentPage token={token} user={user} username={user.username} />
     ) : route === 'master-data' ? (
@@ -110,6 +111,8 @@ export function App() {
       <QualityBoardPage mode="qc" token={token} user={user} />
     ) : route === 'qa-decisions' ? (
       <QualityBoardPage mode="qa" token={token} user={user} />
+    ) : route === 'qa-scan-verification' ? (
+      <QCScanVerificationPage token={token} user={user} />
     ) : (
       <WarehouseDashboard user={user} />
     )

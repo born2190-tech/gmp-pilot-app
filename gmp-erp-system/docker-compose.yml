@@ -23,8 +23,13 @@ services:
     environment:
       GMP_DATABASE_URL: postgresql+psycopg://gmp_user:gmp_pass@postgres:5432/gmp_erp
       GMP_SECRET_KEY: dev-change-me
+      GMP_QC_SCAN_ROOT: /data/qc-scans
     ports:
       - "8002:8000"
+    volumes:
+      # GMP true-copy scans of signed Ф-14 notifications. On-prem deploy: bind
+      # this to a backed-up disk on the factory server. Pilot uses a named volume.
+      - gmp_erp_qc_scans:/data/qc-scans
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,3 +46,4 @@ services:
 
 volumes:
   gmp_erp_postgres_data:
+  gmp_erp_qc_scans:

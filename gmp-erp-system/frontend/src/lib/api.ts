@@ -21,6 +21,11 @@ import type {
   QCNotificationCreate,
   QCNotificationItem,
   QCNotificationsResponse,
+  QCNotificationScanItem,
+  QCNotificationScansResponse,
+  QCPendingScansResponse,
+  QCScanRejectRequest,
+  QCScanVerifyRequest,
   QADecisionRequest,
   QCResultRequest,
   QCReportCreate,
@@ -216,6 +221,54 @@ export async function downloadQcNotificationPdf(token: string, notificationId: s
     throw new Error(`HTTP ${response.status}`)
   }
   return response.blob()
+}
+
+export function listQcNotificationScans(token: string, notificationId: string): Promise<QCNotificationScansResponse> {
+  return request<QCNotificationScansResponse>(`/api/inventory/qc-notifications/${notificationId}/scans`, 'GET', { token })
+}
+
+export async function uploadQcNotificationScan(token: string, notificationId: string, file: File): Promise<QCNotificationScanItem> {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  const response = await fetch(`/api/inventory/qc-notifications/${notificationId}/scans`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`
+    try {
+      const payload = await response.json()
+      if (typeof payload.detail === 'string') detail = payload.detail
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail)
+  }
+  return (await response.json()) as QCNotificationScanItem
+}
+
+export async function downloadQcNotificationScan(token: string, scanId: string): Promise<Blob> {
+  const response = await fetch(`/api/inventory/qc-notifications/scans/${scanId}/file`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.blob()
+}
+
+export function listPendingQcScans(token: string): Promise<QCPendingScansResponse> {
+  return request<QCPendingScansResponse>('/api/inventory/qc-notifications/scans/pending', 'GET', { token })
+}
+
+export function verifyQcScan(token: string, scanId: string, payload: QCScanVerifyRequest): Promise<QCNotificationScanItem> {
+  return request<QCNotificationScanItem>(`/api/inventory/qc-notifications/scans/${scanId}/verify`, 'POST', { token, body: payload })
+}
+
+export function rejectQcScan(token: string, scanId: string, payload: QCScanRejectRequest): Promise<QCNotificationScanItem> {
+  return request<QCNotificationScanItem>(`/api/inventory/qc-notifications/scans/${scanId}/reject`, 'POST', { token, body: payload })
 }
 
 export function listQaLots(token: string): Promise<QualityLotsResponse> {

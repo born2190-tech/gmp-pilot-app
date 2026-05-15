@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.qcTasks', section: 'qc', permission: 'VIEW_QC', route: 'qc-tasks' },
   { labelKey: 'nav.qcNotifications', section: 'qc', permission: 'VIEW_QC', route: 'qc-notifications' },
   { labelKey: 'nav.qaDecisions', section: 'qa', permission: 'VIEW_QA', route: 'qa-decisions' },
+  { labelKey: 'nav.qaScanVerification', section: 'qa', permission: 'VERIFY_QC_SCAN', route: 'qa-scan-verification' },
   { labelKey: 'nav.productionOrders', section: 'production', permission: 'VIEW_PRODUCTION', route: 'production-orders' },
   { labelKey: 'nav.requisitions', section: 'production', permission: 'VIEW_PRODUCTION', route: 'requisitions' },
   { labelKey: 'nav.bmr', section: 'production', permission: 'EXECUTE_BMR', route: 'bmr' },

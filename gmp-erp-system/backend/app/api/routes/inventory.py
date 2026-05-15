@@ -2,7 +2,7 @@ from datetime import date
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from sqlalchemy import String, cast, func, literal, or_
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,8 @@ from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.models.quality import QCNotification, QCNotificationLine, QCReport
+from app.models.identity import User
+from app.models.quality import QCNotification, QCNotificationLine, QCNotificationScan, QCReport
 from app.schemas.inventory import (
     AdjustLotRequest,
     FGShipmentCreate,
@@ -31,10 +32,30 @@ from app.schemas.inventory import (
     SignatureRequest,
     TransferLotRequest,
 )
-from app.schemas.quality import QCNotificationCreate, QCNotificationItem, QCNotificationLineItem
+from app.schemas.quality import (
+    QCNotificationCreate,
+    QCNotificationItem,
+    QCNotificationLineItem,
+    QCNotificationScanItem,
+    QCNotificationScansResponse,
+    QCPendingScanItem,
+    QCPendingScansResponse,
+    QCScanRejectRequest,
+    QCScanVerifyRequest,
+)
 from app.services.inventory import adjust_lot, create_fg_shipment, create_inventory_count, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
 from app.services.permissions import require_permission
 from app.services.qc_notification_pdf import render_qc_notification_pdf
+from app.services.qc_notification_scans import (
+    compute_state_hash,
+    list_scans,
+    load_scan_file,
+    make_qr_payload,
+    record_print_event,
+    reject_scan,
+    upload_scan,
+    verify_scan,
+)
 from app.services.quality import create_qc_notification, get_qc_notification
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
@@ -456,7 +477,11 @@ def qc_notification_pdf_route(
         .order_by(QCNotificationLine.created_at)
         .all()
     )
-    pdf_bytes = render_qc_notification_pdf(notification, warehouse, lines)
+    state_hash = notification.state_hash or compute_state_hash(notification, lines)
+    qr_payload = make_qr_payload(notification.id, state_hash)
+    pdf_bytes = render_qc_notification_pdf(notification, warehouse, lines, qr_payload=qr_payload)
+    # Record first-print event — moves status created → printed, stamps user/time.
+    record_print_event(db, current_user, notification, state_hash)
     # Notification numbers may contain non-ASCII (e.g. "№"); HTTP headers are
     # latin-1 only, so use RFC 5987 filename* with a sanitised ASCII fallback.
     raw_name = f"izveshchenie-{notification.notification_no}.pdf"
@@ -471,3 +496,160 @@ def qc_notification_pdf_route(
             )
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# QC notification scans (Ф-14 true-copy chain of custody)
+# ---------------------------------------------------------------------------
+
+
+def _scan_item(scan: QCNotificationScan) -> QCNotificationScanItem:
+    return QCNotificationScanItem.model_validate(scan)
+
+
+@router.post(
+    "/qc-notifications/{notification_id}/scans",
+    response_model=QCNotificationScanItem,
+    status_code=201,
+)
+async def upload_qc_scan_route(
+    notification_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCNotificationScanItem:
+    scan = await upload_scan(db, current_user, notification_id, file)
+    return _scan_item(scan)
+
+
+@router.get(
+    "/qc-notifications/{notification_id}/scans",
+    response_model=QCNotificationScansResponse,
+)
+def list_qc_scans_route(
+    notification_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCNotificationScansResponse:
+    scans = list_scans(db, current_user, notification_id)
+    notification = db.get(QCNotification, notification_id)
+    return QCNotificationScansResponse(
+        notification_id=notification.id,
+        notification_no=notification.notification_no,
+        notification_status=notification.status,
+        scans=[_scan_item(scan) for scan in scans],
+    )
+
+
+@router.get("/qc-notifications/scans/{scan_id}/file")
+def download_qc_scan_route(
+    scan_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    scan, blob = load_scan_file(db, current_user, scan_id)
+    raw_name = f"qc-scan-{scan.notification_id}-v{scan.version}.pdf"
+    return Response(
+        content=blob,
+        media_type=scan.mime_type or "application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{raw_name}"; '
+                f"filename*=UTF-8''{quote(raw_name)}"
+            )
+        },
+    )
+
+
+@router.post(
+    "/qc-notifications/scans/{scan_id}/verify",
+    response_model=QCNotificationScanItem,
+)
+def verify_qc_scan_route(
+    scan_id: UUID,
+    payload: QCScanVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCNotificationScanItem:
+    scan = verify_scan(
+        db,
+        current_user,
+        scan_id,
+        signature_warehouse_ok=payload.signature_warehouse_ok,
+        signature_qc_ok=payload.signature_qc_ok,
+        signature_manager_ok=payload.signature_manager_ok,
+        remarks=payload.remarks,
+        username=payload.username,
+        password=payload.password,
+        meaning=payload.meaning,
+        reason=payload.reason,
+    )
+    return _scan_item(scan)
+
+
+@router.post(
+    "/qc-notifications/scans/{scan_id}/reject",
+    response_model=QCNotificationScanItem,
+)
+def reject_qc_scan_route(
+    scan_id: UUID,
+    payload: QCScanRejectRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCNotificationScanItem:
+    scan = reject_scan(
+        db,
+        current_user,
+        scan_id,
+        remarks=payload.remarks,
+        username=payload.username,
+        password=payload.password,
+        meaning=payload.meaning,
+        reason=payload.reason,
+    )
+    return _scan_item(scan)
+
+
+@router.get(
+    "/qc-notifications/scans/pending",
+    response_model=QCPendingScansResponse,
+)
+def list_pending_qc_scans_route(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCPendingScansResponse:
+    """Queue for ДОК — all scans waiting for wet-ink signature verification."""
+    require_permission(current_user, "VERIFY_QC_SCAN")
+    rows = (
+        db.query(
+            QCNotificationScan.id.label("scan_id"),
+            QCNotificationScan.notification_id,
+            QCNotification.notification_no,
+            Warehouse.warehouse_type,
+            QCNotification.notified_at,
+            QCNotificationScan.uploaded_at,
+            QCNotificationScan.uploaded_by,
+            User.full_name.label("uploaded_by_name"),
+            QCNotificationScan.version,
+            func.count(QCNotificationLine.id).label("lines_count"),
+        )
+        .join(QCNotification, QCNotification.id == QCNotificationScan.notification_id)
+        .join(Warehouse, Warehouse.id == QCNotification.warehouse_id)
+        .outerjoin(QCNotificationLine, QCNotificationLine.notification_id == QCNotification.id)
+        .outerjoin(User, User.id == QCNotificationScan.uploaded_by)
+        .filter(QCNotificationScan.status == "pending_verification")
+        .group_by(
+            QCNotificationScan.id,
+            QCNotificationScan.notification_id,
+            QCNotification.notification_no,
+            Warehouse.warehouse_type,
+            QCNotification.notified_at,
+            QCNotificationScan.uploaded_at,
+            QCNotificationScan.uploaded_by,
+            User.full_name,
+            QCNotificationScan.version,
+        )
+        .order_by(QCNotificationScan.uploaded_at.asc())
+        .all()
+    )
+    return QCPendingScansResponse(scans=[QCPendingScanItem.model_validate(row) for row in rows])

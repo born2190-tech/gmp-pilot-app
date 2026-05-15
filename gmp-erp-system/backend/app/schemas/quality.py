@@ -78,6 +78,72 @@ class QCNotificationCreate(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class QCNotificationScanItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    notification_id: UUID
+    version: int
+    file_size: int
+    mime_type: str
+    sha256_hash: str
+    status: str
+    uploaded_at: datetime
+    uploaded_by: UUID
+    verified_at: datetime | None
+    verified_by: UUID | None
+    signature_warehouse_ok: bool | None
+    signature_qc_ok: bool | None
+    signature_manager_ok: bool | None
+    remarks: str | None
+
+
+class QCNotificationScansResponse(BaseModel):
+    notification_id: UUID
+    notification_no: str
+    notification_status: str
+    scans: list[QCNotificationScanItem]
+
+
+class QCScanVerifyRequest(BaseModel):
+    signature_warehouse_ok: bool
+    signature_qc_ok: bool
+    signature_manager_ok: bool
+    remarks: str | None = Field(default=None, max_length=1000)
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    meaning: str = Field(min_length=1)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class QCScanRejectRequest(BaseModel):
+    remarks: str = Field(min_length=1, max_length=1000)
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    meaning: str = Field(min_length=1)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class QCPendingScanItem(BaseModel):
+    """Row shown on the ДОК verification queue."""
+    model_config = ConfigDict(from_attributes=True)
+
+    scan_id: UUID
+    notification_id: UUID
+    notification_no: str
+    warehouse_type: str
+    notified_at: datetime
+    uploaded_at: datetime
+    uploaded_by: UUID
+    uploaded_by_name: str | None
+    version: int
+    lines_count: int
+
+
+class QCPendingScansResponse(BaseModel):
+    scans: list[QCPendingScanItem]
+
+
 class QCReportParameterCreate(BaseModel):
     parameter_name: str = Field(min_length=1, max_length=255)
     specification: str = Field(min_length=1)

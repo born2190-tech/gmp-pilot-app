@@ -85,10 +85,32 @@ def _format_qty(value: float) -> str:
     return f"{value:.3f}".rstrip("0").rstrip(".")
 
 
+def _make_qr_image(payload: str, size_mm: float = 22.0) -> Image | None:
+    """Render a QR code as a reportlab Image, or None if qrcode is missing."""
+    try:
+        import qrcode  # type: ignore
+    except ImportError:
+        return None
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=8,
+        border=1,
+    )
+    qr.add_data(payload)
+    qr.make(fit=True)
+    pil_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    buf = io.BytesIO()
+    pil_img.save(buf, format="PNG")
+    buf.seek(0)
+    return Image(buf, width=size_mm * mm, height=size_mm * mm)
+
+
 def render_qc_notification_pdf(
     notification: QCNotification,
     warehouse: Warehouse,
     lines: list[QCNotificationLine],
+    qr_payload: str | None = None,
 ) -> bytes:
     body_font, bold_font = _register_fonts()
     buffer = io.BytesIO()
@@ -154,7 +176,37 @@ def render_qc_notification_pdf(
     elements.append(Spacer(1, 4 * mm))
 
     # --- caption + notification number -------------------------------------
-    elements.append(Paragraph(f"ИЗВЕЩЕНИЕ № {notification.notification_no}", title_style))
+    # QR code with notification id + state hash — used by ДКК to attach the
+    # signed scan back to the right record and detect content tampering
+    # between print and signature collection.
+    qr_image = _make_qr_image(qr_payload) if qr_payload else None
+
+    if qr_image is not None:
+        title_with_qr = Table(
+            [
+                [
+                    Paragraph(f"ИЗВЕЩЕНИЕ № {notification.notification_no}", title_style),
+                    qr_image,
+                ],
+            ],
+            colWidths=[150 * mm, 30 * mm],
+        )
+        title_with_qr.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (0, 0), "MIDDLE"),
+                    ("VALIGN", (1, 0), (1, 0), "TOP"),
+                    ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]
+            )
+        )
+        elements.append(title_with_qr)
+    else:
+        elements.append(Paragraph(f"ИЗВЕЩЕНИЕ № {notification.notification_no}", title_style))
     elements.append(Spacer(1, 3 * mm))
 
     notified_str = notification.notified_at.strftime("%d.%m.%Y")

@@ -20,6 +20,8 @@ RUN pip install --no-cache-dir \
     "passlib[bcrypt]>=1.7" \
     "python-jose[cryptography]>=3.3" \
     "reportlab>=4.2" \
+    "qrcode[pil]>=7.4" \
+    "python-multipart>=0.0.9" \
     "httpx>=0.27"
 
 COPY . .
