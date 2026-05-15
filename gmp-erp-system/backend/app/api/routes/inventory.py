@@ -1,4 +1,5 @@
 from datetime import date
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -456,9 +457,17 @@ def qc_notification_pdf_route(
         .all()
     )
     pdf_bytes = render_qc_notification_pdf(notification, warehouse, lines)
-    filename = f"izveshchenie-{notification.notification_no}.pdf"
+    # Notification numbers may contain non-ASCII (e.g. "№"); HTTP headers are
+    # latin-1 only, so use RFC 5987 filename* with a sanitised ASCII fallback.
+    raw_name = f"izveshchenie-{notification.notification_no}.pdf"
+    ascii_fallback = raw_name.encode("ascii", "replace").decode("ascii").replace("?", "_")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{ascii_fallback}"; '
+                f"filename*=UTF-8''{quote(raw_name)}"
+            )
+        },
     )
