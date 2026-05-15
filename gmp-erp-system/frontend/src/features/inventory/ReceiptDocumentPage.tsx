@@ -100,6 +100,8 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   const [isLoading, setIsLoading] = useState(false)
   const [createReferenceDialog, setCreateReferenceDialog] = useState<CreateReferenceDialogState | null>(null)
   const [referenceDraft, setReferenceDraft] = useState({ code: '', name: '', item_type: 'raw_material' })
+  const [notificationDialogOpen, setNotificationDialogOpen] = useState(false)
+  const [notificationDraftNo, setNotificationDraftNo] = useState('')
 
   const form = useForm<ReceiptForm>({
     defaultValues: {
@@ -269,25 +271,44 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
     setError(null)
   }
 
-  async function handleCreateAndPrintNotification() {
+  async function submitNotificationNumber(notificationNo: string) {
     if (!postedSummary) return
     setError(null)
     setIsLoading(true)
     try {
       const notification = await createQcNotification(token, {
         receipt_id: postedSummary.receiptId,
+        notification_no: notificationNo,
         reason: t('receipt.defaultReason'),
       })
       setPostedSummary({ ...postedSummary, notificationId: notification.id, notificationNo: notification.notification_no })
+      setNotificationDialogOpen(false)
+      setNotificationDraftNo('')
+      // Open print dialog directly via hidden iframe so the operator can send
+      // the form to the printer in one click — same flow as on the QC page.
       const blob = await downloadQcNotificationPdf(token, notification.id)
       const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `izveshchenie-${notification.notification_no}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
+      const iframe = document.createElement('iframe')
+      iframe.style.position = 'fixed'
+      iframe.style.right = '0'
+      iframe.style.bottom = '0'
+      iframe.style.width = '0'
+      iframe.style.height = '0'
+      iframe.style.border = '0'
+      iframe.src = url
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow?.focus()
+          iframe.contentWindow?.print()
+        } catch {
+          /* swallow */
+        }
+        window.setTimeout(() => {
+          iframe.remove()
+          URL.revokeObjectURL(url)
+        }, 60_000)
+      }
+      document.body.appendChild(iframe)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('qcNotifications.createFailed'))
     } finally {
@@ -387,7 +408,14 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
             </div>
             <div className="flex flex-wrap gap-2">
               {postedSummary.warehouseType === 'SUBSTANCE_WAREHOUSE' && !postedSummary.notificationId && (
-                <Button type="button" onClick={handleCreateAndPrintNotification} disabled={isLoading}>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setNotificationDraftNo('')
+                    setNotificationDialogOpen(true)
+                  }}
+                  disabled={isLoading}
+                >
                   {t('qcNotifications.create')}
                 </Button>
               )}
@@ -518,7 +546,76 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         t={t}
         type={createReferenceDialog?.type ?? 'material'}
       />
+      <NotificationNumberDialog
+        open={notificationDialogOpen}
+        value={notificationDraftNo}
+        onChange={setNotificationDraftNo}
+        onClose={() => setNotificationDialogOpen(false)}
+        onSubmit={() => {
+          const v = notificationDraftNo.trim()
+          if (v) void submitNotificationNumber(v)
+        }}
+        loading={isLoading}
+        t={t}
+      />
     </section>
+  )
+}
+
+function NotificationNumberDialog({
+  open,
+  value,
+  onChange,
+  onClose,
+  onSubmit,
+  loading,
+  t,
+}: {
+  open: boolean
+  value: string
+  onChange: (value: string) => void
+  onClose: () => void
+  onSubmit: () => void
+  loading: boolean
+  t: ReturnType<typeof useI18n>['t']
+}) {
+  if (!open) return null
+  const canSave = Boolean(value.trim()) && !loading
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+      <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-xl">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <h2 className="text-lg font-semibold text-slate-950">{t('qcNotifications.numberDialogTitle')}</h2>
+          <p className="mt-1 text-sm text-slate-600">{t('qcNotifications.numberDialogHint')}</p>
+        </div>
+        <div className="px-6 py-5">
+          <Field label={t('qcNotifications.notificationNo')}>
+            <input
+              autoFocus
+              className="input bg-slate-50 font-mono"
+              placeholder={t('qcNotifications.numberDialogPlaceholder')}
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && canSave) {
+                  event.preventDefault()
+                  onSubmit()
+                }
+              }}
+              maxLength={64}
+            />
+          </Field>
+        </div>
+        <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="button" disabled={!canSave} onClick={onSubmit}>
+            {loading ? t('receipt.posting') : t('qcNotifications.create')}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 

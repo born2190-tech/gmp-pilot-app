@@ -331,7 +331,7 @@ function ExpandedForm({ notification: n, locale, t, onPrint, onView }: ExpandedF
               {t('qcNotifications.formCaption')}
             </p>
             <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
-              {t('qcNotifications.formTitle')} <span className="font-mono">{n.notification_no}</span>
+              {t('qcNotifications.detailTitle')} <span className="font-mono">{n.notification_no}</span>
             </h2>
             <p className="mt-1 text-sm text-slate-600">{t('qcNotifications.formIntro')}</p>
           </div>
@@ -339,19 +339,19 @@ function ExpandedForm({ notification: n, locale, t, onPrint, onView }: ExpandedF
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={onView}
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50"
-              >
-                <Eye size={15} />
-                {t('qcNotifications.viewPdf')}
-              </button>
-              <button
-                type="button"
                 onClick={onPrint}
                 className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
               >
                 <Printer size={15} />
                 {t('qcNotifications.printDirect')}
+              </button>
+              <button
+                type="button"
+                onClick={onView}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              >
+                <Eye size={15} />
+                {t('qcNotifications.viewPdf')}
               </button>
             </div>
             <p className="text-[11px] text-slate-500">{t('qcNotifications.printHint')}</p>
