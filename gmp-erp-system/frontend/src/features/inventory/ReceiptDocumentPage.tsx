@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { AlertCircle, ChevronDown, ChevronRight, Info, Plus, Search } from 'lucide-react'
-import { createReceipt, listLocations, listManufacturers, listMaterials, listSuppliers, listWarehouses, postReceipt } from '../../lib/api'
+import { createQcNotification, createReceipt, downloadQcNotificationPdf, listLocations, listManufacturers, listMaterials, listSuppliers, listWarehouses, postReceipt } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
 import type { CurrentUser } from '../../types/auth'
 import type { LocationItem, ManufacturerItem, MaterialItem, ReceiptCreate, SupplierItem, WarehouseItem } from '../../types/inventory'
@@ -47,8 +47,12 @@ interface ReceiptLineForm {
 }
 
 interface PostedSummary {
+  receiptId: string
   documentNo: string
   lotsCreated: number
+  warehouseType: string
+  notificationId?: string
+  notificationNo?: string
 }
 
 type ReferenceDialogType = 'material' | 'manufacturer' | 'supplier'
@@ -265,6 +269,32 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
     setError(null)
   }
 
+  async function handleCreateAndPrintNotification() {
+    if (!postedSummary) return
+    setError(null)
+    setIsLoading(true)
+    try {
+      const notification = await createQcNotification(token, {
+        receipt_id: postedSummary.receiptId,
+        reason: t('receipt.defaultReason'),
+      })
+      setPostedSummary({ ...postedSummary, notificationId: notification.id, notificationNo: notification.notification_no })
+      const blob = await downloadQcNotificationPdf(token, notification.id)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `izveshchenie-${notification.notification_no}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('qcNotifications.createFailed'))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   async function submit(values: ReceiptForm) {
     setError(null)
     setPostedSummary(null)
@@ -307,7 +337,12 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         meaning: t('receipt.postMeaning'),
         reason: values.reason,
       })
-      setPostedSummary({ documentNo: posted.document_no, lotsCreated: posted.lots_created })
+      setPostedSummary({
+        receiptId: receipt.id,
+        documentNo: posted.document_no,
+        lotsCreated: posted.lots_created,
+        warehouseType: selectedWarehouse?.warehouse_type ?? '',
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : t('receipt.postFailed'))
     } finally {
@@ -342,9 +377,22 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-medium">{t('receipt.posted', { documentNo: postedSummary.documentNo, count: postedSummary.lotsCreated })}</p>
-              <p className="mt-1 text-sm">{t('receipt.qcNotificationCreated')}</p>
+              {postedSummary.notificationNo ? (
+                <p className="mt-1 text-sm">{t('qcNotifications.createSuccess', { no: postedSummary.notificationNo })}</p>
+              ) : (
+                postedSummary.warehouseType === 'SUBSTANCE_WAREHOUSE' && (
+                  <p className="mt-1 text-sm">{t('receipt.qcNotificationManualHint')}</p>
+                )
+              )}
             </div>
-            <Button type="button" variant="secondary" onClick={resetDocument}>{t('receipt.newReceipt')}</Button>
+            <div className="flex flex-wrap gap-2">
+              {postedSummary.warehouseType === 'SUBSTANCE_WAREHOUSE' && !postedSummary.notificationId && (
+                <Button type="button" onClick={handleCreateAndPrintNotification} disabled={isLoading}>
+                  {t('qcNotifications.create')}
+                </Button>
+              )}
+              <Button type="button" variant="secondary" onClick={resetDocument}>{t('receipt.newReceipt')}</Button>
+            </div>
           </div>
         </Alert>
       )}

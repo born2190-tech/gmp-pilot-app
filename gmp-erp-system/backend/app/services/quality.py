@@ -5,12 +5,13 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
-from app.models.inventory import Lot
-from app.models.quality import QCReport, QCReportParameter
+from app.models.inventory import Lot, ReceiptDocument, ReceiptLine
+from app.models.master_data import Manufacturer, Material, Warehouse
+from app.models.quality import QCNotification, QCNotificationLine, QCReport, QCReportParameter
 from app.schemas.inventory import SignatureRequest
-from app.schemas.quality import QADecisionRequest, QCReportCreate, QCResultRequest, SampleLotRequest
+from app.schemas.quality import QADecisionRequest, QCNotificationCreate, QCReportCreate, QCResultRequest, SampleLotRequest
 from app.services.audit import write_audit
-from app.services.permissions import require_permission
+from app.services.permissions import require_permission, require_warehouse_type_scope
 from app.services.signature import validate_signature
 
 
@@ -183,3 +184,114 @@ def qa_decision(db: Session, user: CurrentUser, lot_id: UUID, payload: QADecisio
     db.commit()
     db.refresh(lot)
     return lot
+
+
+def generate_qc_notification_no(receipt: ReceiptDocument) -> str:
+    return f"IQC-{receipt.received_date.strftime('%Y%m%d')}-{receipt.document_no}"[:64]
+
+
+def create_qc_notification(db: Session, user: CurrentUser, payload: QCNotificationCreate) -> QCNotification:
+    """Manually create a QC notification (Извещение) for a posted receipt.
+
+    Form Ф-14 к СОП-209 — printed by the substance warehouse and handed
+    to the QC manager so they can sample lots that just entered quarantine.
+    """
+    require_permission(user, "POST_RECEIPT")
+    receipt = db.get(ReceiptDocument, payload.receipt_id)
+    if not receipt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")
+    if receipt.status != "posted":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only posted receipts can be notified to QC")
+    warehouse = db.get(Warehouse, receipt.warehouse_id)
+    require_warehouse_type_scope(user, warehouse.warehouse_type)
+    if warehouse.warehouse_type != "SUBSTANCE_WAREHOUSE":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="QC notification (Ф-14 СОП-209) is only issued for the substance warehouse",
+        )
+
+    notification_no = (payload.notification_no or "").strip() or generate_qc_notification_no(receipt)
+    if db.query(QCNotification).filter(QCNotification.notification_no == notification_no).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Notification number already exists")
+
+    lines = db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt.id).order_by(ReceiptLine.created_at).all()
+    if not lines:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Receipt has no lines")
+
+    notification = QCNotification(
+        notification_no=notification_no,
+        status="created",
+        warehouse_id=receipt.warehouse_id,
+        receipt_id=receipt.id,
+        created_by=user.id,
+        notified_at=now_utc(),
+    )
+    db.add(notification)
+    db.flush()
+
+    for line in lines:
+        material = db.get(Material, line.material_id)
+        manufacturer = db.get(Manufacturer, line.manufacturer_id)
+        lot = (
+            db.query(Lot)
+            .filter(Lot.material_id == line.material_id, Lot.warehouse_id == receipt.warehouse_id)
+            .filter((Lot.supplier_lot == line.supplier_lot) | (Lot.internal_lot == (line.supplier_lot or "")))
+            .order_by(Lot.created_at.desc())
+            .first()
+        )
+        if not lot:
+            # Fallback: any lot from this receipt's material with matching expiry.
+            lot = (
+                db.query(Lot)
+                .filter(Lot.material_id == line.material_id, Lot.expiry_date == line.expiry_date)
+                .order_by(Lot.created_at.desc())
+                .first()
+            )
+        if not lot:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Lot for material {material.code} not found — post the receipt first",
+            )
+        db.add(
+            QCNotificationLine(
+                notification_id=notification.id,
+                lot_id=lot.id,
+                material_name=material.name,
+                batch_number=line.supplier_lot or lot.internal_lot,
+                expiry_date=line.expiry_date.isoformat(),
+                quantity=line.quantity,
+                unit=line.unit,
+                manufacturer_name=manufacturer.name,
+                invoice_info=f"{receipt.document_no} от {receipt.received_date.isoformat()}",
+            )
+        )
+
+    write_audit(
+        db,
+        user,
+        object_type="qc_notification",
+        object_id=str(notification.id),
+        action_type="CREATE_QC_NOTIFICATION",
+        new_value={
+            "notification_no": notification.notification_no,
+            "receipt_document_no": receipt.document_no,
+            "warehouse_type": warehouse.warehouse_type,
+            "lines": len(lines),
+        },
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(notification)
+    return notification
+
+
+def get_qc_notification(db: Session, user: CurrentUser, notification_id: UUID) -> QCNotification:
+    if "VIEW_WAREHOUSE" not in user.permissions and "VIEW_QC" not in user.permissions:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission VIEW_WAREHOUSE or VIEW_QC is required")
+    notification = db.get(QCNotification, notification_id)
+    if not notification:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC notification not found")
+    warehouse = db.get(Warehouse, notification.warehouse_id)
+    if user.warehouse_scope and warehouse.warehouse_type != user.warehouse_scope:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Notification is out of scope")
+    return notification

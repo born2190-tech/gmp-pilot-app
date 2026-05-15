@@ -18,6 +18,8 @@ import type {
   MaterialsResponse,
   MovementsResponse,
   PostReceiptResponse,
+  QCNotificationCreate,
+  QCNotificationItem,
   QCNotificationsResponse,
   QADecisionRequest,
   QCResultRequest,
@@ -195,6 +197,25 @@ export function listQcLots(token: string): Promise<QualityLotsResponse> {
 
 export function listQcNotifications(token: string): Promise<QCNotificationsResponse> {
   return request<QCNotificationsResponse>('/api/quality/qc-notifications', 'GET', { token })
+}
+
+export function createQcNotification(token: string, payload: QCNotificationCreate): Promise<QCNotificationItem> {
+  return request<QCNotificationItem>('/api/inventory/qc-notifications', 'POST', { token, body: payload })
+}
+
+export function qcNotificationPdfUrl(notificationId: string): string {
+  return `/api/inventory/qc-notifications/${notificationId}/pdf`
+}
+
+export async function downloadQcNotificationPdf(token: string, notificationId: string): Promise<Blob> {
+  const response = await fetch(qcNotificationPdfUrl(notificationId), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+  return response.blob()
 }
 
 export function listQaLots(token: string): Promise<QualityLotsResponse> {

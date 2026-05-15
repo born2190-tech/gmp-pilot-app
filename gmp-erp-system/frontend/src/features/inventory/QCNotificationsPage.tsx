@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/table/DataTable'
 import { useI18n } from '../../i18n/I18nProvider'
-import { listQcNotifications } from '../../lib/api'
+import { downloadQcNotificationPdf, listQcNotifications } from '../../lib/api'
 import type { QCNotificationItem } from '../../types/inventory'
 
 interface QCNotificationsPageProps {
@@ -43,6 +43,22 @@ export function QCNotificationsPage({ token }: QCNotificationsPageProps) {
 
   const selectedNotification = notifications[0]
 
+  async function handlePrint(notificationId: string, notificationNo: string) {
+    try {
+      const blob = await downloadQcNotificationPdf(token, notificationId)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `izveshchenie-${notificationNo}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('qcNotifications.printFailed'))
+    }
+  }
+
   const columns = useMemo<ColumnDef<QCNotificationItem>[]>(
     () => [
       { accessorKey: 'notified_at', header: t('qcNotifications.notifiedAt'), cell: ({ row }) => formatDateTime(row.original.notified_at, locale) },
@@ -57,8 +73,21 @@ export function QCNotificationsPage({ token }: QCNotificationsPageProps) {
             .map((line) => `${line.material_name} / ${line.batch_number} / ${line.quantity} ${line.unit} / ${formatDate(line.expiry_date, locale)}`)
             .join('; '),
       },
+      {
+        id: 'actions',
+        header: '',
+        cell: ({ row }) => (
+          <button
+            className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            onClick={() => handlePrint(row.original.id, row.original.notification_no)}
+            type="button"
+          >
+            {t('qcNotifications.print')}
+          </button>
+        ),
+      },
     ],
-    [locale, t],
+    [locale, t, token],
   )
 
   return (
@@ -83,7 +112,18 @@ export function QCNotificationsPage({ token }: QCNotificationsPageProps) {
         </div>
 
         <aside className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-950">{selectedNotification?.notification_no || t('qcNotifications.formTitle')}</h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-slate-950">{selectedNotification?.notification_no || t('qcNotifications.formTitle')}</h2>
+            {selectedNotification && (
+              <button
+                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => handlePrint(selectedNotification.id, selectedNotification.notification_no)}
+                type="button"
+              >
+                {t('qcNotifications.print')}
+              </button>
+            )}
+          </div>
           {selectedNotification ? (
             <div className="mt-4 space-y-4 text-sm">
               <dl className="grid grid-cols-2 gap-3">

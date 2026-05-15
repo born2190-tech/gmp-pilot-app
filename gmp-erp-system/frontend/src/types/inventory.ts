@@ -126,6 +126,12 @@ export interface QCNotificationsResponse {
   notifications: QCNotificationItem[]
 }
 
+export interface QCNotificationCreate {
+  receipt_id: string
+  notification_no?: string | null
+  reason?: string | null
+}
+
 export interface SampleLotRequest {
   reason: string
 }

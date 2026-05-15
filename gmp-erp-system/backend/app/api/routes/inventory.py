@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import String, cast, func, literal, or_
 from sqlalchemy.orm import Session
 
@@ -9,7 +9,7 @@ from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.models.quality import QCReport
+from app.models.quality import QCNotification, QCNotificationLine, QCReport
 from app.schemas.inventory import (
     AdjustLotRequest,
     FGShipmentCreate,
@@ -30,8 +30,11 @@ from app.schemas.inventory import (
     SignatureRequest,
     TransferLotRequest,
 )
+from app.schemas.quality import QCNotificationCreate, QCNotificationItem, QCNotificationLineItem
 from app.services.inventory import adjust_lot, create_fg_shipment, create_inventory_count, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
 from app.services.permissions import require_permission
+from app.services.qc_notification_pdf import render_qc_notification_pdf
+from app.services.quality import create_qc_notification, get_qc_notification
 
 router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 
@@ -403,3 +406,59 @@ def list_movements(
         )
 
     return MovementsResponse(movements=query.all())
+
+
+# ---------------------------------------------------------------------------
+# QC notification — Извещение (Ф-14 к СОП-209)
+# ---------------------------------------------------------------------------
+
+
+def _qc_notification_item(db: Session, notification: QCNotification) -> QCNotificationItem:
+    warehouse = db.get(Warehouse, notification.warehouse_id)
+    lines = (
+        db.query(QCNotificationLine)
+        .filter(QCNotificationLine.notification_id == notification.id)
+        .order_by(QCNotificationLine.created_at)
+        .all()
+    )
+    return QCNotificationItem(
+        id=notification.id,
+        notification_no=notification.notification_no,
+        status=notification.status,
+        warehouse_type=warehouse.warehouse_type,
+        notified_at=notification.notified_at,
+        lines=[QCNotificationLineItem.model_validate(line) for line in lines],
+    )
+
+
+@router.post("/qc-notifications", response_model=QCNotificationItem, status_code=201)
+def create_qc_notification_route(
+    payload: QCNotificationCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCNotificationItem:
+    notification = create_qc_notification(db, current_user, payload)
+    return _qc_notification_item(db, notification)
+
+
+@router.get("/qc-notifications/{notification_id}/pdf")
+def qc_notification_pdf_route(
+    notification_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    notification = get_qc_notification(db, current_user, notification_id)
+    warehouse = db.get(Warehouse, notification.warehouse_id)
+    lines = (
+        db.query(QCNotificationLine)
+        .filter(QCNotificationLine.notification_id == notification.id)
+        .order_by(QCNotificationLine.created_at)
+        .all()
+    )
+    pdf_bytes = render_qc_notification_pdf(notification, warehouse, lines)
+    filename = f"izveshchenie-{notification.notification_no}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )

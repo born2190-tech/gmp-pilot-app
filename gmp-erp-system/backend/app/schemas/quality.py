@@ -72,6 +72,12 @@ class QCNotificationsResponse(BaseModel):
     notifications: list[QCNotificationItem]
 
 
+class QCNotificationCreate(BaseModel):
+    receipt_id: UUID
+    notification_no: str | None = Field(default=None, max_length=64)
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class QCReportParameterCreate(BaseModel):
     parameter_name: str = Field(min_length=1, max_length=255)
     specification: str = Field(min_length=1)

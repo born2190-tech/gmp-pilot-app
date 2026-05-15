@@ -131,7 +131,17 @@ def test_receipt_posting_creates_lot_and_receipt_movement() -> None:
     assert lot["incoming_control_notified_at"] is not None
     assert lot["qc_result_received_at"] is None
     assert movements.json()["movements"][0]["movement_type"] == "RECEIPT"
-    notification = notifications.json()["notifications"][0]
+    # QC notification is no longer auto-created — operator must trigger it
+    # manually so the printed Ф-14 form (СОП-209) can be handed to QC.
+    assert notifications.json()["notifications"] == []
+
+    created = client.post(
+        "/api/inventory/qc-notifications",
+        headers=headers,
+        json={"receipt_id": str(draft.json()["id"]), "reason": "Извещение на входной контроль"},
+    )
+    assert created.status_code == 201
+    notification = created.json()
     assert notification["notification_no"] == "IQC-20260510-REC-2026-0001"
     assert notification["status"] == "created"
     assert notification["warehouse_type"] == "SUBSTANCE_WAREHOUSE"
@@ -143,6 +153,11 @@ def test_receipt_posting_creates_lot_and_receipt_movement() -> None:
     assert line["unit"] == "kg"
     assert line["manufacturer_name"] == "Validated Manufacturer"
     assert line["invoice_info"] == "REC-2026-0001 от 2026-05-10"
+
+    pdf = client.get(f"/api/inventory/qc-notifications/{notification['id']}/pdf", headers=headers)
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content[:4] == b"%PDF"
 
 
 def test_receipt_can_create_inline_master_data_without_supplier() -> None:
