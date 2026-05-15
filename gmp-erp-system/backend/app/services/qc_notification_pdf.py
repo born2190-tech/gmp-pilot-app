@@ -19,6 +19,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
+    Image,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -28,6 +29,9 @@ from reportlab.platypus import (
 
 from app.models.master_data import Warehouse
 from app.models.quality import QCNotification, QCNotificationLine
+
+
+_LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "assets" / "novugen-logo.png"
 
 
 # Cyrillic-capable fonts. DejaVu is shipped via the `fonts-dejavu` Debian
@@ -110,10 +114,18 @@ def render_qc_notification_pdf(
     elements: list = []
 
     # --- header table (organisation block) ---------------------------------
+    if _LOGO_PATH.is_file():
+        # 30 mm wide image — keeps the aspect ratio of the supplied PNG.
+        logo_cell: object = Image(str(_LOGO_PATH), width=30 * mm, height=10 * mm, kind="proportional")
+    else:
+        logo_cell = Paragraph(
+            "<b>novugen</b>",
+            ParagraphStyle("logo", fontName=bold_font, fontSize=18, leading=22, alignment=1),
+        )
     header = Table(
         [
             [
-                Paragraph("<b>novugen</b>", ParagraphStyle("logo", fontName=bold_font, fontSize=18, leading=22, alignment=1)),
+                logo_cell,
                 Paragraph(
                     "СОП-209 Процедура по обеспечению сохранности ЛС "
                     "при транспортировке, погрузке–разгрузке и складировании на хранение",
