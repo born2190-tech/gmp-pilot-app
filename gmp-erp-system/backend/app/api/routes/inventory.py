@@ -8,7 +8,16 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
-from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot
+from app.models.inventory import (
+    FGShipmentDocument,
+    FGShipmentLine,
+    InventoryCountDocument,
+    InventoryCountLine,
+    InventoryCountWave,
+    InventoryCountWaveLine,
+    InventoryMovement,
+    Lot,
+)
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.identity import User
 from app.models.quality import QCNotification, QCNotificationLine, QCNotificationScan, QCReport
@@ -22,6 +31,15 @@ from app.schemas.inventory import (
     InventoryCountItem,
     InventoryCountLineItem,
     InventoryCountsResponse,
+    InventoryWaveCancelRequest,
+    InventoryWaveItem,
+    InventoryWaveLineItem,
+    InventoryWaveLineUpdate,
+    InventoryWavePostRequest,
+    InventoryWaveStartRequest,
+    InventoryWaveSubmitRequest,
+    InventoryWaveVerifyRequest,
+    InventoryWavesResponse,
     IssueProductionRequest,
     LotOperationResponse,
     LotsResponse,
@@ -44,6 +62,16 @@ from app.schemas.quality import (
     QCScanVerifyRequest,
 )
 from app.services.inventory import adjust_lot, create_fg_shipment, create_inventory_count, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
+from app.services.inventory_count_waves import (
+    cancel_wave as cancel_wave_service,
+    get_wave as get_wave_service,
+    list_waves as list_waves_service,
+    post_wave as post_wave_service,
+    save_line as save_line_service,
+    start_wave as start_wave_service,
+    submit_for_verification as submit_wave_service,
+    verify_line as verify_line_service,
+)
 from app.services.permissions import require_permission
 from app.services.qc_notification_pdf import render_qc_notification_pdf
 from app.services.qc_notification_scans import (
@@ -663,3 +691,174 @@ def list_pending_qc_scans_route(
         .all()
     )
     return QCPendingScansResponse(scans=[QCPendingScanItem.model_validate(row) for row in rows])
+
+
+# ---------------------------------------------------------------------------
+# Inventory count waves (GMP 4-eyes workflow)
+# ---------------------------------------------------------------------------
+
+
+def _user_name(db: Session, uid: UUID | None) -> str | None:
+    if uid is None:
+        return None
+    u = db.get(User, uid)
+    return u.full_name if u else None
+
+
+def _wave_line_item(db: Session, line: InventoryCountWaveLine) -> InventoryWaveLineItem:
+    lot = db.get(Lot, line.lot_id)
+    material = db.get(Material, lot.material_id) if lot else None
+    location = db.get(Location, lot.location_id) if lot else None
+    return InventoryWaveLineItem(
+        id=line.id,
+        lot_id=line.lot_id,
+        internal_lot=lot.internal_lot if lot else "",
+        supplier_lot=lot.supplier_lot if lot else None,
+        material_code=material.code if material else "",
+        material_name=material.name if material else "",
+        location_code=location.code if location else "",
+        rack_no=lot.rack_no if lot else None,
+        sector_no=lot.sector_no if lot else None,
+        tier_no=lot.tier_no if lot else None,
+        place_no=lot.place_no if lot else None,
+        pallet_no=lot.pallet_no if lot else None,
+        unit=line.unit,
+        status=line.status,
+        system_quantity=line.system_quantity,
+        actual_quantity=line.actual_quantity,
+        variance=line.variance,
+        variance_pct=line.variance_pct,
+        notes=line.notes,
+        counted_by=line.counted_by,
+        counted_by_name=_user_name(db, line.counted_by),
+        counted_at=line.counted_at,
+        verified_by=line.verified_by,
+        verified_by_name=_user_name(db, line.verified_by),
+        verified_at=line.verified_at,
+        verifier_comment=line.verifier_comment,
+    )
+
+
+def _wave_item(db: Session, wave: InventoryCountWave, include_lines: bool = True) -> InventoryWaveItem:
+    warehouse = db.get(Warehouse, wave.warehouse_id)
+    lines = (
+        db.query(InventoryCountWaveLine)
+        .filter(InventoryCountWaveLine.wave_id == wave.id)
+        .order_by(InventoryCountWaveLine.created_at)
+        .all()
+    )
+    total = len(lines)
+    counted = sum(1 for line in lines if line.status != "pending")
+    variance = sum(1 for line in lines if line.status == "needs_verification")
+    return InventoryWaveItem(
+        id=wave.id,
+        wave_no=wave.wave_no,
+        status=wave.status,
+        warehouse_type=warehouse.warehouse_type if warehouse else "",
+        warehouse_name=warehouse.name if warehouse else "",
+        scope_description=wave.scope_description,
+        tolerance_pct=wave.tolerance_pct,
+        created_by=wave.created_by,
+        created_by_name=_user_name(db, wave.created_by),
+        started_at=wave.started_at,
+        counters=[c for c in (wave.counters or "").split(",") if c],
+        verifier_id=wave.verifier_id,
+        verifier_name=_user_name(db, wave.verifier_id),
+        submitted_at=wave.submitted_at,
+        posted_by=wave.posted_by,
+        posted_by_name=_user_name(db, wave.posted_by),
+        posted_at=wave.posted_at,
+        total_lines=total,
+        counted_lines=counted,
+        variance_lines=variance,
+        lines=[_wave_line_item(db, line) for line in lines] if include_lines else [],
+    )
+
+
+@router.get("/inventory-waves", response_model=InventoryWavesResponse)
+def list_inventory_waves_route(
+    status_filter: str | None = Query(default=None, alias="status"),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryWavesResponse:
+    waves = list_waves_service(db, current_user, status_filter)
+    return InventoryWavesResponse(waves=[_wave_item(db, wave, include_lines=False) for wave in waves])
+
+
+@router.get("/inventory-waves/{wave_id}", response_model=InventoryWaveItem)
+def get_inventory_wave_route(
+    wave_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryWaveItem:
+    wave = get_wave_service(db, current_user, wave_id)
+    return _wave_item(db, wave)
+
+
+@router.post("/inventory-waves", response_model=InventoryWaveItem, status_code=201)
+def start_inventory_wave_route(
+    payload: InventoryWaveStartRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryWaveItem:
+    wave = start_wave_service(db, current_user, payload)
+    return _wave_item(db, wave)
+
+
+@router.post("/inventory-waves/{wave_id}/lines/{line_id}", response_model=InventoryWaveItem)
+def save_inventory_wave_line_route(
+    wave_id: UUID,
+    line_id: UUID,
+    payload: InventoryWaveLineUpdate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryWaveItem:
+    save_line_service(db, current_user, wave_id, line_id, payload)
+    wave = get_wave_service(db, current_user, wave_id)
+    return _wave_item(db, wave)
+
+
+@router.post("/inventory-waves/{wave_id}/submit", response_model=InventoryWaveItem)
+def submit_inventory_wave_route(
+    wave_id: UUID,
+    payload: InventoryWaveSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryWaveItem:
+    wave = submit_wave_service(db, current_user, wave_id, payload)
+    return _wave_item(db, wave)
+
+
+@router.post("/inventory-waves/{wave_id}/lines/{line_id}/verify", response_model=InventoryWaveItem)
+def verify_inventory_wave_line_route(
+    wave_id: UUID,
+    line_id: UUID,
+    payload: InventoryWaveVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryWaveItem:
+    verify_line_service(db, current_user, wave_id, line_id, payload)
+    wave = get_wave_service(db, current_user, wave_id)
+    return _wave_item(db, wave)
+
+
+@router.post("/inventory-waves/{wave_id}/post", response_model=InventoryWaveItem)
+def post_inventory_wave_route(
+    wave_id: UUID,
+    payload: InventoryWavePostRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryWaveItem:
+    wave = post_wave_service(db, current_user, wave_id, payload)
+    return _wave_item(db, wave)
+
+
+@router.post("/inventory-waves/{wave_id}/cancel", response_model=InventoryWaveItem)
+def cancel_inventory_wave_route(
+    wave_id: UUID,
+    payload: InventoryWaveCancelRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryWaveItem:
+    wave = cancel_wave_service(db, current_user, wave_id, payload)
+    return _wave_item(db, wave)

@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, String
+from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -158,6 +158,74 @@ class InventoryCountLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
 
     count: Mapped[InventoryCountDocument] = relationship()
+    lot: Mapped[Lot] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# Inventory count wave (GMP-style 4-eyes inventory)
+# ---------------------------------------------------------------------------
+#
+# Replaces the simple one-shot InventoryCountDocument with a multi-stage
+# workflow: planning → counting → verification → posted (+ cancelled).
+#
+# - planning: QA defines scope; system snapshots system_qty for each lot
+# - counting: counters record actual qty per lot; can save partial progress
+# - verification: lines whose variance exceeds tolerance go to a separate
+#   verifier (4-eyes: verifier ≠ counter) for physical re-count
+# - posted: QA signs the wave; system writes ADJUSTMENT movements and
+#   updates lot quantities to actual; wave becomes immutable.
+# ---------------------------------------------------------------------------
+
+
+class InventoryCountWave(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "inventory_count_waves"
+
+    wave_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # planning | counting | verification | posted | cancelled
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=False)
+    # Free-text human description of scope ("Весь склад", "Стеллаж A-3"…) —
+    # we keep the per-lot membership in WaveLine rows; this field is just
+    # for display so the inspector can read the audit history.
+    scope_description: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Lots whose absolute variance is ≤ tolerance_pct% of system_qty are
+    # treated as within tolerance and don't need verifier sign-off.
+    tolerance_pct: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    counters: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    verifier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    posted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    warehouse: Mapped[Warehouse] = relationship()
+    lines: Mapped[list["InventoryCountWaveLine"]] = relationship(
+        back_populates="wave",
+        cascade="all, delete-orphan",
+    )
+
+
+class InventoryCountWaveLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "inventory_count_wave_lines"
+
+    wave_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("inventory_count_waves.id"), nullable=False)
+    lot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lots.id"), nullable=False)
+    # pending | counted | within_tolerance | needs_verification | verified | rejected
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    system_quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    actual_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    variance: Mapped[float | None] = mapped_column(Float, nullable=True)
+    variance_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    counted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    counted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verifier_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    wave: Mapped[InventoryCountWave] = relationship(back_populates="lines")
     lot: Mapped[Lot] = relationship()
 
 

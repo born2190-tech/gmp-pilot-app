@@ -184,6 +184,112 @@ class InventoryCountLineCreate(BaseModel):
     actual_quantity: float = Field(ge=0)
 
 
+# ---------------------------------------------------------------------------
+# Inventory count wave (GMP 4-eyes workflow)
+# ---------------------------------------------------------------------------
+
+class WaveScope(BaseModel):
+    """Defines which lots become part of the wave."""
+
+    warehouse_id: UUID
+    # Optional narrowing: only lots in this zone (location code) participate.
+    location_code: str | None = Field(default=None, max_length=64)
+    # Optional narrowing by physical rack number (Ф-3 СОП-415).
+    rack_no: str | None = Field(default=None, max_length=32)
+    # Manual override: explicit lot ids. If non-empty, ignore the filters above.
+    lot_ids: list[UUID] = Field(default_factory=list)
+
+
+class InventoryWaveStartRequest(BaseModel):
+    wave_no: str | None = Field(default=None, max_length=64)
+    scope: WaveScope
+    tolerance_pct: float = Field(default=0.5, ge=0, le=100)
+    counters: list[str] = Field(default_factory=list)
+    verifier_username: str | None = Field(default=None, max_length=128)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class InventoryWaveLineUpdate(BaseModel):
+    actual_quantity: float = Field(ge=0)
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class InventoryWaveVerifyRequest(BaseModel):
+    decision: str = Field(pattern="^(confirm|escalate)$")
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+class InventoryWavePostRequest(SignatureRequest):
+    pass
+
+
+class InventoryWaveCancelRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class InventoryWaveSubmitRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class InventoryWaveLineItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    lot_id: UUID
+    internal_lot: str
+    supplier_lot: str | None
+    material_code: str
+    material_name: str
+    location_code: str
+    rack_no: str | None
+    sector_no: str | None
+    tier_no: str | None
+    place_no: str | None
+    pallet_no: str | None
+    unit: str
+    status: str
+    system_quantity: float
+    actual_quantity: float | None
+    variance: float | None
+    variance_pct: float | None
+    notes: str | None
+    counted_by: UUID | None
+    counted_by_name: str | None
+    counted_at: datetime | None
+    verified_by: UUID | None
+    verified_by_name: str | None
+    verified_at: datetime | None
+    verifier_comment: str | None
+
+
+class InventoryWaveItem(BaseModel):
+    id: UUID
+    wave_no: str
+    status: str
+    warehouse_type: str
+    warehouse_name: str
+    scope_description: str
+    tolerance_pct: float
+    created_by: UUID
+    created_by_name: str | None
+    started_at: datetime
+    counters: list[str]
+    verifier_id: UUID | None
+    verifier_name: str | None
+    submitted_at: datetime | None
+    posted_by: UUID | None
+    posted_by_name: str | None
+    posted_at: datetime | None
+    total_lines: int
+    counted_lines: int
+    variance_lines: int
+    lines: list[InventoryWaveLineItem] = Field(default_factory=list)
+
+
+class InventoryWavesResponse(BaseModel):
+    waves: list[InventoryWaveItem]
+
+
 class InventoryCountCreate(SignatureRequest):
     document_no: str = Field(min_length=1, max_length=64)
     count_date: date
