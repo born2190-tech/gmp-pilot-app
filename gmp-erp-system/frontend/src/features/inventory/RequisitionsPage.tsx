@@ -1053,7 +1053,20 @@ function AllocRow({
         <div className="font-mono text-[12.5px] tabular-nums text-slate-700">{formatDate(alloc.lot_expiry_date, locale)}</div>
         <div className="text-[10.5px] text-slate-500">{t('requisitions.daysLeft', { n: String(left) })}</div>
       </td>
-      <td className="px-3 py-2 text-[11px] text-slate-700">{translatedLocation(alloc.lot_location_code, t)}</td>
+      <td className="px-3 py-2 text-[11px] text-slate-700">
+        <div>{translatedLocation(alloc.lot_location_code, t)}</div>
+        {(() => {
+          const parts: string[] = []
+          if (alloc.lot_rack_no) parts.push(`${t('warehouseOps.rackNo')} ${alloc.lot_rack_no}`)
+          if (alloc.lot_sector_no) parts.push(`${t('warehouseOps.sectorNo')} ${alloc.lot_sector_no}`)
+          if (alloc.lot_tier_no) parts.push(`${t('warehouseOps.tierNo')} ${alloc.lot_tier_no}`)
+          if (alloc.lot_place_no) parts.push(`${t('warehouseOps.placeNo')} ${alloc.lot_place_no}`)
+          if (alloc.lot_pallet_no) parts.push(`${t('warehouseOps.palletNo')} ${alloc.lot_pallet_no}`)
+          return parts.length > 0 ? (
+            <div className="mt-0.5 font-mono text-[10.5px] text-slate-500">{parts.join(' · ')}</div>
+          ) : null
+        })()}
+      </td>
       <td className="px-3 py-2 text-right font-mono tabular-nums text-slate-700">{alloc.lot_available}</td>
       <td className="px-3 py-2 text-right">
         {canEdit ? (

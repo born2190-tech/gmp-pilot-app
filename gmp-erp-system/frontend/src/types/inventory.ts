@@ -522,6 +522,11 @@ export interface RequisitionAllocationLineItem {
   lot_supplier_lot: string
   lot_expiry_date: string
   lot_location_code: string
+  lot_rack_no: string | null
+  lot_sector_no: string | null
+  lot_tier_no: string | null
+  lot_place_no: string | null
+  lot_pallet_no: string | null
   lot_available: number
   warehouse_type: string
   allocated_quantity: number

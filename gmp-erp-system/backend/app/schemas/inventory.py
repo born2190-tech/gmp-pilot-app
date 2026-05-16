@@ -400,6 +400,12 @@ class AllocationLineItem(BaseModel):
     lot_supplier_lot: str
     lot_expiry_date: date
     lot_location_code: str
+    # Physical address inside the warehouse (form Ф-3 СОП-415); any may be null.
+    lot_rack_no: str | None = None
+    lot_sector_no: str | None = None
+    lot_tier_no: str | None = None
+    lot_place_no: str | None = None
+    lot_pallet_no: str | None = None
     lot_available: float
     warehouse_type: str
     allocated_quantity: float
