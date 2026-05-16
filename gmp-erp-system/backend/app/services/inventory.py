@@ -245,11 +245,46 @@ def transfer_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: Transfer
     target_location = get_required(db, Location, payload.to_location_id, "Location")
     if target_location.warehouse_id != lot.warehouse_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Target location must belong to the same warehouse")
-    if target_location.id == lot.location_id:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Lot is already in this location")
 
+    # Capture old values for audit before mutating.
     old_location_id = lot.location_id
-    lot.location_id = target_location.id
+    old_phys = {
+        "rack_no": lot.rack_no,
+        "sector_no": lot.sector_no,
+        "tier_no": lot.tier_no,
+        "place_no": lot.place_no,
+        "pallet_no": lot.pallet_no,
+    }
+
+    # Normalise empty strings → None so the DB stores a clean NULL.
+    def _norm(value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+    new_phys = {
+        "rack_no": _norm(payload.rack_no),
+        "sector_no": _norm(payload.sector_no),
+        "tier_no": _norm(payload.tier_no),
+        "place_no": _norm(payload.place_no),
+        "pallet_no": _norm(payload.pallet_no),
+    }
+
+    location_changed = target_location.id != old_location_id
+    phys_changed = any(old_phys[k] != new_phys[k] for k in new_phys)
+
+    if not location_changed and not phys_changed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Nothing to transfer — both target location and physical address are unchanged",
+        )
+
+    if location_changed:
+        lot.location_id = target_location.id
+    for key, value in new_phys.items():
+        setattr(lot, key, value)
+
     db.add(
         InventoryMovement(
             movement_type="TRANSFER",
@@ -274,8 +309,8 @@ def transfer_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: Transfer
         object_type="lot",
         object_id=str(lot.id),
         action_type="TRANSFER_LOT",
-        old_value={"location_id": str(old_location_id)},
-        new_value={"location_id": str(target_location.id)},
+        old_value={"location_id": str(old_location_id), **old_phys},
+        new_value={"location_id": str(target_location.id), **new_phys},
         reason=payload.reason,
     )
     db.commit()

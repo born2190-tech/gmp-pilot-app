@@ -65,6 +65,14 @@ class Lot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
     quality_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Physical address inside the warehouse (form Ф-3 СОП-415: учётная карточка
+    # сырья). All optional — operator fills what's relevant for the warehouse
+    # type. Updated by transfer operations.
+    rack_no: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    sector_no: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    tier_no: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    place_no: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    pallet_no: Mapped[str | None] = mapped_column(String(32), nullable=True)
     incoming_control_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sampling_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     qc_result_received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

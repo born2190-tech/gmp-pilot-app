@@ -84,6 +84,11 @@ class LotItem(BaseModel):
     warehouse_id: UUID
     warehouse_type: str
     location_code: str
+    rack_no: str | None = None
+    sector_no: str | None = None
+    tier_no: str | None = None
+    place_no: str | None = None
+    pallet_no: str | None = None
     quantity: float
     unit: str
     quality_status: str
@@ -108,6 +113,13 @@ class LotOperationResponse(LotItem):
 class TransferLotRequest(BaseModel):
     to_location_id: UUID
     reason: str = Field(min_length=1)
+    # Physical destination coordinates (form Ф-3 СОП-415). Empty/null means
+    # "not specified" — the corresponding fields on the lot stay unchanged.
+    rack_no: str | None = Field(default=None, max_length=32)
+    sector_no: str | None = Field(default=None, max_length=32)
+    tier_no: str | None = Field(default=None, max_length=32)
+    place_no: str | None = Field(default=None, max_length=32)
+    pallet_no: str | None = Field(default=None, max_length=32)
 
 
 class AdjustLotRequest(SignatureRequest):

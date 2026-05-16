@@ -81,6 +81,12 @@ export interface LotItem {
   warehouse_id?: string
   warehouse_type: string
   location_code: string
+  // Physical coordinate (form Ф-3 СОП-415). All optional — any subset may be set.
+  rack_no?: string | null
+  sector_no?: string | null
+  tier_no?: string | null
+  place_no?: string | null
+  pallet_no?: string | null
   quantity: number
   unit: string
   quality_status: string
@@ -260,6 +266,11 @@ export interface MovementsResponse {
 export interface TransferLotRequest {
   to_location_id: string
   reason: string
+  rack_no?: string | null
+  sector_no?: string | null
+  tier_no?: string | null
+  place_no?: string | null
+  pallet_no?: string | null
 }
 
 export interface AdjustLotRequest extends SignatureRequest {

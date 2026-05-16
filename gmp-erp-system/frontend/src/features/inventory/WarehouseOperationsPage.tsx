@@ -39,6 +39,12 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
   // Transfer
   const [targetLocationId, setTargetLocationId] = useState('')
   const [transferReason, setTransferReason] = useState('')
+  // Physical destination coordinates (Ф-3 СОП-415)
+  const [physRack, setPhysRack] = useState('')
+  const [physSector, setPhysSector] = useState('')
+  const [physTier, setPhysTier] = useState('')
+  const [physPlace, setPhysPlace] = useState('')
+  const [physPallet, setPhysPallet] = useState('')
 
   // Adjust
   const [newQuantity, setNewQuantity] = useState('')
@@ -69,6 +75,25 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
+  // Pre-fill physical coordinates when a lot is selected so the operator only
+  // edits what actually changed.
+  useEffect(() => {
+    if (selectedLot) {
+      setPhysRack(selectedLot.rack_no ?? '')
+      setPhysSector(selectedLot.sector_no ?? '')
+      setPhysTier(selectedLot.tier_no ?? '')
+      setPhysPlace(selectedLot.place_no ?? '')
+      setPhysPallet(selectedLot.pallet_no ?? '')
+    } else {
+      setPhysRack('')
+      setPhysSector('')
+      setPhysTier('')
+      setPhysPlace('')
+      setPhysPallet('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLotId])
+
   const selectedLot = lots.find((lot) => lot.id === selectedLotId)
   const scopedLocations = selectedLot
     ? locations.filter(
@@ -79,6 +104,11 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
   function clearTransfer() {
     setTargetLocationId('')
     setTransferReason('')
+    setPhysRack('')
+    setPhysSector('')
+    setPhysTier('')
+    setPhysPlace('')
+    setPhysPallet('')
   }
 
   function clearAdjust() {
@@ -114,6 +144,11 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
       await transferLot(token, selectedLot.id, {
         to_location_id: targetLocationId,
         reason: transferReason,
+        rack_no: physRack || null,
+        sector_no: physSector || null,
+        tier_no: physTier || null,
+        place_no: physPlace || null,
+        pallet_no: physPallet || null,
       })
       setSuccess(t('warehouseOps.transferDone'))
       clearTransfer()
@@ -269,6 +304,43 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
                 ))}
               </select>
             </FormRow>
+
+            {/* Physical destination coords (Ф-3 СОП-415) */}
+            <div className="rounded-md border border-slate-200 bg-slate-50/30 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {t('warehouseOps.physicalAddressTitle')}
+                </p>
+                <span className="text-[10.5px] text-slate-400">{t('warehouseOps.physicalAddressOptional')}</span>
+              </div>
+              <div className="grid grid-cols-5 gap-1.5">
+                {(
+                  [
+                    [t('warehouseOps.rackNo'), physRack, setPhysRack, 'A-3'],
+                    [t('warehouseOps.sectorNo'), physSector, setPhysSector, '2'],
+                    [t('warehouseOps.tierNo'), physTier, setPhysTier, '1'],
+                    [t('warehouseOps.placeNo'), physPlace, setPhysPlace, '5'],
+                    [t('warehouseOps.palletNo'), physPallet, setPhysPallet, '7'],
+                  ] as Array<[string, string, (value: string) => void, string]>
+                ).map(([label, value, setter, placeholder]) => (
+                  <div key={label}>
+                    <input
+                      type="text"
+                      maxLength={32}
+                      disabled={!selectedLot}
+                      value={value}
+                      onChange={(event) => setter(event.target.value)}
+                      placeholder={placeholder}
+                      className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 font-mono text-[12.5px] tabular-nums outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60 disabled:cursor-not-allowed disabled:bg-slate-50"
+                    />
+                    <label className="mt-0.5 block text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                      {label}
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[10.5px] text-slate-500">{t('warehouseOps.physicalAddressHint')}</p>
+            </div>
 
             <FormRow label={t('warehouseOps.transferReasonLabel')}>
               <input

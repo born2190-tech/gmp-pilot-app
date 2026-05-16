@@ -1,160 +1,184 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ColumnDef, Row, SortingFn } from '@tanstack/react-table'
-import { DataTable } from '../../components/table/DataTable'
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  Boxes,
+  CalendarClock,
+  CalendarRange,
+  FlaskConical,
+  Inbox,
+  MapPin,
+  RotateCcw,
+  Search,
+  SearchX,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react'
 import { listLots, listMovements } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { LotItem, MovementItem } from '../../types/inventory'
+import {
+  Chip,
+  KpiTile,
+  MovementTypeBadge,
+  SegmentedControl,
+  SortHeader,
+  daysLeft,
+  dateCompare,
+  formatDate,
+  formatDateTime,
+  formatShortDateTime,
+  numCompare,
+  ruCompare,
+  toDateInputValue,
+  useEscape,
+  useSort,
+  type SortState,
+} from './_registry/atoms'
 
-type RegistryTab = 'series' | 'movements'
+type Tab = 'series' | 'movements'
 type DateType = 'arrival' | 'expiry' | 'operation'
-type DatePreset = 'today' | 'week' | 'month' | 'quarter' | 'all'
+type DatePreset = 'today' | 'week' | 'month' | 'quarter' | 'all' | null
+type KpiKey = 'active' | 'pending' | 'expiring'
 
 interface RegistryFilters {
-  dateType: DateType
-  dateFrom: string
-  dateTo: string
   material: string
-  qualityStatus: string
   location: string
+  qualityStatus: string
   manufacturer: string
-  internalLot: string
   document: string
   movementType: string
-  search: string
 }
+
+const EMPTY_FILTERS: RegistryFilters = {
+  material: '',
+  location: '',
+  qualityStatus: '',
+  manufacturer: '',
+  document: '',
+  movementType: '',
+}
+
+const PRESET_KEYS: Exclude<DatePreset, null>[] = ['today', 'week', 'month', 'quarter', 'all']
 
 interface WarehouseRegistryPageProps {
   token: string
 }
 
-const DEFAULT_FILTERS: RegistryFilters = {
-  dateType: 'arrival',
-  dateFrom: '',
-  dateTo: '',
-  material: '',
-  qualityStatus: '',
-  location: '',
-  manufacturer: '',
-  internalLot: '',
-  document: '',
-  movementType: '',
-  search: '',
+function movementKey(rawType: string): string {
+  return `movementType.${rawType.toUpperCase()}`
 }
 
-function toDateInputValue(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+function uniqueValues(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) => ruCompare(a, b))
 }
 
-function formatDate(value: string | null, locale: string) {
-  if (!value) return '-'
-  return new Intl.DateTimeFormat(locale).format(new Date(value))
+// Format the physical coordinate (rack/sector/tier/place/pallet) as one line.
+// Only includes filled segments. Returns '' if all segments are empty.
+function formatPhysAddr(lot: LotItem): string {
+  const parts: string[] = []
+  if (lot.rack_no)   parts.push(lot.rack_no)
+  if (lot.sector_no) parts.push(`С.${lot.sector_no}`)
+  if (lot.tier_no)   parts.push(`Я.${lot.tier_no}`)
+  if (lot.place_no)  parts.push(`М.${lot.place_no}`)
+  if (lot.pallet_no) parts.push(`П.${lot.pallet_no}`)
+  return parts.join(' · ')
 }
 
-function formatDateTime(value: string, locale: string) {
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+function physAddrTooltip(lot: LotItem, t: Translate): string {
+  const bits: string[] = []
+  if (lot.rack_no)   bits.push(`${t('warehouseOps.rackNo')} ${lot.rack_no}`)
+  if (lot.sector_no) bits.push(`${t('warehouseOps.sectorNo')} ${lot.sector_no}`)
+  if (lot.tier_no)   bits.push(`${t('warehouseOps.tierNo')} ${lot.tier_no}`)
+  if (lot.place_no)  bits.push(`${t('warehouseOps.placeNo')} ${lot.place_no}`)
+  if (lot.pallet_no) bits.push(`${t('warehouseOps.palletNo')} ${lot.pallet_no}`)
+  return bits.join(' / ')
 }
 
-function uniqueValues(values: string[]) {
-  return Array.from(new Set(values.filter(Boolean))).sort()
+// Full-label list for the lot detail panel — uses the same labels as the
+// short version above ("Стеллаж", "Сектор", …) so it's never abbreviated.
+function formatPhysAddrFull(lot: LotItem, t: Translate): string {
+  const bits: string[] = []
+  if (lot.rack_no)   bits.push(`${t('warehouseOps.rackNo')} ${lot.rack_no}`)
+  if (lot.sector_no) bits.push(`${t('warehouseOps.sectorNo')} ${lot.sector_no}`)
+  if (lot.tier_no)   bits.push(`${t('warehouseOps.tierNo')} ${lot.tier_no}`)
+  if (lot.place_no)  bits.push(`${t('warehouseOps.placeNo')} ${lot.place_no}`)
+  if (lot.pallet_no) bits.push(`${t('warehouseOps.palletNo')} ${lot.pallet_no}`)
+  return bits.join(' · ')
 }
 
-function formatSeries(value: string) {
-  const series = String(value || '').trim()
-  return series || '-'
+const LOCATION_PILL: Record<string, string> = {
+  RECEIVING:  'bg-slate-100 text-slate-700 ring-slate-200',
+  QUARANTINE: 'bg-amber-50 text-amber-800 ring-amber-200',
+  RELEASED:   'bg-emerald-50 text-emerald-800 ring-emerald-200',
+  REJECTED:   'bg-rose-50 text-rose-800 ring-rose-200',
 }
 
-// Sort strings by Russian alphabet (А-Я, Ё after Е), case-insensitive, with
-// natural numeric ordering so "Серия 2" precedes "Серия 10".
-// Default TanStack sort uses raw Unicode code points → Cyrillic ends up after
-// Latin and Ё lands far from Е.
-const ruCollator = new Intl.Collator('ru', { sensitivity: 'base', numeric: true })
-function ruStringSort<T>(rowA: Row<T>, rowB: Row<T>, columnId: string): number {
-  const a = String(rowA.getValue(columnId) ?? '').trim()
-  const b = String(rowB.getValue(columnId) ?? '').trim()
-  // Empty values to the bottom regardless of direction.
-  if (!a && !b) return 0
-  if (!a) return 1
-  if (!b) return -1
-  return ruCollator.compare(a, b)
-}
-
-function movementTypeToTranslationKey(movementType: string) {
-  return `movementType.${movementType.toUpperCase()}`
-}
-
-const MOVEMENT_TYPE_STYLES: Record<string, { icon: string; bg: string; text: string; border: string }> = {
-  RECEIPT:           { icon: '↓', bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200' },
-  SHIPMENT:          { icon: '↑', bg: 'bg-red-50',    text: 'text-red-700',    border: 'border-red-200'   },
-  TRANSFER:          { icon: '⇆', bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200'  },
-  ADJUSTMENT:        { icon: '△', bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-200' },
-  ISSUE_PRODUCTION:  { icon: '↑', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200'},
-  INVENTORY_COUNT:   { icon: '≡', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200'},
-  RETURN:            { icon: '↩', bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200'},
-}
-
-function MovementTypeBadge({ rawType, label }: { rawType: string; label: string }) {
-  const key = rawType.toUpperCase()
-  const style = MOVEMENT_TYPE_STYLES[key] ?? { icon: '•', bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-gray-200' }
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${style.bg} ${style.text} ${style.border}`}>
-      <span className="text-sm leading-none">{style.icon}</span>
-      {label}
-    </span>
-  )
+function countActiveAdv(f: RegistryFilters): number {
+  return [f.material, f.location, f.qualityStatus, f.manufacturer, f.document, f.movementType].filter(Boolean).length
 }
 
 export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
   const { locale, t } = useI18n()
-  const [activeTab, setActiveTab] = useState<RegistryTab>('series')
+
+  // Core state
+  const [tab, setTab] = useState<Tab>('series')
+  const [search, setSearch] = useState('')
+  const [dateType, setDateType] = useState<DateType>('arrival')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [datePreset, setDatePreset] = useState<DatePreset>('all')
+  const [filters, setFilters] = useState<RegistryFilters>(EMPTY_FILTERS)
+  const [draft, setDraft] = useState<RegistryFilters>(EMPTY_FILTERS)
+  const [advOpen, setAdvOpen] = useState(false)
+  const [kpi, setKpi] = useState<KpiKey | null>(null)
+  const [selectedLot, setSelectedLot] = useState<LotItem | null>(null)
+
+  // Data
   const [lots, setLots] = useState<LotItem[]>([])
   const [movements, setMovements] = useState<MovementItem[]>([])
-  const [filtersDraft, setFiltersDraft] = useState<RegistryFilters>(DEFAULT_FILTERS)
-  const [filtersVisible, setFiltersVisible] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
+  // Sort
+  const seriesSortCtl = useSort({ key: 'internal_lot', dir: 'desc' })
+  const movementsSortCtl = useSort({ key: 'created_at', dir: 'desc' })
+
+  useEscape(() => setSelectedLot(null))
+
+  // When switching tabs, normalize dateType (operation only valid on movements)
   useEffect(() => {
-    void applyFilters(DEFAULT_FILTERS)
-  }, [token])
+    if (tab === 'movements') setDateType('operation')
+    else if (dateType === 'operation') setDateType('arrival')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
-  useEffect(() => {
-    if (activeTab === 'movements') {
-      setFiltersDraft((current) => ({ ...current, dateType: 'operation' }))
-    }
-  }, [activeTab])
-
-  async function applyFilters(next: RegistryFilters) {
+  // Fetch
+  async function fetchAll() {
     setIsLoading(true)
     setError(null)
     try {
-      const lotsDateType = next.dateType === 'expiry' ? 'expiry' : 'arrival'
+      const lotsDateType: 'arrival' | 'expiry' = dateType === 'expiry' ? 'expiry' : 'arrival'
       const [lotsResponse, movementsResponse] = await Promise.all([
         listLots(token, {
           date_type: lotsDateType,
-          date_from: next.dateFrom || undefined,
-          date_to: next.dateTo || undefined,
-          material: next.material || undefined,
-          quality_status: next.qualityStatus || undefined,
-          location: next.location || undefined,
-          manufacturer: next.manufacturer || undefined,
-          internal_lot: next.internalLot || undefined,
-          supplier_lot: next.internalLot || undefined,
-          search: next.search || undefined,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          material: filters.material || undefined,
+          quality_status: filters.qualityStatus || undefined,
+          location: filters.location || undefined,
+          manufacturer: filters.manufacturer || undefined,
+          search: search || undefined,
         }),
         listMovements(token, {
-          date_from: next.dateFrom || undefined,
-          date_to: next.dateTo || undefined,
-          material: next.material || undefined,
-          internal_lot: next.internalLot || undefined,
-          supplier_lot: next.internalLot || undefined,
-          document: next.document || undefined,
-          movement_type: next.movementType || undefined,
-          search: next.search || undefined,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          material: filters.material || undefined,
+          document: filters.document || undefined,
+          movement_type: filters.movementType || undefined,
+          search: search || undefined,
         }),
       ])
       setLots(lotsResponse.lots)
@@ -166,312 +190,875 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
     }
   }
 
-  const lotColumns = useMemo<ColumnDef<LotItem, unknown>[]>(
-    () => [
-      {
-        accessorKey: 'internal_lot',
-        header: t('registry.internalLot'),
-        cell: ({ row }) => formatSeries(row.original.internal_lot),
-        sortingFn: ruStringSort as SortingFn<LotItem>,
-        sortUndefined: 'last',
-      },
-      {
-        id: 'material',
-        header: t('registry.material'),
-        accessorFn: (row) => `${row.material_code} · ${row.material_name}`,
-        cell: ({ row }) => `${row.original.material_code} · ${row.original.material_name}`,
-        sortingFn: ruStringSort as SortingFn<LotItem>,
-      },
-      {
-        accessorKey: 'manufacturer_name',
-        header: t('registry.manufacturer'),
-        sortingFn: ruStringSort as SortingFn<LotItem>,
-      },
-      {
-        accessorKey: 'location_code',
-        header: t('registry.location'),
-        cell: ({ row }) => translatedLocation(row.original.location_code, t),
-      },
-      {
-        id: 'qty',
-        header: t('registry.qty'),
-        cell: ({ row }) => `${row.original.quantity} ${row.original.unit}`,
-      },
-      {
-        accessorKey: 'quality_status',
-        header: t('registry.qualityStatus'),
-        cell: ({ row }) => <StatusBadge status={row.original.quality_status} />,
-      },
-      {
-        accessorKey: 'incoming_control_notified_at',
-        header: t('registry.arrivalDate'),
-        cell: ({ row }) => formatDate(row.original.incoming_control_notified_at, locale),
-      },
-      {
-        accessorKey: 'expiry_date',
-        header: t('registry.expiryDate'),
-        cell: ({ row }) => formatDate(row.original.expiry_date, locale),
-      },
-      {
-        accessorKey: 'qc_result_received_at',
-        header: t('registry.qcResultDate'),
-        cell: ({ row }) => formatDate(row.original.qc_result_received_at, locale),
-      },
-      {
-        accessorKey: 'qc_report_no',
-        header: t('registry.qcReportNo'),
-        cell: ({ row }) => row.original.qc_report_no || '-',
-      },
-    ],
-    [locale, t],
+  useEffect(() => {
+    void fetchAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+
+  useEffect(() => {
+    void fetchAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filters, dateFrom, dateTo, dateType])
+
+  // Derived KPI numbers (on full lots set)
+  const kpiActive = useMemo(() => {
+    const released = lots.filter((lot) => lot.quality_status === 'released')
+    return {
+      count: released.length,
+      qty: released.reduce((sum, lot) => sum + (lot.quantity || 0), 0),
+    }
+  }, [lots])
+
+  const kpiPending = useMemo(
+    () => lots.filter((lot) => ['quarantine', 'sampled', 'under_test'].includes(lot.quality_status)).length,
+    [lots],
   )
 
-  const movementColumns = useMemo<ColumnDef<MovementItem, unknown>[]>(
-    () => [
-      {
-        accessorKey: 'created_at',
-        header: t('registry.operationDate'),
-        cell: ({ row }) => formatDateTime(row.original.created_at, locale),
-      },
-      {
-        accessorKey: 'movement_type',
-        header: t('registry.movementType'),
-        cell: ({ row }) => {
-          const rawType = row.original.movement_type
-          const translationKey = movementTypeToTranslationKey(rawType)
-          const localized = t(translationKey as never)
-          const label = localized.startsWith('movementType.') ? rawType : localized
-          return <MovementTypeBadge rawType={rawType} label={label} />
-        },
-      },
-      {
-        id: 'document',
-        header: t('registry.document'),
-        cell: ({ row }) => `${row.original.document_type} · ${row.original.document_id.slice(0, 8)}`,
-      },
-      {
-        accessorKey: 'material_name',
-        header: t('common.name'),
-        cell: ({ row }) => row.original.material_name?.trim() || '-',
-        sortingFn: ruStringSort as SortingFn<MovementItem>,
-      },
-      {
-        accessorKey: 'internal_lot',
-        header: t('registry.internalLot'),
-        cell: ({ row }) => formatSeries(row.original.internal_lot),
-        sortingFn: ruStringSort as SortingFn<MovementItem>,
-      },
-      { accessorKey: 'material_code', header: t('common.code'), sortingFn: ruStringSort as SortingFn<MovementItem> },
-      {
-        id: 'delta',
-        header: t('registry.delta'),
-        cell: ({ row }) => `${row.original.quantity_delta > 0 ? '+' : ''}${row.original.quantity_delta} ${row.original.unit}`,
-      },
-      {
-        id: 'after',
-        header: t('registry.qtyAfter'),
-        cell: ({ row }) => `${row.original.quantity_after} ${row.original.unit}`,
-      },
-      { accessorKey: 'reason', header: t('registry.reason') },
-      { accessorKey: 'workstation_id', header: t('registry.workstation') },
-    ],
-    [locale, t],
+  const kpiExpiring = useMemo(
+    () =>
+      lots.filter((lot) => {
+        const left = daysLeft(lot.expiry_date)
+        return left !== null && left >= 0 && left <= 30
+      }).length,
+    [lots],
   )
 
-  const qualityStatuses = useMemo(() => uniqueValues(lots.map((lot) => lot.quality_status)), [lots])
-  const movementTypes = useMemo(() => uniqueValues(movements.map((movement) => movement.movement_type)), [movements])
+  // Sort + KPI filter applied client-side on top of backend filtering
+  const visibleLots = useMemo(() => {
+    let rows = lots
+    if (kpi === 'pending') rows = rows.filter((lot) => ['quarantine', 'sampled', 'under_test'].includes(lot.quality_status))
+    if (kpi === 'expiring')
+      rows = rows.filter((lot) => {
+        const left = daysLeft(lot.expiry_date)
+        return left !== null && left >= 0 && left <= 30
+      })
+    if (kpi === 'active') rows = rows.filter((lot) => lot.quality_status === 'released')
+    return [...rows].sort((a, b) => compareLot(a, b, seriesSortCtl.sort))
+  }, [lots, kpi, seriesSortCtl.sort])
 
-  function applyPreset(preset: DatePreset) {
+  const visibleMovements = useMemo(
+    () => [...movements].sort((a, b) => compareMovement(a, b, movementsSortCtl.sort)),
+    [movements, movementsSortCtl.sort],
+  )
+
+  function applyPreset(preset: Exclude<DatePreset, null>) {
+    setDatePreset(preset)
     const today = new Date()
     if (preset === 'all') {
-      setFiltersDraft((current) => ({ ...current, dateFrom: '', dateTo: '' }))
+      setDateFrom('')
+      setDateTo('')
       return
     }
-
     if (preset === 'today') {
       const value = toDateInputValue(today)
-      setFiltersDraft((current) => ({ ...current, dateFrom: value, dateTo: value }))
+      setDateFrom(value)
+      setDateTo(value)
       return
     }
-
     if (preset === 'week') {
       const day = today.getDay() === 0 ? 7 : today.getDay()
-      const weekStart = new Date(today)
-      weekStart.setDate(today.getDate() - day + 1)
-      const weekEnd = new Date(weekStart)
-      weekEnd.setDate(weekStart.getDate() + 6)
-      setFiltersDraft((current) => ({ ...current, dateFrom: toDateInputValue(weekStart), dateTo: toDateInputValue(weekEnd) }))
+      const ws = new Date(today)
+      ws.setDate(today.getDate() - day + 1)
+      const we = new Date(ws)
+      we.setDate(ws.getDate() + 6)
+      setDateFrom(toDateInputValue(ws))
+      setDateTo(toDateInputValue(we))
       return
     }
-
     if (preset === 'month') {
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-      setFiltersDraft((current) => ({ ...current, dateFrom: toDateInputValue(monthStart), dateTo: toDateInputValue(monthEnd) }))
+      setDateFrom(toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)))
+      setDateTo(toDateInputValue(new Date(today.getFullYear(), today.getMonth() + 1, 0)))
       return
     }
-
-    const quarter = Math.floor(today.getMonth() / 3)
-    const quarterStart = new Date(today.getFullYear(), quarter * 3, 1)
-    const quarterEnd = new Date(today.getFullYear(), quarter * 3 + 3, 0)
-    setFiltersDraft((current) => ({ ...current, dateFrom: toDateInputValue(quarterStart), dateTo: toDateInputValue(quarterEnd) }))
+    const q = Math.floor(today.getMonth() / 3)
+    setDateFrom(toDateInputValue(new Date(today.getFullYear(), q * 3, 1)))
+    setDateTo(toDateInputValue(new Date(today.getFullYear(), q * 3 + 3, 0)))
   }
+
+  function resetAll() {
+    setSearch('')
+    setFilters(EMPTY_FILTERS)
+    setDraft(EMPTY_FILTERS)
+    setKpi(null)
+    setDateFrom('')
+    setDateTo('')
+    setDatePreset('all')
+  }
+
+  const advCount = countActiveAdv(filters)
+  const hasSearchOrFilters = search.length > 0 || advCount > 0 || kpi !== null || Boolean(dateFrom || dateTo)
+  const isEmptyResult = tab === 'series' ? visibleLots.length === 0 : visibleMovements.length === 0
+
+  const qualityStatusOptions = useMemo(() => uniqueValues(lots.map((lot) => lot.quality_status)), [lots])
+  const movementTypeOptions = useMemo(() => uniqueValues(movements.map((m) => m.movement_type)), [movements])
 
   return (
     <section className="space-y-4">
-      <div className="mb-1 flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase text-slate-500">{t('registry.kicker')}</p>
-          <h1 className="text-2xl font-semibold text-slate-950">{t('registry.title')}</h1>
+      {/* Header + KPI tiles */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-1">
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{t('registry.kicker')}</p>
+          <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-slate-950">{t('registry.title')}</h1>
+          <p className="max-w-2xl text-sm text-slate-600">{t('registry.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2">
-          {(() => {
-            const activeCount = [
-              filtersDraft.material, filtersDraft.location, filtersDraft.internalLot,
-              filtersDraft.document, filtersDraft.movementType, filtersDraft.qualityStatus,
-              filtersDraft.manufacturer, filtersDraft.search, filtersDraft.dateFrom, filtersDraft.dateTo,
-            ].filter(Boolean).length
-            return activeCount > 0 ? (
-              <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                {activeCount} фильтр{activeCount >= 5 ? 'ов' : activeCount >= 2 ? 'а' : ''}
-              </span>
-            ) : null
-          })()}
-          <button
-            className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-            onClick={() => setFiltersVisible((v) => !v)}
-            type="button"
-          >
-            {filtersVisible ? '▲ Скрыть фильтры' : '▼ Фильтры'}
-          </button>
-        </div>
-      </div>
-
-      {filtersVisible && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <button className="mode-button" onClick={() => applyPreset('today')} type="button">{t('registry.periodToday')}</button>
-            <button className="mode-button" onClick={() => applyPreset('week')} type="button">{t('registry.periodWeek')}</button>
-            <button className="mode-button" onClick={() => applyPreset('month')} type="button">{t('registry.periodMonth')}</button>
-            <button className="mode-button" onClick={() => applyPreset('quarter')} type="button">{t('registry.periodQuarter')}</button>
-            <button className="mode-button" onClick={() => applyPreset('all')} type="button">{t('registry.periodAll')}</button>
-          </div>
-
-          <div className="grid gap-3 xl:grid-cols-4">
-          <label className="text-sm font-medium text-slate-700">
-            {t('registry.dateType')}
-            <select className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, dateType: event.target.value as DateType }))} value={filtersDraft.dateType}>
-              {activeTab === 'series' ? (
-                <>
-                  <option value="arrival">{t('registry.arrivalDate')}</option>
-                  <option value="expiry">{t('registry.expiryDate')}</option>
-                </>
-              ) : (
-                <option value="operation">{t('registry.operationDate')}</option>
-              )}
-            </select>
-          </label>
-
-          <label className="text-sm font-medium text-slate-700">
-            {t('registry.dateFrom')}
-            <input className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, dateFrom: event.target.value }))} type="date" value={filtersDraft.dateFrom} />
-          </label>
-
-          <label className="text-sm font-medium text-slate-700">
-            {t('registry.dateTo')}
-            <input className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, dateTo: event.target.value }))} type="date" value={filtersDraft.dateTo} />
-          </label>
-
-          <label className="text-sm font-medium text-slate-700">
-            {t('registry.search')}
-            <input className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, search: event.target.value }))} placeholder={t('registry.searchPlaceholder')} value={filtersDraft.search} />
-          </label>
-
-          <label className="text-sm font-medium text-slate-700">
-            {t('registry.material')}
-            <input className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, material: event.target.value }))} value={filtersDraft.material} />
-          </label>
-
-          {activeTab === 'series' && (
-            <label className="text-sm font-medium text-slate-700">
-              {t('registry.qualityStatus')}
-              <select className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, qualityStatus: event.target.value }))} value={filtersDraft.qualityStatus}>
-                <option value="">{t('registry.all')}</option>
-                {qualityStatuses.map((status) => (
-                  <option key={status} value={status}>{t(`status.${status}` as never)}</option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          <label className="text-sm font-medium text-slate-700">
-            {t('registry.location')}
-            <input className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, location: event.target.value }))} value={filtersDraft.location} />
-          </label>
-
-          {activeTab === 'series' && (
-            <label className="text-sm font-medium text-slate-700">
-              {t('registry.manufacturer')}
-              <input className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, manufacturer: event.target.value }))} value={filtersDraft.manufacturer} />
-            </label>
-          )}
-
-          <label className="text-sm font-medium text-slate-700">
-            {t('registry.internalLot')}
-            <input className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, internalLot: event.target.value }))} value={filtersDraft.internalLot} />
-          </label>
-
-          {activeTab === 'movements' && (
-            <>
-              <label className="text-sm font-medium text-slate-700">
-                {t('registry.document')}
-                <input className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, document: event.target.value }))} value={filtersDraft.document} />
-              </label>
-
-              <label className="text-sm font-medium text-slate-700">
-                {t('registry.movementType')}
-                <select className="input mt-1" onChange={(event) => setFiltersDraft((current) => ({ ...current, movementType: event.target.value }))} value={filtersDraft.movementType}>
-                  <option value="">{t('registry.all')}</option>
-                  {movementTypes.map((movementType) => (
-                      <option key={movementType} value={movementType}>
-                        {(() => {
-                          const translationKey = movementTypeToTranslationKey(movementType)
-                          const localized = t(translationKey as never)
-                          return localized.startsWith('movementType.') ? movementType : localized
-                        })()}
-                      </option>
-                  ))}
-                </select>
-              </label>
-            </>
-          )}
-        </div>
-
-        <div className="mt-3 flex gap-2">
-          <button className="mode-button mode-button-active" onClick={() => void applyFilters(filtersDraft)} type="button">{t('registry.apply')}</button>
-          <button className="mode-button" onClick={() => {
-            const reset = activeTab === 'series' ? { ...DEFAULT_FILTERS, dateType: 'arrival' as DateType } : { ...DEFAULT_FILTERS, dateType: 'operation' as DateType }
-            setFiltersDraft(reset)
-            void applyFilters(reset)
-          }} type="button">{t('registry.reset')}</button>
+        <div className="flex flex-wrap gap-2">
+          <KpiTile
+            icon={Boxes}
+            accent="bg-slate-100 text-slate-700"
+            label={t('registry.kpiActive')}
+            value={kpiActive.count}
+            sub={t('registry.kpiActiveSub', { qty: kpiActive.qty.toLocaleString(locale) })}
+            active={kpi === 'active'}
+            onClick={() => setKpi(kpi === 'active' ? null : 'active')}
+          />
+          <KpiTile
+            icon={FlaskConical}
+            accent="bg-amber-50 text-amber-700"
+            label={t('registry.kpiPending')}
+            value={kpiPending}
+            sub={t('registry.kpiPendingSub')}
+            active={kpi === 'pending'}
+            onClick={() => setKpi(kpi === 'pending' ? null : 'pending')}
+          />
+          <KpiTile
+            icon={CalendarClock}
+            accent="bg-rose-50 text-rose-700"
+            label={t('registry.kpiExpiring')}
+            value={kpiExpiring}
+            sub={t('registry.kpiExpiringSub')}
+            active={kpi === 'expiring'}
+            onClick={() => setKpi(kpi === 'expiring' ? null : 'expiring')}
+          />
         </div>
       </div>
+
+      {/* Error alert */}
+      {error && (
+        <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
       )}
 
-      <div className="rounded-lg border border-slate-200 bg-white p-2">
-        <div className="flex gap-2 border-b border-slate-200 px-2 pb-2">
-          <button className={activeTab === 'series' ? 'mode-button mode-button-active' : 'mode-button'} onClick={() => setActiveTab('series')} type="button">{t('registry.tabSeries')}</button>
-          <button className={activeTab === 'movements' ? 'mode-button mode-button-active' : 'mode-button'} onClick={() => setActiveTab('movements')} type="button">{t('registry.tabMovements')}</button>
-        </div>
-        <div className="p-2">
-          {error && <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          {activeTab === 'series' ? (
-            <DataTable columns={lotColumns} data={lots} emptyLabel={t('registry.emptySeries')} isLoading={isLoading} />
-          ) : (
-            <DataTable columns={movementColumns} data={movements} emptyLabel={t('registry.emptyMovements')} isLoading={isLoading} />
+      {/* Search + Tabs + Refine */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="relative min-w-[280px] flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t('registry.searchPlaceholder')}
+            className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-9 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              aria-label="clear search"
+            >
+              <X size={14} />
+            </button>
           )}
         </div>
+
+        <SegmentedControl<Tab>
+          options={[
+            { value: 'series', label: t('registry.tabSeries'), icon: Boxes },
+            { value: 'movements', label: t('registry.tabMovements'), icon: ArrowUpDown },
+          ]}
+          value={tab}
+          onChange={(value) => {
+            setTab(value)
+            setSelectedLot(null)
+          }}
+        />
+
+        <button
+          type="button"
+          onClick={() => setAdvOpen((current) => !current)}
+          className={`inline-flex h-10 items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition ${
+            advOpen ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          <SlidersHorizontal size={14} />
+          {t('registry.refine')}
+          {advCount > 0 && (
+            <span
+              className={`ml-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 font-mono text-[11px] font-semibold ${
+                advOpen ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'
+              }`}
+            >
+              {advCount}
+            </span>
+          )}
+        </button>
       </div>
+
+      {/* Advanced filters */}
+      {advOpen && (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <FilterGroup title={t('registry.groupMaterial')}>
+              <FilterInput
+                label={t('registry.material')}
+                value={draft.material}
+                onChange={(value) => setDraft((current) => ({ ...current, material: value }))}
+              />
+              {tab === 'series' && (
+                <FilterInput
+                  label={t('registry.manufacturer')}
+                  value={draft.manufacturer}
+                  onChange={(value) => setDraft((current) => ({ ...current, manufacturer: value }))}
+                />
+              )}
+            </FilterGroup>
+
+            {tab === 'series' && (
+              <FilterGroup title={t('registry.groupState')}>
+                <FilterSelect
+                  label={t('registry.qualityStatus')}
+                  value={draft.qualityStatus}
+                  onChange={(value) => setDraft((current) => ({ ...current, qualityStatus: value }))}
+                  options={[
+                    { value: '', label: t('registry.all') },
+                    ...qualityStatusOptions.map((status) => ({
+                      value: status,
+                      label: t(`status.${status}` as never),
+                    })),
+                  ]}
+                />
+                <FilterInput
+                  label={t('registry.location')}
+                  value={draft.location}
+                  onChange={(value) => setDraft((current) => ({ ...current, location: value }))}
+                />
+              </FilterGroup>
+            )}
+
+            {tab === 'movements' && (
+              <FilterGroup title={t('registry.groupDocument')}>
+                <FilterSelect
+                  label={t('registry.movementType')}
+                  value={draft.movementType}
+                  onChange={(value) => setDraft((current) => ({ ...current, movementType: value }))}
+                  options={[
+                    { value: '', label: t('registry.all') },
+                    ...movementTypeOptions.map((type) => {
+                      const translated = t(movementKey(type) as never)
+                      return { value: type, label: translated.startsWith('movementType.') ? type : translated }
+                    }),
+                  ]}
+                />
+                <FilterInput
+                  label={t('registry.document')}
+                  value={draft.document}
+                  onChange={(value) => setDraft((current) => ({ ...current, document: value }))}
+                />
+              </FilterGroup>
+            )}
+          </div>
+          <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(EMPTY_FILTERS)
+                setFilters(EMPTY_FILTERS)
+              }}
+              className="inline-flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium text-slate-500 hover:text-slate-900"
+            >
+              <RotateCcw size={13} />
+              {t('registry.reset')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFilters(draft)
+                setAdvOpen(false)
+              }}
+              className="inline-flex h-8 items-center rounded-md bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800"
+            >
+              {t('registry.apply')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Period card */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        {tab === 'series' ? (
+          <SegmentedControl<DateType>
+            options={[
+              { value: 'arrival', label: t('registry.arrivalDate') },
+              { value: 'expiry', label: t('registry.expiryDate') },
+            ]}
+            value={dateType === 'operation' ? 'arrival' : dateType}
+            onChange={setDateType}
+          />
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+            <CalendarRange size={13} />
+            {t('registry.operationDate')}
+          </span>
+        )}
+        <div className="flex items-center gap-1.5">
+          <DateField
+            value={dateFrom}
+            onChange={(value) => {
+              setDateFrom(value)
+              setDatePreset(null)
+            }}
+          />
+          <span className="text-slate-300">→</span>
+          <DateField
+            value={dateTo}
+            onChange={(value) => {
+              setDateTo(value)
+              setDatePreset(null)
+            }}
+          />
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {PRESET_KEYS.map((key) => (
+            <Chip key={key} active={datePreset === key} onClick={() => applyPreset(key)}>
+              {t(`registry.period${capitalize(key)}` as never)}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        {isLoading ? (
+          <SkeletonTable />
+        ) : isEmptyResult ? (
+          hasSearchOrFilters ? (
+            <EmptyFiltered onReset={resetAll} t={t} />
+          ) : (
+            <EmptyData t={t} />
+          )
+        ) : tab === 'series' ? (
+          <SeriesTable
+            rows={visibleLots}
+            sort={seriesSortCtl.sort}
+            onSort={seriesSortCtl.onSort}
+            onSelect={setSelectedLot}
+            selectedId={selectedLot?.id ?? null}
+            locale={locale}
+            t={t}
+          />
+        ) : (
+          <MovementsTable
+            rows={visibleMovements}
+            sort={movementsSortCtl.sort}
+            onSort={movementsSortCtl.onSort}
+            locale={locale}
+            t={t}
+          />
+        )}
+      </div>
+
+      {/* Side panel */}
+      <LotDetailPanel lot={selectedLot} onClose={() => setSelectedLot(null)} locale={locale} t={t} />
     </section>
+  )
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+// ─── Sorting comparators ─────────────────────────────────────────────────────
+
+function compareLot(a: LotItem, b: LotItem, sort: SortState): number {
+  const dir = sort.dir === 'asc' ? 1 : -1
+  switch (sort.key) {
+    case 'quantity':
+      return numCompare(a.quantity, b.quantity) * dir
+    case 'expiry_date':
+      return dateCompare(a.expiry_date, b.expiry_date) * dir
+    case 'internal_lot':
+    case 'material_name':
+    case 'manufacturer_name':
+      return ruCompare((a as unknown as Record<string, string>)[sort.key], (b as unknown as Record<string, string>)[sort.key]) * dir
+    default:
+      return 0
+  }
+}
+
+function compareMovement(a: MovementItem, b: MovementItem, sort: SortState): number {
+  const dir = sort.dir === 'asc' ? 1 : -1
+  switch (sort.key) {
+    case 'created_at':
+      return dateCompare(a.created_at, b.created_at) * dir
+    case 'delta':
+      return numCompare(a.quantity_delta, b.quantity_delta) * dir
+    case 'internal_lot':
+    case 'material_name':
+    case 'material_code':
+      return ruCompare((a as unknown as Record<string, string>)[sort.key], (b as unknown as Record<string, string>)[sort.key]) * dir
+    default:
+      return 0
+  }
+}
+
+// ─── Small inputs ────────────────────────────────────────────────────────────
+
+function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</h3>
+      <div className="space-y-2">{children}</div>
+    </div>
+  )
+}
+
+function FilterInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <div>
+      <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</label>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
+      />
+    </div>
+  )
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: Array<{ value: string; label: string }>
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</label>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function DateField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="relative">
+      <CalendarRange size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+      <input
+        type="date"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-8 rounded-md border border-slate-200 bg-white pl-7 pr-2 font-mono text-xs text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
+      />
+    </div>
+  )
+}
+
+// ─── Tables ──────────────────────────────────────────────────────────────────
+
+type Translate = ReturnType<typeof useI18n>['t']
+
+interface SeriesTableProps {
+  rows: LotItem[]
+  sort: SortState
+  onSort: (key: string) => void
+  onSelect: (lot: LotItem) => void
+  selectedId: string | null
+  locale: string
+  t: Translate
+}
+
+function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t }: SeriesTableProps) {
+  return (
+    <div className="max-h-[640px] overflow-auto">
+      <table className="w-full min-w-[1100px] text-sm">
+        <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur">
+          <tr className="border-b border-slate-200">
+            <Th><SortHeader label={t('registry.internalLot')} sortKey="internal_lot" sort={sort} onSort={onSort} /></Th>
+            <Th><SortHeader label={t('registry.material')} sortKey="material_name" sort={sort} onSort={onSort} /></Th>
+            <Th><SortHeader label={t('registry.manufacturer')} sortKey="manufacturer_name" sort={sort} onSort={onSort} /></Th>
+            <Th>{t('registry.location')}</Th>
+            <Th align="right"><SortHeader label={t('registry.qty')} sortKey="quantity" sort={sort} onSort={onSort} align="right" /></Th>
+            <Th>{t('registry.qualityStatus')}</Th>
+            <Th><SortHeader label={t('registry.expiryDate')} sortKey="expiry_date" sort={sort} onSort={onSort} /></Th>
+            <Th>{t('registry.qcReportNo')}</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((lot, index) => {
+            const left = daysLeft(lot.expiry_date)
+            const active = selectedId === lot.id
+            return (
+              <tr
+                key={lot.id}
+                onClick={() => onSelect(lot)}
+                className={`cursor-pointer border-b border-slate-100 hover:bg-slate-50 ${
+                  active ? 'bg-slate-50' : index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'
+                }`}
+              >
+                <Td>
+                  <div className="font-mono text-[12.5px] font-semibold text-slate-900">{lot.internal_lot || '—'}</div>
+                  <div className="font-mono text-[11px] text-slate-500">{lot.supplier_lot || '—'}</div>
+                </Td>
+                <Td>
+                  <div className="font-medium text-slate-900">{lot.material_name}</div>
+                  <div className="font-mono text-[11px] text-slate-500">{lot.material_code}</div>
+                </Td>
+                <Td className="text-slate-700">{lot.manufacturer_name}</Td>
+                <Td>
+                  <div>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
+                        LOCATION_PILL[lot.location_code] ?? LOCATION_PILL.RECEIVING
+                      }`}
+                    >
+                      <MapPin size={11} /> {translatedLocation(lot.location_code, t)}
+                    </span>
+                  </div>
+                  {(() => {
+                    const addr = formatPhysAddr(lot)
+                    return addr ? (
+                      <div
+                        className="mt-0.5 font-mono text-[11px] tabular-nums text-slate-600"
+                        title={physAddrTooltip(lot, t)}
+                      >
+                        {addr}
+                      </div>
+                    ) : (
+                      <div className="mt-0.5 text-[11px] italic text-slate-400">
+                        {t('registry.physicalAddressEmpty')}
+                      </div>
+                    )
+                  })()}
+                </Td>
+                <Td align="right">
+                  <span className="font-mono tabular-nums text-slate-900">
+                    <span className="font-semibold">{lot.quantity}</span> <span className="text-slate-500">{lot.unit}</span>
+                  </span>
+                </Td>
+                <Td><StatusBadge status={lot.quality_status} /></Td>
+                <Td>
+                  <div className="font-mono tabular-nums text-slate-700">{formatDate(lot.expiry_date, locale)}</div>
+                  {left !== null && left <= 30 && (
+                    <div className={`text-[11px] ${left < 0 ? 'text-rose-700' : 'text-amber-700'}`}>
+                      {left < 0
+                        ? t('registry.expiredHint', { days: String(Math.abs(left)) })
+                        : t('registry.expiresInHint', { days: String(left) })}
+                    </div>
+                  )}
+                  {lot.incoming_control_notified_at && (
+                    <div className="font-mono text-[10.5px] text-slate-400">
+                      {t('registry.arrivedHint', { date: formatDate(lot.incoming_control_notified_at, locale) })}
+                    </div>
+                  )}
+                </Td>
+                <Td>
+                  <div className="font-mono text-[11.5px] text-blue-700">{lot.qc_report_no || '—'}</div>
+                  {lot.qc_result_received_at && (
+                    <div className="font-mono text-[10.5px] text-slate-400">
+                      {t('registry.qcReceivedHint', { date: formatDate(lot.qc_result_received_at, locale) })}
+                    </div>
+                  )}
+                </Td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+interface MovementsTableProps {
+  rows: MovementItem[]
+  sort: SortState
+  onSort: (key: string) => void
+  locale: string
+  t: Translate
+}
+
+function MovementsTable({ rows, sort, onSort, locale, t }: MovementsTableProps) {
+  return (
+    <div className="max-h-[640px] overflow-auto">
+      <table className="w-full min-w-[1100px] text-sm">
+        <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur">
+          <tr className="border-b border-slate-200">
+            <Th><SortHeader label={t('registry.operationDate')} sortKey="created_at" sort={sort} onSort={onSort} /></Th>
+            <Th>{t('registry.movementType')}</Th>
+            <Th>{t('registry.document')}</Th>
+            <Th>{t('registry.materialSeries')}</Th>
+            <Th align="right"><SortHeader label={t('registry.delta')} sortKey="delta" sort={sort} onSort={onSort} align="right" /></Th>
+            <Th align="right">{t('registry.qtyAfter')}</Th>
+            <Th>{t('registry.reason')}</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m, index) => {
+            const translated = t(movementKey(m.movement_type) as never)
+            const label = translated.startsWith('movementType.') ? m.movement_type : translated
+            return (
+              <tr
+                key={m.id}
+                className={`border-b border-slate-100 hover:bg-slate-50 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}
+              >
+                <Td>
+                  <div className="font-mono tabular-nums text-slate-800">{formatShortDateTime(m.created_at, locale)}</div>
+                  <div className="text-[10px] text-slate-400">{new Date(m.created_at).getFullYear()}</div>
+                </Td>
+                <Td><MovementTypeBadge rawType={m.movement_type} label={label} /></Td>
+                <Td>
+                  <div className="font-medium text-slate-800">{m.document_type}</div>
+                  <div className="font-mono text-[11px] text-slate-500">#{m.document_id.slice(0, 8)}</div>
+                </Td>
+                <Td>
+                  <div className="truncate font-medium text-slate-900" style={{ maxWidth: 280 }}>
+                    {m.material_name || '—'}
+                  </div>
+                  <div className="font-mono text-[11px] text-slate-500">
+                    {m.internal_lot || '—'} · {m.material_code || '—'}
+                  </div>
+                </Td>
+                <Td align="right">
+                  <span
+                    className={`font-mono font-semibold tabular-nums ${
+                      m.quantity_delta < 0 ? 'text-rose-700' : m.quantity_delta > 0 ? 'text-emerald-700' : 'text-slate-500'
+                    }`}
+                  >
+                    {m.quantity_delta > 0 ? '+' : ''}
+                    {m.quantity_delta} <span className="text-slate-400">{m.unit}</span>
+                  </span>
+                </Td>
+                <Td align="right">
+                  <span className="font-mono tabular-nums text-slate-800">
+                    {m.quantity_after} <span className="text-slate-500">{m.unit}</span>
+                  </span>
+                </Td>
+                <Td>
+                  <div className="truncate text-slate-600" style={{ maxWidth: 320 }} title={m.reason || ''}>
+                    {m.reason || '—'}
+                  </div>
+                </Td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function Th({ children, align = 'left' }: { children: React.ReactNode; align?: 'left' | 'right' }) {
+  return (
+    <th className={`whitespace-nowrap border-b border-slate-200 px-3 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      {children}
+    </th>
+  )
+}
+
+function Td({
+  children,
+  align = 'left',
+  className = '',
+}: {
+  children: React.ReactNode
+  align?: 'left' | 'right'
+  className?: string
+}) {
+  return (
+    <td className={`px-3 py-2.5 align-top ${align === 'right' ? 'text-right' : 'text-left'} ${className}`}>{children}</td>
+  )
+}
+
+// ─── Side panel ──────────────────────────────────────────────────────────────
+
+interface LotDetailPanelProps {
+  lot: LotItem | null
+  onClose: () => void
+  locale: string
+  t: Translate
+}
+
+function LotDetailPanel({ lot, onClose, locale, t }: LotDetailPanelProps) {
+  return (
+    <>
+      <div
+        onClick={onClose}
+        className={`fixed inset-0 z-30 bg-slate-950/30 backdrop-blur-sm transition-opacity ${
+          lot ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      />
+      <aside
+        className={`fixed right-0 top-0 z-40 flex h-screen w-[480px] max-w-[92vw] flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform ${
+          lot ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {lot && (
+          <>
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 p-5">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {t('registry.lotPassport')}
+                </p>
+                <h2 className="mt-1 font-mono text-[18px] font-semibold tracking-tight text-slate-950">
+                  {lot.internal_lot || '—'}
+                </h2>
+                <p className="mt-0.5 text-sm font-medium text-slate-700">{lot.material_name}</p>
+                <p className="font-mono text-[11px] text-slate-500">
+                  {lot.material_code} · {lot.manufacturer_name}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="close"
+                className="rounded-md border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex-1 space-y-4 overflow-y-auto p-5">
+              <div className="flex items-center gap-2">
+                <StatusBadge status={lot.quality_status} />
+                <span
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${
+                    LOCATION_PILL[lot.location_code] ?? LOCATION_PILL.RECEIVING
+                  }`}
+                >
+                  <MapPin size={11} /> {translatedLocation(lot.location_code, t)}
+                </span>
+                <span className="ml-auto font-mono tabular-nums text-slate-900">
+                  <span className="text-base font-semibold">{lot.quantity}</span>{' '}
+                  <span className="text-slate-500">{lot.unit}</span>
+                </span>
+              </div>
+
+              <DetailSection title={t('registry.lotIdentification')}>
+                <DetailRow label={t('registry.supplierLotShort')} value={lot.supplier_lot || '—'} mono />
+                <DetailRow label={t('lots.manufacturer')} value={lot.manufacturer_name} />
+                <DetailRow label={t('lots.warehouse')} value={t(`status.${lot.warehouse_type}` as never)} />
+                <DetailRow
+                  label={t('warehouseOps.physicalAddressTitle')}
+                  value={formatPhysAddrFull(lot, t) || <span className="italic text-slate-400">{t('registry.physicalAddressEmpty')}</span>}
+                />
+              </DetailSection>
+
+              <DetailSection title={t('registry.lotDates')}>
+                <DetailRow label={t('receipt.productionDate')} value={formatDate(lot.production_date, locale)} mono />
+                <DetailRow
+                  label={t('registry.expiryDate')}
+                  value={formatDate(lot.expiry_date, locale)}
+                  mono
+                  accent={(() => {
+                    const left = daysLeft(lot.expiry_date)
+                    return left !== null && left <= 30 ? 'amber' : null
+                  })()}
+                />
+              </DetailSection>
+
+              <DetailSection title={t('registry.lotControlChain')}>
+                <DetailRow label={t('lots.qcNotified')} value={formatDateTime(lot.incoming_control_notified_at, locale)} mono />
+                <DetailRow label={t('quality.sample')} value={formatDateTime(lot.sampling_date, locale)} mono />
+                <DetailRow label={t('lots.qcResult')} value={formatDateTime(lot.qc_result_received_at, locale)} mono />
+                <DetailRow label={t('registry.qcReportNo')} value={lot.qc_report_no || '—'} mono />
+                <DetailRow label={t('quality.qaReview')} value={formatDateTime(lot.qa_decision_at, locale)} mono />
+              </DetailSection>
+            </div>
+          </>
+        )}
+      </aside>
+    </>
+  )
+}
+
+function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</h3>
+      <div className="overflow-hidden rounded-md border border-slate-200">{children}</div>
+    </section>
+  )
+}
+
+function DetailRow({
+  label,
+  value,
+  mono,
+  accent,
+}: {
+  label: string
+  value: React.ReactNode
+  mono?: boolean
+  accent?: 'amber' | null
+}) {
+  const accentCls = accent === 'amber' ? 'text-amber-700' : 'text-slate-900'
+  return (
+    <div className="flex items-baseline justify-between border-b border-slate-100 px-3 py-2 last:border-b-0 odd:bg-slate-50/30">
+      <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">{label}</span>
+      <span className={`text-[12.5px] ${mono ? 'font-mono tabular-nums' : ''} ${accentCls}`}>{value || '—'}</span>
+    </div>
+  )
+}
+
+// ─── Empty / loading states ──────────────────────────────────────────────────
+
+function SkeletonTable() {
+  const widths = [110, 200, 140, 90, 80, 110, 90]
+  return (
+    <div className="p-3">
+      <div className="space-y-2">
+        {Array.from({ length: 6 }).map((_, row) => (
+          <div key={row} className="flex items-center gap-3 rounded-md bg-slate-50 px-3 py-3">
+            {widths.map((width, i) => (
+              <div key={i} className="h-3 animate-pulse rounded bg-slate-200" style={{ width }} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function EmptyFiltered({ onReset, t }: { onReset: () => void; t: Translate }) {
+  return (
+    <div className="flex flex-col items-center gap-2 px-4 py-16">
+      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+        <SearchX size={20} />
+      </span>
+      <p className="text-sm font-medium text-slate-900">{t('registry.emptyFiltered')}</p>
+      <button
+        type="button"
+        onClick={onReset}
+        className="text-xs font-medium text-blue-700 hover:underline"
+      >
+        {t('registry.resetFilters')}
+      </button>
+    </div>
+  )
+}
+
+function EmptyData({ t }: { t: Translate }) {
+  return (
+    <div className="flex flex-col items-center gap-2 px-4 py-16">
+      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+        <Inbox size={22} />
+      </span>
+      <p className="text-sm font-medium text-slate-900">{t('registry.emptyAll')}</p>
+      <p className="text-xs text-slate-500">{t('registry.emptyAllHint')}</p>
+    </div>
   )
 }
