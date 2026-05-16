@@ -9,9 +9,11 @@ import {
   ClipboardCheck,
   Eye,
   EyeOff,
+  FileDown,
   Inbox,
   PenLine,
   Plus,
+  ScanBarcode,
   Search,
   ShieldCheck,
   Wand2,
@@ -19,6 +21,7 @@ import {
 } from 'lucide-react'
 import {
   cancelInventoryWave,
+  downloadInventoryWavePdf,
   getInventoryWave,
   listInventoryWaves,
   listLots,
@@ -308,6 +311,7 @@ export function InventoryCountPage({ token, user }: InventoryCountPageProps) {
     return (
       <DetailView
         wave={selected}
+        token={token}
         locale={locale}
         t={t}
         onBack={backToList}
@@ -634,7 +638,7 @@ interface PlanningViewProps {
   t: Translate
 }
 
-type ScopeType = 'all' | 'zone' | 'rack'
+type ScopeType = 'all' | 'zone' | 'rack' | 'custom'
 
 function PlanningView({ warehouses, lots, onLoadLots, onCancel, onStart, error, isLoading, t }: PlanningViewProps) {
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? '')
@@ -644,6 +648,8 @@ function PlanningView({ warehouses, lots, onLoadLots, onCancel, onStart, error, 
   const [tolerance, setTolerance] = useState(0.5)
   const [counters, setCounters] = useState<string>('')
   const [verifier, setVerifier] = useState<string>('')
+  const [customLotIds, setCustomLotIds] = useState<string[]>([])
+  const [customSearch, setCustomSearch] = useState('')
 
   useEffect(() => {
     if (warehouses.length > 0 && !warehouseId) setWarehouseId(warehouses[0].id)
@@ -655,13 +661,31 @@ function PlanningView({ warehouses, lots, onLoadLots, onCancel, onStart, error, 
   }, [])
 
   const scopeLots = useMemo(() => {
+    if (scopeType === 'custom') {
+      const ids = new Set(customLotIds)
+      return lots.filter((lot) => ids.has(lot.id))
+    }
     return lots.filter((lot) => {
       if (lot.warehouse_id !== warehouseId) return false
       if (scopeType === 'zone' && zone && lot.location_code !== zone) return false
       if (scopeType === 'rack' && rack && lot.rack_no !== rack) return false
       return lot.quantity > 0
     })
-  }, [lots, warehouseId, scopeType, zone, rack])
+  }, [lots, warehouseId, scopeType, zone, rack, customLotIds])
+
+  const customCandidates = useMemo(() => {
+    const q = customSearch.trim().toLowerCase()
+    const pool = lots.filter((lot) => lot.warehouse_id === warehouseId && lot.quantity > 0 && !customLotIds.includes(lot.id))
+    if (!q) return pool.slice(0, 30)
+    return pool
+      .filter(
+        (lot) =>
+          lot.internal_lot.toLowerCase().includes(q) ||
+          lot.material_code.toLowerCase().includes(q) ||
+          lot.material_name.toLowerCase().includes(q),
+      )
+      .slice(0, 30)
+  }, [lots, warehouseId, customLotIds, customSearch])
 
   const zones = useMemo(
     () => Array.from(new Set(lots.filter((l) => l.warehouse_id === warehouseId).map((l) => l.location_code))).sort(),
@@ -698,6 +722,7 @@ function PlanningView({ warehouses, lots, onLoadLots, onCancel, onStart, error, 
         warehouse_id: warehouseId,
         location_code: scopeType === 'zone' ? zone || null : null,
         rack_no: scopeType === 'rack' ? rack || null : null,
+        lot_ids: scopeType === 'custom' ? customLotIds : [],
       },
       tolerance_pct: tolerance,
       counters: counterList,
@@ -779,6 +804,7 @@ function PlanningView({ warehouses, lots, onLoadLots, onCancel, onStart, error, 
               { value: 'all', label: t('inventoryCount.scopeAll') },
               { value: 'zone', label: t('inventoryCount.scopeZone') },
               { value: 'rack', label: t('inventoryCount.scopeRack') },
+              { value: 'custom', label: t('inventoryCount.scopeCustom') },
             ] as const).map((opt) => (
               <label key={opt.value} className="flex cursor-pointer items-center gap-3">
                 <input
@@ -845,6 +871,85 @@ function PlanningView({ warehouses, lots, onLoadLots, onCancel, onStart, error, 
           </FormField>
         </div>
       </div>
+
+      {scopeType === 'custom' && (
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-[15px] font-semibold text-slate-900">{t('inventoryCount.customListTitle')}</h3>
+            <span className="text-[11px] text-slate-500">
+              {t('inventoryCount.customSelected', { n: String(customLotIds.length) })}
+            </span>
+          </div>
+
+          {customLotIds.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {customLotIds.map((id) => {
+                const lot = lots.find((l) => l.id === id)
+                if (!lot) return null
+                return (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[12px] text-slate-800"
+                  >
+                    {lot.internal_lot}
+                    <button
+                      type="button"
+                      onClick={() => setCustomLotIds((curr) => curr.filter((cid) => cid !== id))}
+                      className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                      aria-label="remove"
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={customSearch}
+              onChange={(event) => setCustomSearch(event.target.value)}
+              placeholder={t('inventoryCount.customSearchPlaceholder')}
+              className="h-9 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
+            />
+          </div>
+
+          <div className="mt-2 max-h-[240px] overflow-y-auto rounded-md border border-slate-200">
+            {customCandidates.length === 0 ? (
+              <p className="px-3 py-4 text-center text-xs text-slate-500">
+                {t('inventoryCount.customEmpty')}
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {customCandidates.map((lot) => (
+                  <li key={lot.id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px]">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-slate-900">{lot.internal_lot}</span>
+                        <span className="text-slate-600">{lot.material_name}</span>
+                      </div>
+                      <div className="font-mono text-[11px] text-slate-500">
+                        {lot.material_code} · {lot.quantity} {lot.unit}
+                        {lot.rack_no && ` · ${lot.rack_no}`}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCustomLotIds((curr) => [...curr, lot.id])}
+                      className="inline-flex h-7 items-center gap-1 rounded-md bg-slate-900 px-2 text-[11px] font-medium text-white hover:bg-slate-800"
+                    >
+                      <Plus size={12} />
+                      {t('inventoryCount.customAdd')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center gap-2">
@@ -929,6 +1034,38 @@ function WalkthroughView({
   const [expandedRacks, setExpandedRacks] = useState<string[]>(
     Array.from(new Set(wave.lines.map((l) => l.rack_no || '—'))),
   )
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [scannerInput, setScannerInput] = useState('')
+  const [scannerError, setScannerError] = useState<string | null>(null)
+  const [focusedLineId, setFocusedLineId] = useState<string | null>(null)
+
+  function scanLot(query: string) {
+    const q = query.trim().toLowerCase()
+    if (!q) return
+    setScannerError(null)
+    const match = wave.lines.find(
+      (l) => l.internal_lot.toLowerCase() === q || (l.supplier_lot ?? '').toLowerCase() === q,
+    )
+    if (!match) {
+      setScannerError(t('inventoryCount.scannerNotFound', { q: query }))
+      return
+    }
+    const rack = match.rack_no || '—'
+    setExpandedRacks((curr) => (curr.includes(rack) ? curr : [...curr, rack]))
+    setFocusedLineId(match.id)
+    setScannerOpen(false)
+    setScannerInput('')
+    // Allow the DOM to render the expanded section, then scroll into view.
+    window.setTimeout(() => {
+      const el = document.getElementById(`inv-line-${match.id}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        const input = el.querySelector<HTMLInputElement>('input[type="number"]')
+        input?.focus()
+        input?.select()
+      }
+    }, 80)
+  }
 
   // Group lines: rack → tier → lines
   const groups = useMemo(() => {
@@ -970,6 +1107,20 @@ function WalkthroughView({
             <span className="text-sm text-slate-600">{wave.scope_description}</span>
           </div>
           <div className="flex items-center gap-3 text-sm">
+            {canCount && (
+              <button
+                type="button"
+                onClick={() => {
+                  setScannerError(null)
+                  setScannerInput('')
+                  setScannerOpen(true)
+                }}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <ScanBarcode size={14} />
+                {t('inventoryCount.scan')}
+              </button>
+            )}
             <span className="font-mono tabular-nums text-slate-700">
               {countedCount} / {wave.total_lines}
             </span>
@@ -1071,6 +1222,7 @@ function WalkthroughView({
                             locale={locale}
                             t={t}
                             tolerance={wave.tolerance_pct}
+                            focused={focusedLineId === line.id}
                             onSave={(actual, notes) => onSaveLine(line.id, { actual_quantity: actual, notes })}
                           />
                         ))}
@@ -1104,6 +1256,66 @@ function WalkthroughView({
           </button>
         </div>
       </div>
+
+      {scannerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <h2 className="text-base font-semibold text-slate-950">{t('inventoryCount.scanTitle')}</h2>
+              <button
+                type="button"
+                onClick={() => setScannerOpen(false)}
+                aria-label="close"
+                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-4">
+              <p className="mb-2 text-sm text-slate-600">{t('inventoryCount.scanHint')}</p>
+              <input
+                autoFocus
+                value={scannerInput}
+                onChange={(event) => {
+                  setScannerInput(event.target.value)
+                  setScannerError(null)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    scanLot(scannerInput)
+                  }
+                }}
+                placeholder={t('inventoryCount.scanPlaceholder')}
+                className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-mono text-base outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
+              />
+              {scannerError && (
+                <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-800">
+                  <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                  <span>{scannerError}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setScannerOpen(false)}
+                className="inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={!scannerInput.trim()}
+                onClick={() => scanLot(scannerInput)}
+                className="inline-flex h-9 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t('inventoryCount.scanFind')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -1114,6 +1326,7 @@ function CountLineRow({
   locale,
   t,
   tolerance,
+  focused,
   onSave,
 }: {
   line: InventoryWaveLineItem
@@ -1121,6 +1334,7 @@ function CountLineRow({
   locale: string
   t: Translate
   tolerance: number
+  focused?: boolean
   onSave: (actual: number, notes: string | null) => Promise<void>
 }) {
   const [actual, setActual] = useState(line.actual_quantity !== null ? String(line.actual_quantity) : '')
@@ -1153,7 +1367,7 @@ function CountLineRow({
       : 'bg-slate-100 text-slate-500 border-slate-200'
 
   return (
-    <li className="px-4 py-3">
+    <li id={`inv-line-${line.id}`} className={`px-4 py-3 ${focused ? 'bg-amber-50/60 ring-1 ring-amber-200' : ''}`}>
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -1490,6 +1704,7 @@ function VerificationView({
 
 function DetailView({
   wave,
+  token,
   locale,
   t,
   onBack,
@@ -1497,6 +1712,7 @@ function DetailView({
   canCancel,
 }: {
   wave: InventoryWaveItem
+  token: string
   locale: string
   t: Translate
   onBack: () => void
@@ -1505,6 +1721,19 @@ function DetailView({
 }) {
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const [pdfError, setPdfError] = useState<string | null>(null)
+
+  async function handlePdf() {
+    setPdfError(null)
+    try {
+      const blob = await downloadInventoryWavePdf(token, wave.id)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : t('inventoryCount.pdfFailed'))
+    }
+  }
 
   return (
     <section className="space-y-4">
@@ -1521,16 +1750,32 @@ function DetailView({
           <span className="font-mono text-[18px] font-semibold text-slate-950">{wave.wave_no}</span>
           <StatusChip status={wave.status} t={t} />
         </div>
-        {canCancel && !cancelOpen && (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setCancelOpen(true)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-rose-300 bg-white px-3 text-sm font-medium text-rose-700 hover:bg-rose-50"
+            onClick={() => void handlePdf()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50"
           >
-            {t('inventoryCount.cancelWave')}
+            <FileDown size={15} />
+            {t('inventoryCount.printPdf')}
           </button>
-        )}
+          {canCancel && !cancelOpen && (
+            <button
+              type="button"
+              onClick={() => setCancelOpen(true)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-rose-300 bg-white px-3 text-sm font-medium text-rose-700 hover:bg-rose-50"
+            >
+              {t('inventoryCount.cancelWave')}
+            </button>
+          )}
+        </div>
       </div>
+      {pdfError && (
+        <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span>{pdfError}</span>
+        </div>
+      )}
 
       {cancelOpen && (
         <div className="rounded-lg border border-rose-200 bg-rose-50/30 p-4">

@@ -62,6 +62,7 @@ from app.schemas.quality import (
     QCScanVerifyRequest,
 )
 from app.services.inventory import adjust_lot, create_fg_shipment, create_inventory_count, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
+from app.services.inventory_count_pdf import render_inventory_count_pdf
 from app.services.inventory_count_waves import (
     cancel_wave as cancel_wave_service,
     get_wave as get_wave_service,
@@ -862,3 +863,61 @@ def cancel_inventory_wave_route(
 ) -> InventoryWaveItem:
     wave = cancel_wave_service(db, current_user, wave_id, payload)
     return _wave_item(db, wave)
+
+
+@router.get("/inventory-waves/{wave_id}/pdf")
+def inventory_wave_pdf_route(
+    wave_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    wave = get_wave_service(db, current_user, wave_id)
+    warehouse = db.get(Warehouse, wave.warehouse_id)
+    lines = (
+        db.query(InventoryCountWaveLine)
+        .filter(InventoryCountWaveLine.wave_id == wave.id)
+        .order_by(InventoryCountWaveLine.created_at)
+        .all()
+    )
+    # Eager-load lot + material for the PDF so it can print code/name.
+    for line in lines:
+        _ = line.lot.material.name if line.lot and line.lot.material else None
+
+    counter_users: list[User] = []
+    if wave.counters:
+        usernames = [u.strip() for u in wave.counters.split(",") if u.strip()]
+        if usernames:
+            counter_users = db.query(User).filter(User.username.in_(usernames)).all()
+    verifier_user = db.get(User, wave.verifier_id) if wave.verifier_id else None
+    posted_by_user = db.get(User, wave.posted_by) if wave.posted_by else None
+
+    name_ids = {line.counted_by for line in lines if line.counted_by} | {
+        line.verified_by for line in lines if line.verified_by
+    }
+    user_names: dict[str, str] = {}
+    if name_ids:
+        users = db.query(User).filter(User.id.in_(name_ids)).all()
+        for u in users:
+            user_names[str(u.id)] = u.full_name or u.username
+
+    pdf_bytes = render_inventory_count_pdf(
+        wave,
+        warehouse,
+        lines,
+        counter_users,
+        verifier_user,
+        posted_by_user,
+        user_names=user_names,
+    )
+    raw_name = f"inventory-{wave.wave_no}.pdf"
+    ascii_fallback = raw_name.encode("ascii", "replace").decode("ascii").replace("?", "_")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{ascii_fallback}"; '
+                f"filename*=UTF-8''{quote(raw_name)}"
+            )
+        },
+    )

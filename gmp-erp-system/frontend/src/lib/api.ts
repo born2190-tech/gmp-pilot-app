@@ -249,6 +249,15 @@ export function cancelInventoryWave(token: string, waveId: string, payload: Inve
   return request<InventoryWaveItem>(`/api/inventory/inventory-waves/${waveId}/cancel`, 'POST', { token, body: payload })
 }
 
+export async function downloadInventoryWavePdf(token: string, waveId: string): Promise<Blob> {
+  const response = await fetch(`/api/inventory/inventory-waves/${waveId}/pdf`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
 export function createReceipt(token: string, payload: ReceiptCreate): Promise<ReceiptResponse> {
   return request<ReceiptResponse>('/api/inventory/receipts', 'POST', { token, body: payload })
 }
