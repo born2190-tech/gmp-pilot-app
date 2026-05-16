@@ -361,6 +361,112 @@ export interface InventoryCountsResponse {
   counts: InventoryCountItem[]
 }
 
+// ─── Inventory count workflow (replaces the one-shot form) ──────────────────
+//
+// In the UI we call this "Инвентаризация" — the backend identifier "wave" is
+// kept only for internal table/route names so we don't have to migrate the
+// schema.
+
+export type InventoryWaveStatus = 'planning' | 'counting' | 'verification' | 'posted' | 'cancelled'
+export type InventoryWaveLineStatus =
+  | 'pending'
+  | 'counted'
+  | 'within_tolerance'
+  | 'needs_verification'
+  | 'verified'
+  | 'rejected'
+
+export interface InventoryWaveLineItem {
+  id: string
+  lot_id: string
+  internal_lot: string
+  supplier_lot: string | null
+  material_code: string
+  material_name: string
+  location_code: string
+  rack_no: string | null
+  sector_no: string | null
+  tier_no: string | null
+  place_no: string | null
+  pallet_no: string | null
+  unit: string
+  status: InventoryWaveLineStatus
+  system_quantity: number
+  actual_quantity: number | null
+  variance: number | null
+  variance_pct: number | null
+  notes: string | null
+  counted_by: string | null
+  counted_by_name: string | null
+  counted_at: string | null
+  verified_by: string | null
+  verified_by_name: string | null
+  verified_at: string | null
+  verifier_comment: string | null
+}
+
+export interface InventoryWaveItem {
+  id: string
+  wave_no: string
+  status: InventoryWaveStatus
+  warehouse_type: string
+  warehouse_name: string
+  scope_description: string
+  tolerance_pct: number
+  created_by: string
+  created_by_name: string | null
+  started_at: string
+  counters: string[]
+  verifier_id: string | null
+  verifier_name: string | null
+  submitted_at: string | null
+  posted_by: string | null
+  posted_by_name: string | null
+  posted_at: string | null
+  total_lines: number
+  counted_lines: number
+  variance_lines: number
+  lines: InventoryWaveLineItem[]
+}
+
+export interface InventoryWavesResponse {
+  waves: InventoryWaveItem[]
+}
+
+export interface InventoryWaveStartRequest {
+  wave_no?: string | null
+  scope: {
+    warehouse_id: string
+    location_code?: string | null
+    rack_no?: string | null
+    lot_ids?: string[]
+  }
+  tolerance_pct?: number
+  counters?: string[]
+  verifier_username?: string | null
+  reason?: string | null
+}
+
+export interface InventoryWaveLineUpdate {
+  actual_quantity: number
+  notes?: string | null
+}
+
+export interface InventoryWaveVerifyRequest {
+  decision: 'confirm' | 'escalate'
+  comment?: string | null
+}
+
+export interface InventoryWavePostRequest extends SignatureRequest {}
+
+export interface InventoryWaveCancelRequest {
+  reason: string
+}
+
+export interface InventoryWaveSubmitRequest {
+  reason?: string | null
+}
+
 export interface ReceiptCreate {
   document_no: string
   supplier_id?: string | null

@@ -26,6 +26,14 @@ import type {
   QCPendingScansResponse,
   QCScanRejectRequest,
   QCScanVerifyRequest,
+  InventoryWaveCancelRequest,
+  InventoryWaveItem,
+  InventoryWaveLineUpdate,
+  InventoryWavePostRequest,
+  InventoryWaveStartRequest,
+  InventoryWaveSubmitRequest,
+  InventoryWaveVerifyRequest,
+  InventoryWavesResponse,
   QADecisionRequest,
   QCResultRequest,
   QCReportCreate,
@@ -186,6 +194,59 @@ export function createInventoryCount(token: string, payload: InventoryCountCreat
 
 export function listInventoryCounts(token: string): Promise<InventoryCountsResponse> {
   return request<InventoryCountsResponse>('/api/inventory/counts', 'GET', { token })
+}
+
+// ─── Inventory count workflow ──────────────────────────────────────────────
+
+export function listInventoryWaves(token: string, status?: string): Promise<InventoryWavesResponse> {
+  return request<InventoryWavesResponse>('/api/inventory/inventory-waves', 'GET', {
+    token,
+    query: status ? { status } : undefined,
+  })
+}
+
+export function getInventoryWave(token: string, waveId: string): Promise<InventoryWaveItem> {
+  return request<InventoryWaveItem>(`/api/inventory/inventory-waves/${waveId}`, 'GET', { token })
+}
+
+export function startInventoryWave(token: string, payload: InventoryWaveStartRequest): Promise<InventoryWaveItem> {
+  return request<InventoryWaveItem>('/api/inventory/inventory-waves', 'POST', { token, body: payload })
+}
+
+export function saveInventoryWaveLine(
+  token: string,
+  waveId: string,
+  lineId: string,
+  payload: InventoryWaveLineUpdate,
+): Promise<InventoryWaveItem> {
+  return request<InventoryWaveItem>(`/api/inventory/inventory-waves/${waveId}/lines/${lineId}`, 'POST', {
+    token,
+    body: payload,
+  })
+}
+
+export function submitInventoryWave(token: string, waveId: string, payload: InventoryWaveSubmitRequest): Promise<InventoryWaveItem> {
+  return request<InventoryWaveItem>(`/api/inventory/inventory-waves/${waveId}/submit`, 'POST', { token, body: payload })
+}
+
+export function verifyInventoryWaveLine(
+  token: string,
+  waveId: string,
+  lineId: string,
+  payload: InventoryWaveVerifyRequest,
+): Promise<InventoryWaveItem> {
+  return request<InventoryWaveItem>(`/api/inventory/inventory-waves/${waveId}/lines/${lineId}/verify`, 'POST', {
+    token,
+    body: payload,
+  })
+}
+
+export function postInventoryWave(token: string, waveId: string, payload: InventoryWavePostRequest): Promise<InventoryWaveItem> {
+  return request<InventoryWaveItem>(`/api/inventory/inventory-waves/${waveId}/post`, 'POST', { token, body: payload })
+}
+
+export function cancelInventoryWave(token: string, waveId: string, payload: InventoryWaveCancelRequest): Promise<InventoryWaveItem> {
+  return request<InventoryWaveItem>(`/api/inventory/inventory-waves/${waveId}/cancel`, 'POST', { token, body: payload })
 }
 
 export function createReceipt(token: string, payload: ReceiptCreate): Promise<ReceiptResponse> {
