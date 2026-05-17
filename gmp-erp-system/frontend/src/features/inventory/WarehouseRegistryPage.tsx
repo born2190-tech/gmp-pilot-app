@@ -5,6 +5,7 @@ import {
   Boxes,
   CalendarClock,
   CalendarRange,
+  FileDown,
   FlaskConical,
   Inbox,
   MapPin,
@@ -14,7 +15,7 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react'
-import { listLots, listMovements } from '../../lib/api'
+import { downloadLotLedgerCardPdf, listLots, listMovements } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
@@ -559,7 +560,7 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
       </div>
 
       {/* Side panel */}
-      <LotDetailPanel lot={selectedLot} onClose={() => setSelectedLot(null)} locale={locale} t={t} />
+      <LotDetailPanel lot={selectedLot} onClose={() => setSelectedLot(null)} locale={locale} t={t} token={token} />
     </section>
   )
 }
@@ -891,9 +892,23 @@ interface LotDetailPanelProps {
   onClose: () => void
   locale: string
   t: Translate
+  token: string
 }
 
-function LotDetailPanel({ lot, onClose, locale, t }: LotDetailPanelProps) {
+function LotDetailPanel({ lot, onClose, locale, t, token }: LotDetailPanelProps) {
+  const [pdfError, setPdfError] = useState<string | null>(null)
+  async function handleLedgerCardPdf() {
+    if (!lot) return
+    setPdfError(null)
+    try {
+      const blob = await downloadLotLedgerCardPdf(token, lot.id)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : t('registry.ledgerCardFailed'))
+    }
+  }
   return (
     <>
       <div
@@ -922,15 +937,32 @@ function LotDetailPanel({ lot, onClose, locale, t }: LotDetailPanelProps) {
                   {lot.material_code} · {lot.manufacturer_name}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="close"
-                className="rounded-md border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-              >
-                <X size={14} />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => void handleLedgerCardPdf()}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  title={t('registry.ledgerCardHint')}
+                >
+                  <FileDown size={13} />
+                  {t('registry.ledgerCard')}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="close"
+                  className="rounded-md border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                >
+                  <X size={14} />
+                </button>
+              </div>
             </div>
+            {pdfError && (
+              <div className="mx-5 mt-3 flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                <span>{pdfError}</span>
+              </div>
+            )}
             <div className="flex-1 space-y-4 overflow-y-auto p-5">
               <div className="flex items-center gap-2">
                 <StatusBadge status={lot.quality_status} />

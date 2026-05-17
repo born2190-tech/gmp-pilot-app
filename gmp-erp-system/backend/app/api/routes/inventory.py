@@ -63,6 +63,7 @@ from app.schemas.quality import (
 )
 from app.services.inventory import adjust_lot, create_fg_shipment, create_inventory_count, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
 from app.services.inventory_count_pdf import render_inventory_count_pdf
+from app.services.lot_ledger_card_pdf import render_lot_ledger_card_pdf
 from app.services.inventory_count_waves import (
     cancel_wave as cancel_wave_service,
     get_wave as get_wave_service,
@@ -910,6 +911,61 @@ def inventory_wave_pdf_route(
         user_names=user_names,
     )
     raw_name = f"inventory-{wave.wave_no}.pdf"
+    ascii_fallback = raw_name.encode("ascii", "replace").decode("ascii").replace("?", "_")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{ascii_fallback}"; '
+                f"filename*=UTF-8''{quote(raw_name)}"
+            )
+        },
+    )
+
+
+@router.get("/lots/{lot_id}/ledger-card/pdf")
+def lot_ledger_card_pdf_route(
+    lot_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    lot = db.get(Lot, lot_id)
+    if not lot:
+        from fastapi import HTTPException, status as http_status
+
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Lot not found")
+    warehouse = db.get(Warehouse, lot.warehouse_id)
+    if current_user.warehouse_scope and warehouse and warehouse.warehouse_type != current_user.warehouse_scope:
+        from fastapi import HTTPException, status as http_status
+
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Lot is out of warehouse scope")
+    material = db.get(Material, lot.material_id)
+
+    # Pre-fill the "Дата получения" and "Количество полученного" boxes from
+    # the first RECEIPT movement for this lot, if available — that's the
+    # paper card's "initial state" snapshot.
+    initial_qty: float | None = None
+    initial_date = None
+    receipt_move = (
+        db.query(InventoryMovement)
+        .filter(InventoryMovement.lot_id == lot.id, InventoryMovement.movement_type == "RECEIPT")
+        .order_by(InventoryMovement.created_at.asc())
+        .first()
+    )
+    if receipt_move:
+        initial_qty = receipt_move.quantity_after
+        initial_date = receipt_move.created_at
+
+    pdf_bytes = render_lot_ledger_card_pdf(
+        lot=lot,
+        material=material,
+        warehouse=warehouse,
+        initial_quantity=initial_qty,
+        initial_date=initial_date,
+    )
+    raw_name = f"ledger-card-{lot.internal_lot}.pdf"
     ascii_fallback = raw_name.encode("ascii", "replace").decode("ascii").replace("?", "_")
     return Response(
         content=pdf_bytes,

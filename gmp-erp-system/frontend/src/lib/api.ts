@@ -258,6 +258,15 @@ export async function downloadInventoryWavePdf(token: string, waveId: string): P
   return response.blob()
 }
 
+export async function downloadLotLedgerCardPdf(token: string, lotId: string): Promise<Blob> {
+  const response = await fetch(`/api/inventory/lots/${lotId}/ledger-card/pdf`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
 export function createReceipt(token: string, payload: ReceiptCreate): Promise<ReceiptResponse> {
   return request<ReceiptResponse>('/api/inventory/receipts', 'POST', { token, body: payload })
 }
