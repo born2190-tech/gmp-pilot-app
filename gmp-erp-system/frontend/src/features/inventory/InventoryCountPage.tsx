@@ -13,7 +13,6 @@ import {
   Inbox,
   PenLine,
   Plus,
-  ScanBarcode,
   Search,
   ShieldCheck,
   Wand2,
@@ -1034,39 +1033,6 @@ function WalkthroughView({
   const [expandedRacks, setExpandedRacks] = useState<string[]>(
     Array.from(new Set(wave.lines.map((l) => l.rack_no || '—'))),
   )
-  const [scannerOpen, setScannerOpen] = useState(false)
-  const [scannerInput, setScannerInput] = useState('')
-  const [scannerError, setScannerError] = useState<string | null>(null)
-  const [focusedLineId, setFocusedLineId] = useState<string | null>(null)
-
-  function scanLot(query: string) {
-    const q = query.trim().toLowerCase()
-    if (!q) return
-    setScannerError(null)
-    const match = wave.lines.find(
-      (l) => l.internal_lot.toLowerCase() === q || (l.supplier_lot ?? '').toLowerCase() === q,
-    )
-    if (!match) {
-      setScannerError(t('inventoryCount.scannerNotFound', { q: query }))
-      return
-    }
-    const rack = match.rack_no || '—'
-    setExpandedRacks((curr) => (curr.includes(rack) ? curr : [...curr, rack]))
-    setFocusedLineId(match.id)
-    setScannerOpen(false)
-    setScannerInput('')
-    // Allow the DOM to render the expanded section, then scroll into view.
-    window.setTimeout(() => {
-      const el = document.getElementById(`inv-line-${match.id}`)
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        const input = el.querySelector<HTMLInputElement>('input[type="number"]')
-        input?.focus()
-        input?.select()
-      }
-    }, 80)
-  }
-
   // Group lines: rack → tier → lines
   const groups = useMemo(() => {
     const byRack = new Map<string, Map<string, InventoryWaveLineItem[]>>()
@@ -1107,20 +1073,6 @@ function WalkthroughView({
             <span className="text-sm text-slate-600">{wave.scope_description}</span>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            {canCount && (
-              <button
-                type="button"
-                onClick={() => {
-                  setScannerError(null)
-                  setScannerInput('')
-                  setScannerOpen(true)
-                }}
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                <ScanBarcode size={14} />
-                {t('inventoryCount.scan')}
-              </button>
-            )}
             <span className="font-mono tabular-nums text-slate-700">
               {countedCount} / {wave.total_lines}
             </span>
@@ -1222,7 +1174,6 @@ function WalkthroughView({
                             locale={locale}
                             t={t}
                             tolerance={wave.tolerance_pct}
-                            focused={focusedLineId === line.id}
                             onSave={(actual, notes) => onSaveLine(line.id, { actual_quantity: actual, notes })}
                           />
                         ))}
@@ -1257,65 +1208,6 @@ function WalkthroughView({
         </div>
       </div>
 
-      {scannerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <h2 className="text-base font-semibold text-slate-950">{t('inventoryCount.scanTitle')}</h2>
-              <button
-                type="button"
-                onClick={() => setScannerOpen(false)}
-                aria-label="close"
-                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <div className="px-5 py-4">
-              <p className="mb-2 text-sm text-slate-600">{t('inventoryCount.scanHint')}</p>
-              <input
-                autoFocus
-                value={scannerInput}
-                onChange={(event) => {
-                  setScannerInput(event.target.value)
-                  setScannerError(null)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    scanLot(scannerInput)
-                  }
-                }}
-                placeholder={t('inventoryCount.scanPlaceholder')}
-                className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-mono text-base outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
-              />
-              {scannerError && (
-                <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs text-rose-800">
-                  <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-                  <span>{scannerError}</span>
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
-              <button
-                type="button"
-                onClick={() => setScannerOpen(false)}
-                className="inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                disabled={!scannerInput.trim()}
-                onClick={() => scanLot(scannerInput)}
-                className="inline-flex h-9 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {t('inventoryCount.scanFind')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   )
 }
@@ -1326,7 +1218,6 @@ function CountLineRow({
   locale,
   t,
   tolerance,
-  focused,
   onSave,
 }: {
   line: InventoryWaveLineItem
@@ -1334,7 +1225,6 @@ function CountLineRow({
   locale: string
   t: Translate
   tolerance: number
-  focused?: boolean
   onSave: (actual: number, notes: string | null) => Promise<void>
 }) {
   const [actual, setActual] = useState(line.actual_quantity !== null ? String(line.actual_quantity) : '')
@@ -1367,7 +1257,7 @@ function CountLineRow({
       : 'bg-slate-100 text-slate-500 border-slate-200'
 
   return (
-    <li id={`inv-line-${line.id}`} className={`px-4 py-3 ${focused ? 'bg-amber-50/60 ring-1 ring-amber-200' : ''}`}>
+    <li id={`inv-line-${line.id}`} className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
