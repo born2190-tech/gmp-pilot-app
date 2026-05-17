@@ -30,6 +30,9 @@ services:
       # GMP true-copy scans of signed Ф-14 notifications. On-prem deploy: bind
       # this to a backed-up disk on the factory server. Pilot uses a named volume.
       - gmp_erp_qc_scans:/data/qc-scans
+      # Photo evidence for receipt defect acts (СОП-209 Ф-12). Same disk
+      # treatment as QC scans — backed up and tamper-tracked by sha256.
+      - gmp_erp_defect_photos:/data/receipt-defect-photos
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,3 +50,4 @@ services:
 volumes:
   gmp_erp_postgres_data:
   gmp_erp_qc_scans:
+  gmp_erp_defect_photos:

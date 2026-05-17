@@ -467,6 +467,55 @@ export interface InventoryWaveSubmitRequest {
   reason?: string | null
 }
 
+// ─── Receipt defect acts (СОП-209 Ф-12) ────────────────────────────────────
+
+export type ReceiptDefectSeverity = 'critical' | 'significant' | 'minor'
+export type ReceiptDefectStatus = 'pending' | 'escalated' | 'resolved' | 'returned'
+
+export interface ReceiptDefectPhotoItem {
+  id: string
+  mime_type: string
+  file_size: number
+  sha256_hash: string
+  uploaded_by: string
+  uploaded_at: string
+}
+
+export interface ReceiptDefectItem {
+  id: string
+  act_no: string
+  receipt_id: string
+  receipt_line_id: string | null
+  severity: ReceiptDefectSeverity
+  description: string
+  status: ReceiptDefectStatus
+  recorded_by: string
+  recorded_by_name: string | null
+  recorded_at: string
+  resolved_by: string | null
+  resolved_by_name: string | null
+  resolved_at: string | null
+  resolution_comment: string | null
+  material_code: string | null
+  material_name: string | null
+  photos: ReceiptDefectPhotoItem[]
+}
+
+export interface ReceiptDefectsResponse {
+  defects: ReceiptDefectItem[]
+}
+
+export interface ReceiptDefectCreate {
+  receipt_line_id?: string | null
+  severity: ReceiptDefectSeverity
+  description: string
+}
+
+export interface ReceiptDefectStatusUpdate {
+  status: 'escalated' | 'resolved' | 'returned'
+  comment?: string | null
+}
+
 export interface ReceiptCreate {
   document_no: string
   supplier_id?: string | null

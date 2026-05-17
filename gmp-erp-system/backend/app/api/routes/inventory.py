@@ -17,6 +17,10 @@ from app.models.inventory import (
     InventoryCountWaveLine,
     InventoryMovement,
     Lot,
+    ReceiptDefect,
+    ReceiptDefectPhoto,
+    ReceiptDocument,
+    ReceiptLine,
 )
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.identity import User
@@ -41,6 +45,11 @@ from app.schemas.inventory import (
     InventoryWaveVerifyRequest,
     InventoryWavesResponse,
     IssueProductionRequest,
+    ReceiptDefectCreate,
+    ReceiptDefectItem,
+    ReceiptDefectPhotoItem,
+    ReceiptDefectStatusUpdate,
+    ReceiptDefectsResponse,
     LotOperationResponse,
     LotsResponse,
     MovementsResponse,
@@ -64,6 +73,16 @@ from app.schemas.quality import (
 from app.services.inventory import adjust_lot, create_fg_shipment, create_inventory_count, create_receipt_draft, issue_to_production, post_receipt, transfer_lot
 from app.services.inventory_count_pdf import render_inventory_count_pdf
 from app.services.lot_ledger_card_pdf import render_lot_ledger_card_pdf
+from app.services.receipt_defect_pdf import render_receipt_defect_pdf
+from app.services.receipt_defects import (
+    create_defect as create_defect_service,
+    get_defect as get_defect_service,
+    list_defects as list_defects_service,
+    list_photos as list_photos_service,
+    load_photo_file as load_photo_service,
+    set_status as set_defect_status_service,
+    upload_photo as upload_photo_service,
+)
 from app.services.inventory_count_waves import (
     cancel_wave as cancel_wave_service,
     get_wave as get_wave_service,
@@ -969,6 +988,161 @@ def lot_ledger_card_pdf_route(
     ascii_fallback = raw_name.encode("ascii", "replace").decode("ascii").replace("?", "_")
     return Response(
         content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{ascii_fallback}"; '
+                f"filename*=UTF-8''{quote(raw_name)}"
+            )
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Receipt defects (СОП-209 Ф-12)
+# ---------------------------------------------------------------------------
+
+
+def _defect_item(db: Session, defect: ReceiptDefect) -> ReceiptDefectItem:
+    line = db.get(ReceiptLine, defect.receipt_line_id) if defect.receipt_line_id else None
+    material = db.get(Material, line.material_id) if line else None
+    recorded_by = db.get(User, defect.recorded_by) if defect.recorded_by else None
+    resolved_by = db.get(User, defect.resolved_by) if defect.resolved_by else None
+    photos = (
+        db.query(ReceiptDefectPhoto)
+        .filter(ReceiptDefectPhoto.defect_id == defect.id)
+        .order_by(ReceiptDefectPhoto.uploaded_at)
+        .all()
+    )
+    return ReceiptDefectItem(
+        id=defect.id,
+        act_no=defect.act_no,
+        receipt_id=defect.receipt_id,
+        receipt_line_id=defect.receipt_line_id,
+        severity=defect.severity,
+        description=defect.description,
+        status=defect.status,
+        recorded_by=defect.recorded_by,
+        recorded_by_name=(recorded_by.full_name or recorded_by.username) if recorded_by else None,
+        recorded_at=defect.recorded_at,
+        resolved_by=defect.resolved_by,
+        resolved_by_name=(resolved_by.full_name or resolved_by.username) if resolved_by else None,
+        resolved_at=defect.resolved_at,
+        resolution_comment=defect.resolution_comment,
+        material_code=material.code if material else None,
+        material_name=material.name if material else None,
+        photos=[ReceiptDefectPhotoItem.model_validate(p) for p in photos],
+    )
+
+
+@router.get(
+    "/receipts/{receipt_id}/defects",
+    response_model=ReceiptDefectsResponse,
+)
+def list_receipt_defects_route(
+    receipt_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReceiptDefectsResponse:
+    defects = list_defects_service(db, current_user, receipt_id)
+    return ReceiptDefectsResponse(defects=[_defect_item(db, d) for d in defects])
+
+
+@router.post(
+    "/receipts/{receipt_id}/defects",
+    response_model=ReceiptDefectItem,
+    status_code=201,
+)
+def create_receipt_defect_route(
+    receipt_id: UUID,
+    payload: ReceiptDefectCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReceiptDefectItem:
+    defect = create_defect_service(db, current_user, receipt_id, payload)
+    return _defect_item(db, defect)
+
+
+@router.post(
+    "/receipt-defects/{defect_id}/status",
+    response_model=ReceiptDefectItem,
+)
+def set_defect_status_route(
+    defect_id: UUID,
+    payload: ReceiptDefectStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReceiptDefectItem:
+    defect = set_defect_status_service(db, current_user, defect_id, payload)
+    return _defect_item(db, defect)
+
+
+@router.post(
+    "/receipt-defects/{defect_id}/photos",
+    response_model=ReceiptDefectPhotoItem,
+    status_code=201,
+)
+async def upload_defect_photo_route(
+    defect_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReceiptDefectPhotoItem:
+    photo = await upload_photo_service(db, current_user, defect_id, file)
+    return ReceiptDefectPhotoItem.model_validate(photo)
+
+
+@router.get(
+    "/receipt-defect-photos/{photo_id}/file",
+)
+def download_defect_photo_route(
+    photo_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    photo, blob = load_photo_service(db, current_user, photo_id)
+    return Response(
+        content=blob,
+        media_type=photo.mime_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="defect-{photo.id}.bin"'},
+    )
+
+
+@router.get("/receipt-defects/{defect_id}/pdf")
+def receipt_defect_pdf_route(
+    defect_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    defect = get_defect_service(db, current_user, defect_id)
+    receipt = db.get(ReceiptDocument, defect.receipt_id)
+    line = db.get(ReceiptLine, defect.receipt_line_id) if defect.receipt_line_id else None
+    material = db.get(Material, line.material_id) if line else None
+    recorded_by = db.get(User, defect.recorded_by) if defect.recorded_by else None
+    resolved_by = db.get(User, defect.resolved_by) if defect.resolved_by else None
+
+    photos = list_photos_service(db, current_user, defect_id)
+    photos_with_bytes: list[tuple[ReceiptDefectPhoto, bytes]] = []
+    for p in photos:
+        try:
+            _, raw = load_photo_service(db, current_user, p.id)
+            photos_with_bytes.append((p, raw))
+        except Exception:
+            continue
+
+    pdf = render_receipt_defect_pdf(
+        defect=defect,
+        receipt=receipt,
+        line=line,
+        material=material,
+        recorded_by=recorded_by,
+        resolved_by=resolved_by,
+        photos_with_bytes=photos_with_bytes,
+    )
+    raw_name = f"defect-act-{defect.act_no}.pdf"
+    ascii_fallback = raw_name.encode("ascii", "replace").decode("ascii").replace("?", "_")
+    return Response(
+        content=pdf,
         media_type="application/pdf",
         headers={
             "Content-Disposition": (

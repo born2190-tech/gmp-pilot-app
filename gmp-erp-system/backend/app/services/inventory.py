@@ -164,6 +164,21 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
     if receipt.status != "draft":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only draft receipt can be posted")
 
+    # СОП-209 п.6.5: critical packaging defects must be returned to the
+    # supplier before the receipt can be posted. Refuse if any open
+    # critical-severity defect acts exist for this receipt.
+    from app.services.receipt_defects import has_blocking_defects
+
+    if has_blocking_defects(db, receipt.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Cannot post receipt — there are unresolved critical defect acts "
+                "(СОП-209 Ф-12). Material must be returned to supplier or defects "
+                "must be resolved by QA first."
+            ),
+        )
+
     validate_signature(db, user, signature, "POST_RECEIPT", "receipt_document", str(receipt.id))
     receipt.status = "posted"
     receipt.posted_by = user.id

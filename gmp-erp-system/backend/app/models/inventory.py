@@ -26,6 +26,44 @@ class ReceiptDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     warehouse: Mapped[Warehouse] = relationship()
 
 
+class ReceiptDefect(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Act of an external packaging defect found at receipt time (СОП-209 Ф-12).
+
+    One act per discrete defect: each container/pallet with a problem gets
+    its own act. The collection of all acts forms the СОП-209 Ф-12 journal.
+    """
+
+    __tablename__ = "receipt_defects"
+
+    act_no: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    receipt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_documents.id"), nullable=False)
+    # Optional — defect may be reported at receipt level (before lines are
+    # finalised) or against a specific line/material.
+    receipt_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_lines.id"), nullable=True)
+    # critical | significant | minor (matches СОП-209 п.6.5 wording)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    # Lifecycle: pending → escalated → resolved | returned
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    recorded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolution_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ReceiptDefectPhoto(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "receipt_defect_photos"
+
+    defect_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_defects.id"), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_size: Mapped[int] = mapped_column(nullable=False)
+    sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ReceiptLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "receipt_lines"
 

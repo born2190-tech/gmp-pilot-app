@@ -188,6 +188,52 @@ class InventoryCountLineCreate(BaseModel):
 # Inventory count wave (GMP 4-eyes workflow)
 # ---------------------------------------------------------------------------
 
+class ReceiptDefectCreate(BaseModel):
+    receipt_line_id: UUID | None = None
+    severity: str = Field(pattern="^(critical|significant|minor)$")
+    description: str = Field(min_length=1, max_length=2000)
+
+
+class ReceiptDefectStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(escalated|resolved|returned)$")
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+class ReceiptDefectPhotoItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    mime_type: str
+    file_size: int
+    sha256_hash: str
+    uploaded_by: UUID
+    uploaded_at: datetime
+
+
+class ReceiptDefectItem(BaseModel):
+    id: UUID
+    act_no: str
+    receipt_id: UUID
+    receipt_line_id: UUID | None
+    severity: str
+    description: str
+    status: str
+    recorded_by: UUID
+    recorded_by_name: str | None
+    recorded_at: datetime
+    resolved_by: UUID | None
+    resolved_by_name: str | None
+    resolved_at: datetime | None
+    resolution_comment: str | None
+    material_code: str | None = None
+    material_name: str | None = None
+    photos: list[ReceiptDefectPhotoItem] = Field(default_factory=list)
+
+
+class ReceiptDefectsResponse(BaseModel):
+    defects: list[ReceiptDefectItem]
+
+
 class WaveScope(BaseModel):
     """Defines which lots become part of the wave."""
 

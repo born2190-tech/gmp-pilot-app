@@ -34,6 +34,11 @@ import type {
   InventoryWaveSubmitRequest,
   InventoryWaveVerifyRequest,
   InventoryWavesResponse,
+  ReceiptDefectCreate,
+  ReceiptDefectItem,
+  ReceiptDefectPhotoItem,
+  ReceiptDefectStatusUpdate,
+  ReceiptDefectsResponse,
   QADecisionRequest,
   QCResultRequest,
   QCReportCreate,
@@ -260,6 +265,59 @@ export async function downloadInventoryWavePdf(token: string, waveId: string): P
 
 export async function downloadLotLedgerCardPdf(token: string, lotId: string): Promise<Blob> {
   const response = await fetch(`/api/inventory/lots/${lotId}/ledger-card/pdf`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+// ─── Receipt defect acts (СОП-209 Ф-12) ────────────────────────────────────
+
+export function listReceiptDefects(token: string, receiptId: string): Promise<ReceiptDefectsResponse> {
+  return request<ReceiptDefectsResponse>(`/api/inventory/receipts/${receiptId}/defects`, 'GET', { token })
+}
+
+export function createReceiptDefect(token: string, receiptId: string, payload: ReceiptDefectCreate): Promise<ReceiptDefectItem> {
+  return request<ReceiptDefectItem>(`/api/inventory/receipts/${receiptId}/defects`, 'POST', { token, body: payload })
+}
+
+export function setReceiptDefectStatus(token: string, defectId: string, payload: ReceiptDefectStatusUpdate): Promise<ReceiptDefectItem> {
+  return request<ReceiptDefectItem>(`/api/inventory/receipt-defects/${defectId}/status`, 'POST', { token, body: payload })
+}
+
+export async function uploadReceiptDefectPhoto(token: string, defectId: string, file: File): Promise<ReceiptDefectPhotoItem> {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  const response = await fetch(`/api/inventory/receipt-defects/${defectId}/photos`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`
+    try {
+      const payload = await response.json()
+      if (typeof payload.detail === 'string') detail = payload.detail
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail)
+  }
+  return (await response.json()) as ReceiptDefectPhotoItem
+}
+
+export async function downloadReceiptDefectPhoto(token: string, photoId: string): Promise<Blob> {
+  const response = await fetch(`/api/inventory/receipt-defect-photos/${photoId}/file`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+export async function downloadReceiptDefectPdf(token: string, defectId: string): Promise<Blob> {
+  const response = await fetch(`/api/inventory/receipt-defects/${defectId}/pdf`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   })

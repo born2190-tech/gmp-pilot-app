@@ -1,11 +1,35 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
-import { AlertCircle, ChevronDown, ChevronRight, Info, Plus, Search } from 'lucide-react'
-import { createQcNotification, createReceipt, downloadQcNotificationPdf, listLocations, listManufacturers, listMaterials, listSuppliers, listWarehouses, postReceipt } from '../../lib/api'
+import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, FileDown, Info, Paperclip, Plus, Search, ShieldAlert, X } from 'lucide-react'
+import {
+  createQcNotification,
+  createReceipt,
+  createReceiptDefect,
+  downloadQcNotificationPdf,
+  downloadReceiptDefectPdf,
+  listLocations,
+  listManufacturers,
+  listMaterials,
+  listReceiptDefects,
+  listSuppliers,
+  listWarehouses,
+  postReceipt,
+  setReceiptDefectStatus,
+  uploadReceiptDefectPhoto,
+} from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
 import type { CurrentUser } from '../../types/auth'
-import type { LocationItem, ManufacturerItem, MaterialItem, ReceiptCreate, SupplierItem, WarehouseItem } from '../../types/inventory'
+import type {
+  LocationItem,
+  ManufacturerItem,
+  MaterialItem,
+  ReceiptCreate,
+  ReceiptDefectItem,
+  ReceiptDefectSeverity,
+  SupplierItem,
+  WarehouseItem,
+} from '../../types/inventory'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n/I18nProvider'
 
@@ -423,6 +447,15 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
             </div>
           </div>
         </Alert>
+      )}
+
+      {postedSummary && (
+        <DefectsPanel
+          token={token}
+          user={user}
+          receiptId={postedSummary.receiptId}
+          documentNo={postedSummary.documentNo}
+        />
       )}
 
       <form className="space-y-5" onSubmit={form.handleSubmit(submit)}>
@@ -1084,6 +1117,432 @@ function SummaryInline({ label, value }: { label: string; value: ReactNode }) {
     <div className="flex items-center gap-2">
       <span className="text-slate-500">{label}:</span>
       <span className="font-medium text-slate-900">{value}</span>
+    </div>
+  )
+}
+
+// ─── Receipt defect acts (СОП-209 Ф-12) ────────────────────────────────────
+
+const SEVERITY_COLOR: Record<ReceiptDefectSeverity, string> = {
+  critical: 'border-rose-200 bg-rose-50 text-rose-800',
+  significant: 'border-amber-200 bg-amber-50 text-amber-800',
+  minor: 'border-slate-200 bg-slate-50 text-slate-700',
+}
+
+function DefectsPanel({
+  token,
+  user,
+  receiptId,
+  documentNo,
+}: {
+  token: string
+  user: CurrentUser
+  receiptId: string
+  documentNo: string
+}) {
+  const { t } = useI18n()
+  const [defects, setDefects] = useState<ReceiptDefectItem[]>([])
+  const [open, setOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const canResolve = user.permissions.includes('VIEW_QA') || user.permissions.includes('VIEW_QC')
+
+  const reload = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await listReceiptDefects(token, receiptId)
+      setDefects(response.defects)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('receipt.defects.loadFailed'))
+    } finally {
+      setLoading(false)
+    }
+  }, [token, receiptId, t])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  const criticalOpen = defects.filter((d) => d.severity === 'critical' && d.status !== 'resolved' && d.status !== 'returned').length
+
+  return (
+    <section
+      className={`rounded-md border-2 p-4 shadow-sm ${criticalOpen > 0 ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-white'}`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <ShieldAlert size={18} className={criticalOpen > 0 ? 'text-rose-600' : 'text-slate-500'} />
+          <h2 className="text-base font-semibold text-slate-900">{t('receipt.defects.title')}</h2>
+          {defects.length > 0 && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+              {defects.length}
+            </span>
+          )}
+          {criticalOpen > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+              <AlertTriangle size={11} />
+              {t('receipt.defects.criticalOpen', { n: String(criticalOpen) })}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="secondary" onClick={() => setCreateOpen(true)}>
+            <Plus size={14} className="mr-1" />
+            {t('receipt.defects.create')}
+          </Button>
+          {defects.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              {open ? t('common.collapse') : t('common.expand')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-2 text-[12px] text-slate-600">{t('receipt.defects.subtitle')}</p>
+
+      {error && (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {open && defects.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {defects.map((defect) => (
+            <DefectCard
+              key={defect.id}
+              defect={defect}
+              token={token}
+              canResolve={canResolve}
+              onChanged={reload}
+              t={t}
+            />
+          ))}
+        </ul>
+      )}
+
+      {createOpen && (
+        <CreateDefectDialog
+          token={token}
+          receiptId={receiptId}
+          documentNo={documentNo}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => {
+            setCreateOpen(false)
+            setOpen(true)
+            void reload()
+          }}
+          t={t}
+        />
+      )}
+    </section>
+  )
+}
+
+function DefectCard({
+  defect,
+  token,
+  canResolve,
+  onChanged,
+  t,
+}: {
+  defect: ReceiptDefectItem
+  token: string
+  canResolve: boolean
+  onChanged: () => void
+  t: ReturnType<typeof useI18n>['t']
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [commentDraft, setCommentDraft] = useState('')
+
+  async function setStatus(next: 'resolved' | 'returned' | 'escalated') {
+    setError(null)
+    setBusy(true)
+    try {
+      await setReceiptDefectStatus(token, defect.id, { status: next, comment: commentDraft.trim() || null })
+      setCommentDraft('')
+      onChanged()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('receipt.defects.actionFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function viewPdf() {
+    try {
+      const blob = await downloadReceiptDefectPdf(token, defect.id)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('receipt.defects.pdfFailed'))
+    }
+  }
+
+  const statusLabel = t(`receipt.defects.status.${defect.status}` as never)
+
+  return (
+    <li className={`rounded-md border p-3 ${SEVERITY_COLOR[defect.severity]}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[12.5px] font-semibold text-slate-900">{defect.act_no}</span>
+            <span className="rounded-full border border-current/40 bg-white/70 px-2 py-0.5 text-[10px] font-medium uppercase">
+              {t(`receipt.defects.severity.${defect.severity}` as never)}
+            </span>
+            <span className="text-[11px] text-slate-700">· {statusLabel}</span>
+          </div>
+          {defect.material_name && (
+            <div className="mt-0.5 text-[12px] text-slate-700">
+              {defect.material_name} <span className="font-mono text-[10.5px] text-slate-500">· {defect.material_code}</span>
+            </div>
+          )}
+          <p className="mt-1 whitespace-pre-wrap text-[12.5px] text-slate-800">{defect.description}</p>
+          {defect.photos.length > 0 && (
+            <div className="mt-2 flex items-center gap-1 text-[11px] text-slate-600">
+              <Paperclip size={12} />
+              {t('receipt.defects.photosCount', { n: String(defect.photos.length) })}
+            </div>
+          )}
+          <div className="mt-1.5 text-[11px] text-slate-500">
+            {defect.recorded_by_name ?? '—'} · {new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(defect.recorded_at))}
+          </div>
+          {defect.resolution_comment && (
+            <div className="mt-2 rounded border border-white/60 bg-white/60 px-2 py-1 text-[11.5px] text-slate-700">
+              <span className="font-medium">{t('receipt.defects.resolution')}: </span>
+              {defect.resolution_comment}
+              <div className="text-[10.5px] text-slate-500">
+                {defect.resolved_by_name ?? '—'}
+                {defect.resolved_at && ` · ${new Intl.DateTimeFormat('ru-RU').format(new Date(defect.resolved_at))}`}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={() => void viewPdf()}
+            className="inline-flex h-7 items-center gap-1 rounded border border-slate-300 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <FileDown size={11} />
+            {t('receipt.defects.pdf')}
+          </button>
+        </div>
+      </div>
+
+      {canResolve && defect.status !== 'resolved' && defect.status !== 'returned' && (
+        <div className="mt-2 border-t border-white/60 pt-2">
+          <input
+            type="text"
+            value={commentDraft}
+            onChange={(event) => setCommentDraft(event.target.value)}
+            placeholder={t('receipt.defects.commentPlaceholder')}
+            className="mb-2 h-8 w-full rounded border border-slate-300 bg-white px-2 text-[12px] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
+          />
+          <div className="flex flex-wrap justify-end gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void setStatus('resolved')}
+              className="inline-flex h-7 items-center gap-1 rounded bg-emerald-600 px-2 text-[11px] font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {t('receipt.defects.resolve')}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void setStatus('returned')}
+              className="inline-flex h-7 items-center gap-1 rounded border border-amber-500 bg-white px-2 text-[11px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+            >
+              {t('receipt.defects.return')}
+            </button>
+            {defect.status === 'pending' && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void setStatus('escalated')}
+                className="inline-flex h-7 items-center gap-1 rounded border border-slate-300 bg-white px-2 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {t('receipt.defects.escalate')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-2 flex items-start gap-2 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-800">
+          <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+    </li>
+  )
+}
+
+function CreateDefectDialog({
+  token,
+  receiptId,
+  documentNo,
+  onClose,
+  onCreated,
+  t,
+}: {
+  token: string
+  receiptId: string
+  documentNo: string
+  onClose: () => void
+  onCreated: () => void
+  t: ReturnType<typeof useI18n>['t']
+}) {
+  const [severity, setSeverity] = useState<ReceiptDefectSeverity>('significant')
+  const [description, setDescription] = useState('')
+  const [files, setFiles] = useState<File[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const photoRequired = severity !== 'minor'
+  const canSubmit = description.trim().length > 0 && (!photoRequired || files.length > 0)
+
+  async function submit() {
+    setError(null)
+    setBusy(true)
+    try {
+      const created = await createReceiptDefect(token, receiptId, {
+        severity,
+        description: description.trim(),
+      })
+      for (const file of files) {
+        await uploadReceiptDefectPhoto(token, created.id, file)
+      }
+      onCreated()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('receipt.defects.createFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+      <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              СОП-209 Ф-12
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">
+              {t('receipt.defects.modalTitle', { docNo: documentNo })}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="close"
+            className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-4">
+          <div>
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              {t('receipt.defects.severity.label')}
+            </label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {(['critical', 'significant', 'minor'] as ReceiptDefectSeverity[]).map((sev) => {
+                const active = severity === sev
+                const color =
+                  sev === 'critical'
+                    ? 'border-rose-500 bg-rose-50 text-rose-900'
+                    : sev === 'significant'
+                    ? 'border-amber-500 bg-amber-50 text-amber-900'
+                    : 'border-slate-400 bg-slate-50 text-slate-800'
+                return (
+                  <button
+                    key={sev}
+                    type="button"
+                    onClick={() => setSeverity(sev)}
+                    className={`rounded-md border-2 px-3 py-2 text-left text-xs font-medium transition ${
+                      active ? color : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="text-[13px] font-semibold">{t(`receipt.defects.severity.${sev}` as never)}</div>
+                    <div className="mt-0.5 text-[11px] font-normal opacity-80">
+                      {t(`receipt.defects.severity.${sev}.desc` as never)}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              {t('receipt.defects.description')}
+            </label>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={4}
+              placeholder={t('receipt.defects.descriptionPlaceholder')}
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              {t('receipt.defects.photos')}
+              {photoRequired && <span className="text-rose-500"> *</span>}
+            </label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,application/pdf"
+              multiple
+              onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+              className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+            />
+            {files.length > 0 && (
+              <p className="mt-1 text-[11px] text-slate-500">
+                {t('receipt.defects.photosSelected', { n: String(files.length) })}
+              </p>
+            )}
+            {photoRequired && files.length === 0 && (
+              <p className="mt-1 text-[11px] text-rose-600">{t('receipt.defects.photoRequired')}</p>
+            )}
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="button" onClick={() => void submit()} disabled={!canSubmit || busy}>
+            {busy ? t('receipt.defects.saving') : t('receipt.defects.save')}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
