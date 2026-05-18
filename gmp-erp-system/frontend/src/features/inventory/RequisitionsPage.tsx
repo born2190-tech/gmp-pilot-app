@@ -28,7 +28,6 @@ import {
   listLots,
   listMaterials,
   listRequisitions,
-  requisitionPdfUrl,
   updateRequisitionAllocation,
 } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
@@ -713,7 +712,24 @@ function DetailView({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => window.open(requisitionPdfUrl(req.id, true), '_blank', 'noopener,noreferrer')}
+            onClick={async () => {
+              // window.open(url) не передаёт Authorization header — поэтому
+              // тянем PDF через fetch с Bearer-токеном и открываем object-URL.
+              try {
+                const blob = await downloadRequisitionPdf(token, req.id)
+                const url = URL.createObjectURL(blob)
+                const win = window.open(url, '_blank', 'noopener,noreferrer')
+                // Освобождаем object-URL после открытия окна (с задержкой,
+                // чтобы вкладка успела загрузить контент).
+                if (win) {
+                  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+                } else {
+                  URL.revokeObjectURL(url)
+                }
+              } catch {
+                /* UI показывает общую ошибку */
+              }
+            }}
             className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50"
             title={t('requisitions.previewPdfHint')}
           >

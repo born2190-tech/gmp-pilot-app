@@ -1337,25 +1337,32 @@ function ExportModal({
 
           {/* Filters */}
           <div>
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
+            <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-slate-500">
               {t('registry.export.filtersLabel')}
             </p>
+            <p className="mb-2 text-[11.5px] text-slate-500">{t('registry.export.filtersHint')}</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-[12px] text-slate-700">
-                <span className="mb-1 block">{t('registry.export.filterMaterial')}</span>
+                <span className="mb-1 block">
+                  {t('registry.export.filterMaterial')}{' '}
+                  <span className="text-slate-400">— {t('registry.export.emptyMeansAll')}</span>
+                </span>
                 <input
                   value={material}
                   onChange={(e) => setMaterial(e.target.value)}
-                  placeholder={t('registry.export.filterMaterialPh')}
+                  placeholder={t('registry.export.filterMaterialPhAll')}
                   className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
                 />
               </label>
               <label className="text-[12px] text-slate-700">
-                <span className="mb-1 block">{t('registry.export.filterLot')}</span>
+                <span className="mb-1 block">
+                  {t('registry.export.filterLot')}{' '}
+                  <span className="text-slate-400">— {t('registry.export.emptyMeansAll')}</span>
+                </span>
                 <input
                   value={internalLot}
                   onChange={(e) => setInternalLot(e.target.value)}
-                  placeholder="LOT-..."
+                  placeholder={t('registry.export.filterLotPhAll')}
                   className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 font-mono text-sm outline-none focus:border-slate-400"
                 />
               </label>
@@ -1451,7 +1458,23 @@ function ExportModal({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
+        <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-5 py-3">
+          <button
+            type="button"
+            onClick={() => {
+              setMaterial('')
+              setInternalLot('')
+              setQualityStatus('')
+              setMovementType('')
+              setDateFrom('')
+              setDateTo('')
+            }}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12.5px] font-medium text-slate-600 hover:bg-slate-50"
+          >
+            <RotateCcw size={13} />
+            {t('registry.export.allMaterialsBtn')}
+          </button>
+          <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onClose}
@@ -1468,6 +1491,7 @@ function ExportModal({
             <FileSpreadsheet size={14} />
             {isLoading ? t('registry.export.generating') : t('registry.export.generate')}
           </button>
+          </div>
         </div>
       </div>
     </div>
