@@ -205,6 +205,7 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             warehouse_id=receipt.warehouse_id,
             location_id=line.location_id,
             quantity=line.quantity,
+            initial_quantity=line.quantity,
             unit=line.unit,
             quality_status="quarantine",
             incoming_control_notified_at=quarantine_time,
@@ -260,6 +261,23 @@ def transfer_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: Transfer
     target_location = get_required(db, Location, payload.to_location_id, "Location")
     if target_location.warehouse_id != lot.warehouse_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Target location must belong to the same warehouse")
+
+    # GMP gate (СОП-209): пока партия не прошла входной контроль и не получила
+    # статус «released» от ОКК — её нельзя двигать в зону разрешённых
+    # материалов или в любую другую зону кроме карантина / забракованных.
+    # Это перекрывает возможность визуально «перевести» партию в RELEASED
+    # без записи в journal QC notifications.
+    if lot.quality_status != "released":
+        allowed_codes = {"QUARANTINE", "REJECTED", "RECEIVING"}
+        if target_location.code not in allowed_codes:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Cannot move lot — quality status is not 'released'. "
+                    "Wait for QC/QA decision (СОП-209). Allowed targets: "
+                    "QUARANTINE, REJECTED, RECEIVING."
+                ),
+            )
 
     # Capture old values for audit before mutating.
     old_location_id = lot.location_id

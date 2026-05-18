@@ -90,6 +90,7 @@ class LotItem(BaseModel):
     place_no: str | None = None
     pallet_no: str | None = None
     quantity: float
+    initial_quantity: float = 0.0
     unit: str
     quality_status: str
     production_date: date | None

@@ -325,6 +325,107 @@ export async function downloadReceiptDefectPdf(token: string, defectId: string):
   return response.blob()
 }
 
+export interface RegistryKpis {
+  active: number
+  quarantine: number
+  rejected: number
+  low_stock: number
+  total: number
+  low_stock_threshold_pct: number
+}
+
+export function listRegistryKpis(token: string): Promise<RegistryKpis> {
+  return request<RegistryKpis>('/api/inventory/lots/kpis', 'GET', { token })
+}
+
+export interface LotsExportParams {
+  columns: string[]
+  material?: string
+  quality_status?: string
+  location?: string
+  manufacturer?: string
+  internal_lot?: string
+  supplier_lot?: string
+  date_from?: string
+  date_to?: string
+  date_type?: 'arrival' | 'expiry'
+}
+
+export interface MovementsExportParams {
+  columns: string[]
+  material?: string
+  internal_lot?: string
+  supplier_lot?: string
+  document?: string
+  movement_type?: string
+  date_from?: string
+  date_to?: string
+}
+
+function buildQueryString(params: Record<string, string | undefined>): string {
+  const usp = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '' && value !== null) {
+      usp.append(key, String(value))
+    }
+  }
+  const qs = usp.toString()
+  return qs ? `?${qs}` : ''
+}
+
+export async function exportLotsXlsx(token: string, params: LotsExportParams): Promise<Blob> {
+  const qs = buildQueryString({
+    columns: params.columns.join(','),
+    material: params.material,
+    quality_status: params.quality_status,
+    location: params.location,
+    manufacturer: params.manufacturer,
+    internal_lot: params.internal_lot,
+    supplier_lot: params.supplier_lot,
+    date_from: params.date_from,
+    date_to: params.date_to,
+    date_type: params.date_type,
+  })
+  const response = await fetch(`/api/inventory/lots/export.xlsx${qs}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+export async function exportMovementsXlsx(token: string, params: MovementsExportParams): Promise<Blob> {
+  const qs = buildQueryString({
+    columns: params.columns.join(','),
+    material: params.material,
+    internal_lot: params.internal_lot,
+    supplier_lot: params.supplier_lot,
+    document: params.document,
+    movement_type: params.movement_type,
+    date_from: params.date_from,
+    date_to: params.date_to,
+  })
+  const response = await fetch(`/api/inventory/movements/export.xlsx${qs}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+export function requisitionPdfUrl(requisitionId: string, inline = false): string {
+  return `/api/requisitions/${requisitionId}/pdf${inline ? '?inline=true' : ''}`
+}
+
+export async function downloadRequisitionPdf(token: string, requisitionId: string): Promise<Blob> {
+  const response = await fetch(requisitionPdfUrl(requisitionId), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
 export function createReceipt(token: string, payload: ReceiptCreate): Promise<ReceiptResponse> {
   return request<ReceiptResponse>('/api/inventory/receipts', 'POST', { token, body: payload })
 }

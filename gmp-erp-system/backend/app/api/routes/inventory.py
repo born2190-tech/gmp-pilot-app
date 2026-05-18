@@ -137,6 +137,7 @@ def lot_item_query(db: Session, lot_id: UUID) -> LotOperationResponse:
             Lot.place_no,
             Lot.pallet_no,
             Lot.quantity,
+            Lot.initial_quantity,
             Lot.unit,
             Lot.quality_status,
             Lot.production_date,
@@ -362,6 +363,7 @@ def list_lots(
             Lot.place_no,
             Lot.pallet_no,
             Lot.quantity,
+            Lot.initial_quantity,
             Lot.unit,
             Lot.quality_status,
             Lot.production_date,
@@ -487,6 +489,132 @@ def list_movements(
         )
 
     return MovementsResponse(movements=query.all())
+
+
+# ---------------------------------------------------------------------------
+# Registry KPIs and Excel exports
+# ---------------------------------------------------------------------------
+
+
+@router.get("/lots/kpis")
+def lots_kpis(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Aggregate counters for the warehouse registry: active / quarantine / low stock."""
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    base = (
+        db.query(Lot)
+        .join(Warehouse, Warehouse.id == Lot.warehouse_id)
+    )
+    if current_user.warehouse_scope:
+        base = base.filter(Warehouse.warehouse_type == current_user.warehouse_scope)
+
+    active = base.filter(Lot.quality_status == "released", Lot.quantity > 0).count()
+    quarantine = base.filter(Lot.quality_status == "quarantine").count()
+    rejected = base.filter(Lot.quality_status == "rejected").count()
+    # «Мало остатков» — released лоты, у которых остаток < 10% от исходного.
+    low_stock = base.filter(
+        Lot.quality_status == "released",
+        Lot.quantity > 0,
+        Lot.initial_quantity > 0,
+        Lot.quantity < Lot.initial_quantity * 0.10,
+    ).count()
+    total = base.count()
+    return {
+        "active": active,
+        "quarantine": quarantine,
+        "rejected": rejected,
+        "low_stock": low_stock,
+        "total": total,
+        "low_stock_threshold_pct": 10,
+    }
+
+
+@router.get("/lots/export.xlsx")
+def export_lots(
+    columns: str = Query("", description="Comma-separated column ids; empty = all"),
+    material: str | None = None,
+    quality_status: str | None = None,
+    location: str | None = None,
+    manufacturer: str | None = None,
+    internal_lot: str | None = None,
+    supplier_lot: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    date_type: str = Query("arrival", pattern="^(arrival|expiry)$"),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.services.registry_export import export_lots_xlsx
+
+    cols = [c.strip() for c in columns.split(",") if c.strip()]
+    blob = export_lots_xlsx(
+        db,
+        current_user,
+        columns=cols,
+        material=material,
+        quality_status=quality_status,
+        location=location,
+        manufacturer=manufacturer,
+        internal_lot=internal_lot,
+        supplier_lot=supplier_lot,
+        date_from=date_from,
+        date_to=date_to,
+        date_type=date_type,
+    )
+    filename = f"lots-{date.today().isoformat()}.xlsx"
+    return Response(
+        content=blob,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"
+            )
+        },
+    )
+
+
+@router.get("/movements/export.xlsx")
+def export_movements(
+    columns: str = Query("", description="Comma-separated column ids; empty = all"),
+    material: str | None = None,
+    internal_lot: str | None = None,
+    supplier_lot: str | None = None,
+    document: str | None = None,
+    movement_type: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.services.registry_export import export_movements_xlsx
+
+    cols = [c.strip() for c in columns.split(",") if c.strip()]
+    blob = export_movements_xlsx(
+        db,
+        current_user,
+        columns=cols,
+        material=material,
+        internal_lot=internal_lot,
+        supplier_lot=supplier_lot,
+        document=document,
+        movement_type=movement_type,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    filename = f"movements-{date.today().isoformat()}.xlsx"
+    return Response(
+        content=blob,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"
+            )
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -9,9 +9,11 @@ import {
   ClipboardList,
   Eye,
   EyeOff,
+  FileDown,
   Inbox,
   PenLine,
   Plus,
+  Printer,
   Search,
   ShieldCheck,
   Trash2,
@@ -21,10 +23,12 @@ import {
 import {
   allocateRequisition,
   createRequisition,
+  downloadRequisitionPdf,
   issueRequisition,
   listLots,
   listMaterials,
   listRequisitions,
+  requisitionPdfUrl,
   updateRequisitionAllocation,
 } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
@@ -336,6 +340,7 @@ export function RequisitionsPage({ token, user }: RequisitionsPageProps) {
         locale={locale}
         t={t}
         username={user.username}
+        token={token}
         onBack={backToList}
         onAllocate={handleAllocate}
         onSaveAlloc={handleSaveAlloc}
@@ -621,6 +626,7 @@ interface DetailViewProps {
   locale: string
   t: Translate
   username: string
+  token: string
   onBack: () => void
   onAllocate: () => void
   onSaveAlloc: (updates: { id: string; allocated_quantity: number }[]) => Promise<void>
@@ -640,6 +646,7 @@ function DetailView({
   locale,
   t,
   username,
+  token,
   onBack,
   onAllocate,
   onSaveAlloc,
@@ -704,6 +711,38 @@ function DetailView({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.open(requisitionPdfUrl(req.id, true), '_blank', 'noopener,noreferrer')}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50"
+            title={t('requisitions.previewPdfHint')}
+          >
+            <Eye size={15} />
+            {t('requisitions.previewPdf')}
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const blob = await downloadRequisitionPdf(token, req.id)
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `requisition-${req.requisition_no}.pdf`
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                URL.revokeObjectURL(url)
+              } catch {
+                /* swallow — UI shows generic error elsewhere */
+              }
+            }}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50"
+            title={t('requisitions.downloadPdfHint')}
+          >
+            <Printer size={15} />
+            {t('requisitions.downloadPdf')}
+          </button>
           {canEdit && (
             <button
               type="button"

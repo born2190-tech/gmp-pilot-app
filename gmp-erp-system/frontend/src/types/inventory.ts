@@ -88,6 +88,7 @@ export interface LotItem {
   place_no?: string | null
   pallet_no?: string | null
   quantity: number
+  initial_quantity?: number
   unit: string
   quality_status: string
   production_date: string | null

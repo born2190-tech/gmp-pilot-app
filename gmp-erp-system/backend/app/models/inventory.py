@@ -101,6 +101,9 @@ class Lot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=False)
     location_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=False)
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    # Initial quantity captured at receipt; never decreases. Used as the
+    # denominator for the «мало остатков» KPI (current/initial < 10%).
+    initial_quantity: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
     quality_status: Mapped[str] = mapped_column(String(32), nullable=False)
     # Physical address inside the warehouse (form Ф-3 СОП-415: учётная карточка

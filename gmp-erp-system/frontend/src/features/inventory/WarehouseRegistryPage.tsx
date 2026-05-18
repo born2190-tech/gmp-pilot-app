@@ -6,16 +6,24 @@ import {
   CalendarClock,
   CalendarRange,
   FileDown,
+  FileSpreadsheet,
   FlaskConical,
   Inbox,
   MapPin,
+  PackageMinus,
   RotateCcw,
   Search,
   SearchX,
   SlidersHorizontal,
   X,
 } from 'lucide-react'
-import { downloadLotLedgerCardPdf, listLots, listMovements } from '../../lib/api'
+import {
+  downloadLotLedgerCardPdf,
+  exportLotsXlsx,
+  exportMovementsXlsx,
+  listLots,
+  listMovements,
+} from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
@@ -42,7 +50,9 @@ import {
 type Tab = 'series' | 'movements'
 type DateType = 'arrival' | 'expiry' | 'operation'
 type DatePreset = 'today' | 'week' | 'month' | 'quarter' | 'all' | null
-type KpiKey = 'active' | 'pending' | 'expiring'
+type KpiKey = 'active' | 'pending' | 'expiring' | 'lowStock'
+
+const LOW_STOCK_PCT = 0.10
 
 interface RegistryFilters {
   material: string
@@ -134,6 +144,7 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
   const [filters, setFilters] = useState<RegistryFilters>(EMPTY_FILTERS)
   const [draft, setDraft] = useState<RegistryFilters>(EMPTY_FILTERS)
   const [advOpen, setAdvOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [kpi, setKpi] = useState<KpiKey | null>(null)
   const [selectedLot, setSelectedLot] = useState<LotItem | null>(null)
 
@@ -224,6 +235,20 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
     [lots],
   )
 
+  // «Мало остатков» — released лоты, у которых текущий остаток < 10%
+  // от исходного количества при приёмке. Сигнал к запросу новой партии.
+  const kpiLowStock = useMemo(
+    () =>
+      lots.filter((lot) => {
+        if (lot.quality_status !== 'released') return false
+        if (lot.quantity <= 0) return false
+        const initial = lot.initial_quantity ?? 0
+        if (initial <= 0) return false
+        return lot.quantity / initial < LOW_STOCK_PCT
+      }).length,
+    [lots],
+  )
+
   // Sort + KPI filter applied client-side on top of backend filtering
   const visibleLots = useMemo(() => {
     let rows = lots
@@ -234,6 +259,13 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
         return left !== null && left >= 0 && left <= 30
       })
     if (kpi === 'active') rows = rows.filter((lot) => lot.quality_status === 'released')
+    if (kpi === 'lowStock')
+      rows = rows.filter((lot) => {
+        if (lot.quality_status !== 'released') return false
+        if (lot.quantity <= 0) return false
+        const initial = lot.initial_quantity ?? 0
+        return initial > 0 && lot.quantity / initial < LOW_STOCK_PCT
+      })
     return [...rows].sort((a, b) => compareLot(a, b, seriesSortCtl.sort))
   }, [lots, kpi, seriesSortCtl.sort])
 
@@ -330,6 +362,15 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
             active={kpi === 'expiring'}
             onClick={() => setKpi(kpi === 'expiring' ? null : 'expiring')}
           />
+          <KpiTile
+            icon={PackageMinus}
+            accent="bg-rose-50 text-rose-700"
+            label={t('registry.kpiLowStock')}
+            value={kpiLowStock}
+            sub={t('registry.kpiLowStockSub')}
+            active={kpi === 'lowStock'}
+            onClick={() => setKpi(kpi === 'lowStock' ? null : 'lowStock')}
+          />
         </div>
       </div>
 
@@ -394,7 +435,25 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
             </span>
           )}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setExportOpen(true)}
+          className="inline-flex h-10 items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+        >
+          <FileSpreadsheet size={14} />
+          {t('registry.exportExcel')}
+        </button>
       </div>
+
+      {exportOpen && (
+        <ExportModal
+          token={token}
+          defaultKind={tab === 'movements' ? 'movements' : 'lots'}
+          onClose={() => setExportOpen(false)}
+          t={t}
+        />
+      )}
 
       {/* Advanced filters */}
       {advOpen && (
@@ -1091,6 +1150,326 @@ function EmptyData({ t }: { t: Translate }) {
       </span>
       <p className="text-sm font-medium text-slate-900">{t('registry.emptyAll')}</p>
       <p className="text-xs text-slate-500">{t('registry.emptyAllHint')}</p>
+    </div>
+  )
+}
+
+// ─── Excel export modal ─────────────────────────────────────────────────────
+
+type ExportKind = 'lots' | 'movements'
+
+const LOT_COLUMN_OPTIONS: { id: string; labelKey: string }[] = [
+  { id: 'internal_lot',                  labelKey: 'registry.export.col.internalLot' },
+  { id: 'supplier_lot',                  labelKey: 'registry.export.col.supplierLot' },
+  { id: 'material_code',                 labelKey: 'registry.export.col.materialCode' },
+  { id: 'material_name',                 labelKey: 'registry.export.col.materialName' },
+  { id: 'supplier_name',                 labelKey: 'registry.export.col.supplier' },
+  { id: 'manufacturer_name',             labelKey: 'registry.export.col.manufacturer' },
+  { id: 'warehouse_type',                labelKey: 'registry.export.col.warehouse' },
+  { id: 'location_code',                 labelKey: 'registry.export.col.location' },
+  { id: 'rack_no',                       labelKey: 'registry.export.col.rack' },
+  { id: 'sector_no',                     labelKey: 'registry.export.col.sector' },
+  { id: 'tier_no',                       labelKey: 'registry.export.col.tier' },
+  { id: 'place_no',                      labelKey: 'registry.export.col.place' },
+  { id: 'pallet_no',                     labelKey: 'registry.export.col.pallet' },
+  { id: 'quantity',                      labelKey: 'registry.export.col.quantity' },
+  { id: 'initial_quantity',              labelKey: 'registry.export.col.initialQuantity' },
+  { id: 'unit',                          labelKey: 'registry.export.col.unit' },
+  { id: 'quality_status',                labelKey: 'registry.export.col.qualityStatus' },
+  { id: 'production_date',               labelKey: 'registry.export.col.productionDate' },
+  { id: 'expiry_date',                   labelKey: 'registry.export.col.expiryDate' },
+  { id: 'incoming_control_notified_at',  labelKey: 'registry.export.col.arrivalDate' },
+]
+
+const MOVEMENT_COLUMN_OPTIONS: { id: string; labelKey: string }[] = [
+  { id: 'created_at',       labelKey: 'registry.export.col.dateTime' },
+  { id: 'movement_type',    labelKey: 'registry.export.col.movementType' },
+  { id: 'document_type',    labelKey: 'registry.export.col.documentType' },
+  { id: 'internal_lot',     labelKey: 'registry.export.col.internalLot' },
+  { id: 'supplier_lot',     labelKey: 'registry.export.col.supplierLot' },
+  { id: 'material_code',    labelKey: 'registry.export.col.materialCode' },
+  { id: 'material_name',    labelKey: 'registry.export.col.materialName' },
+  { id: 'quantity_delta',   labelKey: 'registry.export.col.qtyDelta' },
+  { id: 'quantity_after',   labelKey: 'registry.export.col.qtyAfter' },
+  { id: 'unit',             labelKey: 'registry.export.col.unit' },
+  { id: 'reason',           labelKey: 'registry.export.col.reason' },
+  { id: 'workstation_id',   labelKey: 'registry.export.col.workstation' },
+]
+
+function ExportModal({
+  token,
+  defaultKind,
+  onClose,
+  t,
+}: {
+  token: string
+  defaultKind: ExportKind
+  onClose: () => void
+  t: Translate
+}) {
+  const [kind, setKind] = useState<ExportKind>(defaultKind)
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set((defaultKind === 'lots' ? LOT_COLUMN_OPTIONS : MOVEMENT_COLUMN_OPTIONS).map((c) => c.id)),
+  )
+  // Filters
+  const [material, setMaterial] = useState('')
+  const [internalLot, setInternalLot] = useState('')
+  const [qualityStatus, setQualityStatus] = useState('')
+  const [movementType, setMovementType] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const columnOptions = kind === 'lots' ? LOT_COLUMN_OPTIONS : MOVEMENT_COLUMN_OPTIONS
+
+  useEscape(onClose)
+
+  function switchKind(next: ExportKind) {
+    setKind(next)
+    setSelected(new Set((next === 'lots' ? LOT_COLUMN_OPTIONS : MOVEMENT_COLUMN_OPTIONS).map((c) => c.id)))
+  }
+
+  function toggleAll() {
+    if (selected.size === columnOptions.length) setSelected(new Set())
+    else setSelected(new Set(columnOptions.map((c) => c.id)))
+  }
+
+  function toggle(id: string) {
+    setSelected((curr) => {
+      const next = new Set(curr)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleExport() {
+    if (selected.size === 0) {
+      setError(t('registry.export.noColumns'))
+      return
+    }
+    setIsLoading(true)
+    setError(null)
+    try {
+      const columns = Array.from(selected)
+      const blob =
+        kind === 'lots'
+          ? await exportLotsXlsx(token, {
+              columns,
+              material: material || undefined,
+              internal_lot: internalLot || undefined,
+              quality_status: qualityStatus || undefined,
+              date_from: dateFrom || undefined,
+              date_to: dateTo || undefined,
+            })
+          : await exportMovementsXlsx(token, {
+              columns,
+              material: material || undefined,
+              internal_lot: internalLot || undefined,
+              movement_type: movementType || undefined,
+              date_from: dateFrom || undefined,
+              date_to: dateTo || undefined,
+            })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${kind}-${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('registry.export.failed'))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet size={18} className="text-emerald-700" />
+            <h2 className="text-base font-semibold text-slate-950">{t('registry.export.title')}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4 space-y-5">
+          {/* Kind switcher */}
+          <div>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              {t('registry.export.kindLabel')}
+            </p>
+            <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => switchKind('lots')}
+                className={`inline-flex h-8 items-center gap-1.5 rounded px-3 text-[13px] font-medium ${
+                  kind === 'lots' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                <Boxes size={13} />
+                {t('registry.export.kindLots')}
+              </button>
+              <button
+                type="button"
+                onClick={() => switchKind('movements')}
+                className={`inline-flex h-8 items-center gap-1.5 rounded px-3 text-[13px] font-medium ${
+                  kind === 'movements' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                <ArrowUpDown size={13} />
+                {t('registry.export.kindMovements')}
+              </button>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              {t('registry.export.filtersLabel')}
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-[12px] text-slate-700">
+                <span className="mb-1 block">{t('registry.export.filterMaterial')}</span>
+                <input
+                  value={material}
+                  onChange={(e) => setMaterial(e.target.value)}
+                  placeholder={t('registry.export.filterMaterialPh')}
+                  className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label className="text-[12px] text-slate-700">
+                <span className="mb-1 block">{t('registry.export.filterLot')}</span>
+                <input
+                  value={internalLot}
+                  onChange={(e) => setInternalLot(e.target.value)}
+                  placeholder="LOT-..."
+                  className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 font-mono text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              {kind === 'lots' && (
+                <label className="text-[12px] text-slate-700">
+                  <span className="mb-1 block">{t('registry.export.filterStatus')}</span>
+                  <select
+                    value={qualityStatus}
+                    onChange={(e) => setQualityStatus(e.target.value)}
+                    className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
+                  >
+                    <option value="">{t('registry.export.any')}</option>
+                    <option value="quarantine">quarantine</option>
+                    <option value="sampled">sampled</option>
+                    <option value="under_test">under_test</option>
+                    <option value="released">released</option>
+                    <option value="rejected">rejected</option>
+                  </select>
+                </label>
+              )}
+              {kind === 'movements' && (
+                <label className="text-[12px] text-slate-700">
+                  <span className="mb-1 block">{t('registry.export.filterMovementType')}</span>
+                  <select
+                    value={movementType}
+                    onChange={(e) => setMovementType(e.target.value)}
+                    className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
+                  >
+                    <option value="">{t('registry.export.any')}</option>
+                    <option value="RECEIPT">RECEIPT</option>
+                    <option value="TRANSFER">TRANSFER</option>
+                    <option value="ISSUE_PRODUCTION">ISSUE_PRODUCTION</option>
+                    <option value="ADJUSTMENT">ADJUSTMENT</option>
+                    <option value="REQUISITION_ISSUE">REQUISITION_ISSUE</option>
+                  </select>
+                </label>
+              )}
+              <label className="text-[12px] text-slate-700">
+                <span className="mb-1 block">{t('registry.export.dateFrom')}</span>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+              <label className="text-[12px] text-slate-700">
+                <span className="mb-1 block">{t('registry.export.dateTo')}</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Columns */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+                {t('registry.export.columnsLabel', { n: String(selected.size), total: String(columnOptions.length) })}
+              </p>
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="text-[11.5px] font-medium text-blue-700 hover:underline"
+              >
+                {selected.size === columnOptions.length ? t('registry.export.clearAll') : t('registry.export.selectAll')}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
+              {columnOptions.map((col) => (
+                <label key={col.id} className="inline-flex items-center gap-2 text-[12.5px] text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(col.id)}
+                    onChange={() => toggle(col.id)}
+                    className="h-3.5 w-3.5 rounded border-slate-300"
+                  />
+                  {t(col.labelKey as never)}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-9 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isLoading || selected.size === 0}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-emerald-700 px-3 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <FileSpreadsheet size={14} />
+            {isLoading ? t('registry.export.generating') : t('registry.export.generate')}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
