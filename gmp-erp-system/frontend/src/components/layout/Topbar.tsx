@@ -1,4 +1,14 @@
-import { LogOut, Microscope, Settings, ShieldCheck, UserCog } from 'lucide-react'
+import {
+  Factory,
+  HardHat,
+  LogOut,
+  Microscope,
+  Settings,
+  ShieldCheck,
+  UserCog,
+  Warehouse,
+} from 'lucide-react'
+import type { ComponentType } from 'react'
 import type { CurrentUser } from '../../types/auth'
 import { useI18n } from '../../i18n/I18nProvider'
 import { LanguageSwitcher } from './LanguageSwitcher'
@@ -8,16 +18,38 @@ interface TopbarProps {
   onLogout: () => void
 }
 
+type RoleVisual = {
+  Icon: ComponentType<{ size?: number; className?: string }>
+  key: string
+}
+
 /**
- * Иконка-роль в breadcrumb chip подбирается по permission-сигнатуре
- * пользователя. Не делаем enum роли на бэкенде — берём то что уже есть.
+ * Отображаемое название роли. Берём напрямую `user.role` (код от бэкенда),
+ * чтобы не путать «Заведующего складом» с «Помощником» — у них одинаковые
+ * права кроме VIEW_AUDIT, но это разные должности по штату Novugen.
+ *
+ * Согласно решению пилота: оперативный доступ в B21 имеют только зав.
+ * склада, его помощник и сотрудники ОКК/ОКА/админа. Рядовые кладовщики
+ * физически работают на складе, в систему не заходят.
  */
-function pickRoleIcon(user: CurrentUser) {
-  const perms = new Set(user.permissions)
-  if (perms.has('MANAGE_USERS')) return { Icon: Settings, key: 'role.admin' as const }
-  if (perms.has('VIEW_QA')) return { Icon: ShieldCheck, key: 'role.qa' as const }
-  if (perms.has('VIEW_QC')) return { Icon: Microscope, key: 'role.qc' as const }
-  return { Icon: UserCog, key: 'role.warehouseOperator' as const }
+const ROLE_VISUAL: Record<string, RoleVisual> = {
+  WAREHOUSE_MANAGER:   { Icon: Warehouse,   key: 'role.warehouseManager'    },
+  WAREHOUSE_OPERATOR:  { Icon: HardHat,     key: 'role.warehouseDeputy'     }, // помощник зав. склада
+  QC_ANALYST:          { Icon: Microscope,  key: 'role.qcAnalyst'           },
+  HEAD_QC:             { Icon: Microscope,  key: 'role.headQc'              },
+  QA_MANAGER:          { Icon: ShieldCheck, key: 'role.qaManager'           },
+  HEAD_QA:             { Icon: ShieldCheck, key: 'role.headQa'              },
+  PRODUCTION_OPERATOR: { Icon: Factory,     key: 'role.productionOperator'  },
+  SHIFT_MASTER:        { Icon: Factory,     key: 'role.shiftMaster'         },
+  HEAD_PRODUCTION:     { Icon: Factory,     key: 'role.headProduction'      },
+  WORKSHOP_HEAD:       { Icon: Factory,     key: 'role.workshopHead'        },
+  TECHNOLOGIST:        { Icon: Factory,     key: 'role.technologist'        },
+  CHIEF_TECHNOLOGIST:  { Icon: Factory,     key: 'role.chiefTechnologist'   },
+  SYS_ADMIN:           { Icon: Settings,    key: 'role.sysAdmin'            },
+}
+
+function pickRoleIcon(user: CurrentUser): RoleVisual {
+  return ROLE_VISUAL[user.role] ?? { Icon: UserCog, key: 'role.unknown' }
 }
 
 function initials(fullName: string | null | undefined, username: string): string {
@@ -40,7 +72,7 @@ export function Topbar({ user, onLogout }: TopbarProps) {
       <div className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5">
         <RoleIcon size={14} className="text-slate-600" />
         <span className="text-[13px] font-medium text-slate-700">
-          {t(roleKey)} <span className="text-slate-400">·</span> {scopeLabel}
+          {t(roleKey as never)} <span className="text-slate-400">·</span> {scopeLabel}
         </span>
       </div>
 
