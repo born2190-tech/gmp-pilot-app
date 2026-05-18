@@ -264,7 +264,7 @@ export interface MovementsResponse {
   movements: MovementItem[]
 }
 
-export interface TransferLotRequest {
+export interface TransferLotRequest extends SignatureRequest {
   to_location_id: string
   reason: string
   rack_no?: string | null

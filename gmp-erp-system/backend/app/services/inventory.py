@@ -258,6 +258,11 @@ def get_lot_for_operation(db: Session, user: CurrentUser, lot_id: UUID) -> Lot:
 def transfer_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: TransferLotRequest) -> Lot:
     require_permission(user, "VIEW_WAREHOUSE")
     lot = get_lot_for_operation(db, user, lot_id)
+    # GMP / ALCOA+: перемещение партии — это операция, изменяющая запись
+    # склада, поэтому она требует электронной подписи (как и корректировка
+    # остатка). Подпись валидируем до проверки целевой ячейки, чтобы
+    # неавторизованный пользователь не мог зондировать структуру складов.
+    validate_signature(db, user, payload, "TRANSFER_LOT", "lot", str(lot.id))
     target_location = get_required(db, Location, payload.to_location_id, "Location")
     if target_location.warehouse_id != lot.warehouse_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Target location must belong to the same warehouse")

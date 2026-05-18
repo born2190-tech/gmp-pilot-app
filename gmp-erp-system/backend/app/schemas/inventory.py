@@ -111,8 +111,10 @@ class LotOperationResponse(LotItem):
     pass
 
 
-class TransferLotRequest(BaseModel):
+class TransferLotRequest(SignatureRequest):
     to_location_id: UUID
+    # `reason` уже унаследовано из SignatureRequest как str | None; здесь
+    # делаем его обязательным (как и раньше) переопределением поля.
     reason: str = Field(min_length=1)
     # Physical destination coordinates (form Ф-3 СОП-415). Empty/null means
     # "not specified" — the corresponding fields on the lot stay unchanged.

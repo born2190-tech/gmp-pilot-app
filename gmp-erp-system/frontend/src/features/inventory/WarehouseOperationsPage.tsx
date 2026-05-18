@@ -39,6 +39,7 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
   // Transfer
   const [targetLocationId, setTargetLocationId] = useState('')
   const [transferReason, setTransferReason] = useState('')
+  const [transferPassword, setTransferPassword] = useState('')
   // Physical destination coordinates (Ф-3 СОП-415)
   const [physRack, setPhysRack] = useState('')
   const [physSector, setPhysSector] = useState('')
@@ -104,6 +105,7 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
   function clearTransfer() {
     setTargetLocationId('')
     setTransferReason('')
+    setTransferPassword('')
     setPhysRack('')
     setPhysSector('')
     setPhysTier('')
@@ -139,11 +141,14 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
   }
 
   async function runTransfer() {
-    if (!selectedLot || !targetLocationId || !transferReason) return
+    if (!selectedLot || !targetLocationId || !transferReason || !transferPassword) return
     await runOperation(async () => {
       await transferLot(token, selectedLot.id, {
         to_location_id: targetLocationId,
         reason: transferReason,
+        username: user.username,
+        password: transferPassword,
+        meaning: t('warehouseOps.signatureMeaningTransfer'),
         rack_no: physRack || null,
         sector_no: physSector || null,
         tier_no: physTier || null,
@@ -183,7 +188,8 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
   const transferValid =
     Boolean(selectedLot) &&
     Boolean(targetLocationId) &&
-    transferReason.trim().length > 0
+    transferReason.trim().length > 0 &&
+    transferPassword.length > 0
 
   const adjustValid =
     Boolean(selectedLot) &&
@@ -352,6 +358,20 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
                 className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60 disabled:cursor-not-allowed disabled:bg-slate-50"
               />
             </FormRow>
+
+            <FormRow label={t('quality.signaturePassword')}>
+              <input
+                type="password"
+                value={transferPassword}
+                onChange={(event) => setTransferPassword(event.target.value)}
+                disabled={!selectedLot}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60 disabled:cursor-not-allowed disabled:bg-slate-50"
+              />
+            </FormRow>
+
+            <p className="text-[11.5px] text-slate-500">{t('warehouseOps.transferSignatureHint')}</p>
           </div>
 
           <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
