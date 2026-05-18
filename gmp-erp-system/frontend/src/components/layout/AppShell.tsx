@@ -14,9 +14,9 @@ export function AppShell({ activeRoute, children, onLogout, onRouteChange, user 
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar activeRoute={activeRoute} onRouteChange={onRouteChange} user={user} />
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onLogout={onLogout} user={user} />
-        <main className="p-5">{children}</main>
+        <main className="flex-1 p-5">{children}</main>
       </div>
     </div>
   )
