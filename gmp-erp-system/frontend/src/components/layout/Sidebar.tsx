@@ -21,7 +21,7 @@ export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
     <aside
       className={`${
         isCollapsed ? 'w-16' : 'w-[248px]'
-      } sticky top-0 flex h-screen flex-col bg-[#0B1220] transition-all duration-300`}
+      } sticky top-0 flex h-screen flex-col overflow-x-hidden bg-[#0B1220] transition-all duration-300`}
     >
       {/* ── Brand block ─────────────────────────────────────── */}
       <div className="flex h-16 items-center border-b border-slate-800 px-4">
@@ -68,7 +68,7 @@ export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
                     type="button"
                     onClick={() => onRouteChange(item.route)}
                     title={isCollapsed ? t(item.labelKey) : undefined}
-                    className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                    className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
                       active
                         ? 'bg-slate-800 text-slate-50'
                         : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-50'
@@ -82,14 +82,7 @@ export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
                     )}
                     <Icon size={18} strokeWidth={1.6} className="flex-shrink-0" />
                     {!isCollapsed && (
-                      <span className="text-[13.5px] font-medium leading-tight">
-                        {t(item.labelKey)}
-                      </span>
-                    )}
-
-                    {/* Tooltip в свёрнутом режиме */}
-                    {isCollapsed && (
-                      <span className="invisible absolute left-full z-50 ml-2 whitespace-nowrap rounded-md bg-slate-900 px-3 py-1.5 text-[12px] text-slate-100 opacity-0 shadow-lg ring-1 ring-slate-700 transition-all group-hover:visible group-hover:opacity-100">
+                      <span className="truncate text-[13.5px] font-medium leading-tight">
                         {t(item.labelKey)}
                       </span>
                     )}
