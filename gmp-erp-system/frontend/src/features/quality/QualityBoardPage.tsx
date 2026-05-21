@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { createQcReport, listQaLots, listQcLots, sampleLot, submitQaDecision, submitQcReport } from '../../lib/api'
+import { createQcReport, listQaLots, listQcLots, submitQaDecision, submitQcReport } from '../../lib/api'
 import { DataTable } from '../../components/table/DataTable'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 import type { LotItem, QCReportItem, QCReportParameterCreate } from '../../types/inventory'
+import { SamplingActPanel } from './SamplingActPanel'
 
 interface QualityBoardPageProps {
   mode: 'qc' | 'qa'
@@ -66,16 +67,13 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
     setParameters((current) => [...current, { parameter_name: '', specification: '', result_value: '', unit: '', method_reference: methodReference, complies: true }])
   }
 
-  async function runAction(action: 'sample' | 'create-report' | 'submit-report' | 'release' | 'reject') {
+  async function runAction(action: 'create-report' | 'submit-report' | 'release' | 'reject') {
     if (!selectedLot) return
     setError(null)
     setSuccess(null)
     setIsLoading(true)
     try {
-      if (action === 'sample') {
-        await sampleLot(token, selectedLot.id, { reason: reason || t('quality.sampleReason') })
-        setSuccess(t('quality.sampled'))
-      } else if (action === 'create-report') {
+      if (action === 'create-report') {
         const report = await createQcReport(token, {
           lot_id: selectedLot.id,
           report_no: reportNo,
@@ -162,6 +160,10 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
 
       <DataTable columns={columns} data={lots} emptyLabel={mode === 'qc' ? t('quality.qcEmpty') : t('quality.qaEmpty')} globalFilter={filter} isLoading={isLoading} />
 
+      {mode === 'qc' && selectedLot && (
+        <SamplingActPanel token={token} user={user} lot={selectedLot} onVerified={() => void loadLots()} />
+      )}
+
       <div className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 xl:grid-cols-4">
         <label className="block text-sm font-medium text-slate-700 xl:col-span-2">
           {t('common.reason')}
@@ -215,9 +217,6 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
         <div className="flex flex-wrap items-end gap-2 xl:col-span-3">
           {mode === 'qc' ? (
             <>
-              <Button disabled={isLoading || !selectedLot || selectedLot.quality_status !== 'quarantine'} onClick={() => runAction('sample')} type="button">
-                {t('quality.sample')}
-              </Button>
               <Button disabled={isLoading || !selectedLot || selectedLot.quality_status === 'quarantine' || Boolean(draftReport)} onClick={() => runAction('create-report')} type="button">
                 {t('quality.createReport')}
               </Button>

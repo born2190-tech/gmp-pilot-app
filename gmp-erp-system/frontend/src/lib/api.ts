@@ -58,9 +58,12 @@ import type {
   RequisitionsResponse,
   AllocationUpdateRequest,
   IssueRequisitionRequest,
+  SamplingActCreate,
+  SamplingActItem,
+  SamplingActsResponse,
 } from '../types/inventory'
 
-type Method = 'GET' | 'POST' | 'PATCH'
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT'
 
 export type LotsQuery = Record<string, string | number | undefined> & {
   date_type?: 'arrival' | 'expiry'
@@ -419,6 +422,60 @@ export function requisitionPdfUrl(requisitionId: string, inline = false): string
 
 export async function downloadRequisitionPdf(token: string, requisitionId: string): Promise<Blob> {
   const response = await fetch(requisitionPdfUrl(requisitionId), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+// ─── Sampling acts (СОП-533 / СОП-548 Ф-10) ─────────────────────────────────
+
+export function listSamplingActs(token: string, status?: string): Promise<SamplingActsResponse> {
+  return request<SamplingActsResponse>('/api/quality/sampling-acts', 'GET', { token, query: { status } })
+}
+
+export function getSamplingActForLot(token: string, lotId: string): Promise<SamplingActItem | null> {
+  return request<SamplingActItem | null>(`/api/quality/lots/${lotId}/sampling-act`, 'GET', { token })
+}
+
+export function getSamplingAct(token: string, actId: string): Promise<SamplingActItem> {
+  return request<SamplingActItem>(`/api/quality/sampling-acts/${actId}`, 'GET', { token })
+}
+
+export function createSamplingAct(token: string, payload: SamplingActCreate): Promise<SamplingActItem> {
+  return request<SamplingActItem>('/api/quality/sampling-acts', 'POST', { token, body: payload })
+}
+
+export function updateSamplingAct(token: string, actId: string, payload: SamplingActCreate): Promise<SamplingActItem> {
+  return request<SamplingActItem>(`/api/quality/sampling-acts/${actId}`, 'PUT', { token, body: payload })
+}
+
+export function postSamplingAct(token: string, actId: string, payload: SignatureRequest): Promise<SamplingActItem> {
+  return request<SamplingActItem>(`/api/quality/sampling-acts/${actId}/post`, 'POST', { token, body: payload })
+}
+
+export async function uploadSamplingScan(token: string, actId: string, file: File): Promise<SamplingActItem> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetch(`/api/quality/sampling-acts/${actId}/scans`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export function samplingActPdfUrl(actId: string, inline = false): string {
+  return `/api/quality/sampling-acts/${actId}/pdf${inline ? '?inline=true' : ''}`
+}
+
+export async function downloadSamplingActPdf(token: string, actId: string): Promise<Blob> {
+  const response = await fetch(samplingActPdfUrl(actId), {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   })

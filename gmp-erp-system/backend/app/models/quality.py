@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -103,3 +103,102 @@ class QCNotificationScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     notification: Mapped[QCNotification] = relationship()
+
+
+class SamplingAct(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Акт отбора средней пробы — СОП-533 Ф-10 (сырьё/упаковка) или
+    СОП-548 Ф-10 (готовая продукция).
+
+    Один акт на партию (строго). Жизненный цикл:
+    draft → scan_uploaded → verified | cancelled.
+
+    При переходе в `verified` (после загрузки скана и подписи ОКК) система
+    атомарно списывает сумму проб с lot.quantity, ставит lot.sampling_date
+    и создаёт InventoryMovement(type=SAMPLING). До статуса `verified`
+    лабораторный анализ по партии заблокирован.
+    """
+
+    __tablename__ = "sampling_acts"
+
+    act_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    lot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lots.id"), nullable=False)
+    qc_notification_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("qc_notifications.id"), nullable=True
+    )
+    # Какой шаблон формы: '533' (сырьё/упаковка) или '548' (ГП). Определяется
+    # автоматически по типу склада/материала при создании.
+    sop_form: Mapped[str] = mapped_column(String(8), nullable=False, default="533")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+
+    # Комиссия (3 ФИО из справочника пользователей; в PDF идут как текст).
+    head_qc_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    warehouse_member_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    qc_representative_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+    # Условия отбора.
+    sampling_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    sampling_location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sample_condition: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    humidity_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    scale_model: Mapped[str | None] = mapped_column(String(255), nullable=True)  # только 533
+    scale_calibration_no: Mapped[str | None] = mapped_column(String(128), nullable=True)  # только 533
+    transport_with_ice: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    specification_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)  # EP/USP/ФСП
+    registration_no: Mapped[str | None] = mapped_column(String(128), nullable=True)  # R-DV/M, только 548
+
+    # Многоступенчатый отбор (только 548; формула 0.4·√n).
+    containers_outer_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    containers_outer_sampled: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    containers_inner_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    containers_inner_sampled: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    posted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    lines: Mapped[list["SamplingLine"]] = relationship(
+        back_populates="sampling_act", cascade="all, delete-orphan"
+    )
+
+
+class SamplingLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Строка отбираемого количества по назначению пробы."""
+
+    __tablename__ = "sampling_lines"
+
+    sampling_act_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sampling_acts.id"), nullable=False
+    )
+    # PHYSICOCHEMICAL | MICROBIOLOGICAL | ARCHIVE | STABILITY (последний только для 548)
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    sampling_act: Mapped[SamplingAct] = relationship(back_populates="lines")
+
+
+class SamplingScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Скан подписанного бумажного акта Ф-10. Хранится на диске, в БД —
+    путь + sha256 (как QCNotificationScan)."""
+
+    __tablename__ = "sampling_scans"
+
+    sampling_act_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sampling_acts.id"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False, default="application/pdf")
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    sampling_act: Mapped[SamplingAct] = relationship()

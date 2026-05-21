@@ -187,3 +187,122 @@ class QCReportItem(BaseModel):
     overall_result: str | None
     submitted_at: datetime | None
     parameters: list[QCReportParameterItem] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Sampling acts — СОП-533 / СОП-548 Ф-10
+# ---------------------------------------------------------------------------
+
+SAMPLING_PURPOSES = ("PHYSICOCHEMICAL", "MICROBIOLOGICAL", "ARCHIVE", "STABILITY")
+
+
+class SamplingLineInput(BaseModel):
+    purpose: str = Field(pattern="^(PHYSICOCHEMICAL|MICROBIOLOGICAL|ARCHIVE|STABILITY)$")
+    quantity: float = Field(ge=0)
+    unit: str = Field(min_length=1, max_length=32)
+
+
+class SamplingActCreate(BaseModel):
+    lot_id: UUID
+    head_qc_user_id: UUID | None = None
+    warehouse_member_user_id: UUID | None = None
+    qc_representative_user_id: UUID | None = None
+    sampling_date: date | None = None
+    sampling_location: str | None = Field(default=None, max_length=255)
+    sample_condition: str | None = Field(default=None, max_length=255)
+    temperature_c: float | None = None
+    humidity_pct: float | None = None
+    scale_model: str | None = Field(default=None, max_length=255)
+    scale_calibration_no: str | None = Field(default=None, max_length=128)
+    transport_with_ice: bool = False
+    specification_ref: str | None = Field(default=None, max_length=255)
+    registration_no: str | None = Field(default=None, max_length=128)
+    containers_outer_total: int | None = None
+    containers_outer_sampled: int | None = None
+    containers_inner_total: int | None = None
+    containers_inner_sampled: int | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+    lines: list[SamplingLineInput] = Field(default_factory=list)
+
+
+class SamplingActUpdate(SamplingActCreate):
+    lot_id: UUID | None = None  # ignored on update; kept for shape compatibility
+
+
+class SamplingActPost(SignatureRequest):
+    pass
+
+
+class SamplingLineItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    purpose: str
+    quantity: float
+    unit: str
+
+
+class SamplingScanItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    version: int
+    file_size: int
+    mime_type: str
+    sha256_hash: str
+    uploaded_at: datetime
+    uploaded_by: UUID
+
+
+class SamplingActItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    act_no: str
+    lot_id: UUID
+    qc_notification_id: UUID | None
+    sop_form: str
+    status: str
+
+    head_qc_user_id: UUID | None
+    warehouse_member_user_id: UUID | None
+    qc_representative_user_id: UUID | None
+    head_qc_name: str | None = None
+    warehouse_member_name: str | None = None
+    qc_representative_name: str | None = None
+
+    sampling_date: date | None
+    sampling_location: str | None
+    sample_condition: str | None
+    temperature_c: float | None
+    humidity_pct: float | None
+    scale_model: str | None
+    scale_calibration_no: str | None
+    transport_with_ice: bool
+    specification_ref: str | None
+    registration_no: str | None
+    containers_outer_total: int | None
+    containers_outer_sampled: int | None
+    containers_inner_total: int | None
+    containers_inner_sampled: int | None
+    notes: str | None
+
+    posted_at: datetime | None
+    created_at: datetime
+
+    # Denormalised lot info for display.
+    material_name: str | None = None
+    material_code: str | None = None
+    internal_lot: str | None = None
+    supplier_lot: str | None = None
+    manufacturer_name: str | None = None
+    lot_quantity: float | None = None
+    lot_unit: str | None = None
+    total_sampled: float = 0.0
+
+    lines: list[SamplingLineItem] = Field(default_factory=list)
+    scans: list[SamplingScanItem] = Field(default_factory=list)
+
+
+class SamplingActsResponse(BaseModel):
+    sampling_acts: list[SamplingActItem]

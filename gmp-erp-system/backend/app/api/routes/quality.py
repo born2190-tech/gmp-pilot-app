@@ -1,6 +1,8 @@
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import func, literal
 from sqlalchemy.orm import Session
 
@@ -22,11 +24,21 @@ from app.schemas.quality import (
     QualityLotItem,
     QualityLotsResponse,
     SampleLotRequest,
+    SamplingActCreate,
+    SamplingActItem,
+    SamplingActPost,
+    SamplingActsResponse,
 )
 from app.services.permissions import require_permission
 from app.services.quality import create_qc_report, qa_decision, sample_lot, submit_qc_report, submit_qc_result
+from app.services import sampling_acts as sampling_service
+from app.services.sampling_act_pdf import render_sampling_act_pdf
 
 router = APIRouter(prefix="/api/quality", tags=["quality"])
+
+
+def _sampling_item(db: Session, act) -> SamplingActItem:
+    return SamplingActItem.model_validate(sampling_service.build_item(db, act))
 
 
 def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
@@ -233,3 +245,116 @@ def submit_qc_report_route(
 ) -> QCReportItem:
     report = submit_qc_report(db, current_user, report_id, payload)
     return qc_report_item(db, report.id)
+
+
+# ---------------------------------------------------------------------------
+# Sampling acts — СОП-533 / СОП-548 Ф-10
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sampling-acts", response_model=SamplingActsResponse)
+def list_sampling_acts_route(
+    status_filter: str | None = Query(default=None, alias="status"),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActsResponse:
+    acts = sampling_service.list_sampling_acts(db, current_user, status_filter)
+    return SamplingActsResponse(sampling_acts=[_sampling_item(db, a) for a in acts])
+
+
+@router.get("/lots/{lot_id}/sampling-act", response_model=SamplingActItem | None)
+def get_sampling_act_for_lot_route(
+    lot_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActItem | None:
+    require_permission(current_user, "VIEW_QC")
+    act = sampling_service.get_act_for_lot(db, lot_id)
+    return _sampling_item(db, act) if act else None
+
+
+@router.post("/sampling-acts", response_model=SamplingActItem, status_code=201)
+def create_sampling_act_route(
+    payload: SamplingActCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActItem:
+    act = sampling_service.create_sampling_act(db, current_user, payload)
+    return _sampling_item(db, act)
+
+
+@router.get("/sampling-acts/{act_id}", response_model=SamplingActItem)
+def get_sampling_act_route(
+    act_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActItem:
+    act = sampling_service.get_sampling_act(db, current_user, act_id)
+    return _sampling_item(db, act)
+
+
+@router.put("/sampling-acts/{act_id}", response_model=SamplingActItem)
+def update_sampling_act_route(
+    act_id: UUID,
+    payload: SamplingActCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActItem:
+    act = sampling_service.update_sampling_act(db, current_user, act_id, payload)
+    return _sampling_item(db, act)
+
+
+@router.post("/sampling-acts/{act_id}/scans", response_model=SamplingActItem)
+async def upload_sampling_scan_route(
+    act_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActItem:
+    await sampling_service.upload_scan(db, current_user, act_id, file)
+    act = sampling_service.get_sampling_act(db, current_user, act_id)
+    return _sampling_item(db, act)
+
+
+@router.get("/sampling-scans/{scan_id}/file")
+def download_sampling_scan_route(
+    scan_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    raw, mime = sampling_service.load_scan_file(db, current_user, scan_id)
+    return Response(content=raw, media_type=mime)
+
+
+@router.post("/sampling-acts/{act_id}/post", response_model=SamplingActItem)
+def post_sampling_act_route(
+    act_id: UUID,
+    payload: SamplingActPost,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActItem:
+    act = sampling_service.post_sampling_act(db, current_user, act_id, payload)
+    return _sampling_item(db, act)
+
+
+@router.get("/sampling-acts/{act_id}/pdf")
+def sampling_act_pdf_route(
+    act_id: UUID,
+    inline: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    act = sampling_service.get_sampling_act(db, current_user, act_id)
+    data = sampling_service.build_item(db, act)
+    pdf_bytes = render_sampling_act_pdf(data)
+    filename = f"sampling-act-{act.act_no}.pdf"
+    disposition = "inline" if inline else "attachment"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f"{disposition}; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"
+            )
+        },
+    )

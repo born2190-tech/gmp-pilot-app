@@ -562,6 +562,103 @@ export interface PostReceiptResponse {
   lots_created: number
 }
 
+// ─── Sampling acts (СОП-533 / СОП-548 Ф-10) ─────────────────────────────────
+
+export type SamplingPurpose = 'PHYSICOCHEMICAL' | 'MICROBIOLOGICAL' | 'ARCHIVE' | 'STABILITY'
+export type SamplingActStatus = 'draft' | 'scan_uploaded' | 'verified' | 'cancelled'
+
+export interface SamplingLineInput {
+  purpose: SamplingPurpose
+  quantity: number
+  unit: string
+}
+
+export interface SamplingLineItem {
+  id: string
+  purpose: SamplingPurpose
+  quantity: number
+  unit: string
+}
+
+export interface SamplingScanItem {
+  id: string
+  version: number
+  file_size: number
+  mime_type: string
+  sha256_hash: string
+  uploaded_at: string
+  uploaded_by: string
+}
+
+export interface SamplingActCreate {
+  lot_id: string
+  head_qc_user_id?: string | null
+  warehouse_member_user_id?: string | null
+  qc_representative_user_id?: string | null
+  sampling_date?: string | null
+  sampling_location?: string | null
+  sample_condition?: string | null
+  temperature_c?: number | null
+  humidity_pct?: number | null
+  scale_model?: string | null
+  scale_calibration_no?: string | null
+  transport_with_ice?: boolean
+  specification_ref?: string | null
+  registration_no?: string | null
+  containers_outer_total?: number | null
+  containers_outer_sampled?: number | null
+  containers_inner_total?: number | null
+  containers_inner_sampled?: number | null
+  notes?: string | null
+  lines: SamplingLineInput[]
+}
+
+export interface SamplingActItem {
+  id: string
+  act_no: string
+  lot_id: string
+  qc_notification_id: string | null
+  sop_form: '533' | '548'
+  status: SamplingActStatus
+  head_qc_user_id: string | null
+  warehouse_member_user_id: string | null
+  qc_representative_user_id: string | null
+  head_qc_name: string | null
+  warehouse_member_name: string | null
+  qc_representative_name: string | null
+  sampling_date: string | null
+  sampling_location: string | null
+  sample_condition: string | null
+  temperature_c: number | null
+  humidity_pct: number | null
+  scale_model: string | null
+  scale_calibration_no: string | null
+  transport_with_ice: boolean
+  specification_ref: string | null
+  registration_no: string | null
+  containers_outer_total: number | null
+  containers_outer_sampled: number | null
+  containers_inner_total: number | null
+  containers_inner_sampled: number | null
+  notes: string | null
+  posted_at: string | null
+  created_at: string
+  material_name: string | null
+  material_code: string | null
+  internal_lot: string | null
+  supplier_lot: string | null
+  manufacturer_name: string | null
+  lot_quantity: number | null
+  lot_unit: string | null
+  total_sampled: number
+  lines: SamplingLineItem[]
+  scans: SamplingScanItem[]
+}
+
+export interface SamplingActsResponse {
+  sampling_acts: SamplingActItem[]
+}
+
 // ─── Production Requisitions ───────────────────────────────────────────────
 
 export interface RequisitionAllocationLineItem {

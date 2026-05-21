@@ -51,6 +51,29 @@ def _require_verified_notification(db: Session, lot: Lot) -> None:
         )
 
 
+def _require_verified_sampling_act(db: Session, lot: Lot) -> None:
+    """Лабораторный анализ нельзя начать, пока акт отбора (СОП-533/548 Ф-10)
+    не подписан (status='verified'). Закрывает дыру: результат анализа не
+    может быть введён раньше физического отбора пробы.
+    """
+    from app.models.quality import SamplingAct
+
+    has_verified = (
+        db.query(SamplingAct.id)
+        .filter(SamplingAct.lot_id == lot.id, SamplingAct.status == "verified")
+        .first()
+    )
+    if not has_verified:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Невозможно начать анализ: акт отбора средней пробы "
+                "(СОП-533/548 Ф-10) не оформлен или не подписан. Сначала "
+                "оформите акт, загрузите подписанный скан и подтвердите его."
+            ),
+        )
+
+
 def sample_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: SampleLotRequest) -> Lot:
     require_permission(user, "ENTER_QC_RESULT")
     lot = get_lot(db, lot_id)
@@ -86,6 +109,7 @@ def submit_qc_result(db: Session, user: CurrentUser, lot_id: UUID, payload: QCRe
     lot = get_lot(db, lot_id)
     if lot.quality_status not in {"sampled", "under_test"}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="QC result requires a sampled lot")
+    _require_verified_sampling_act(db, lot)
 
     validate_signature(db, user, payload, "SUBMIT_QC_RESULT", "lot", str(lot.id))
     old_status = lot.quality_status
@@ -115,6 +139,7 @@ def create_qc_report(db: Session, user: CurrentUser, payload: QCReportCreate) ->
     lot = get_lot(db, payload.lot_id)
     if lot.quality_status not in {"sampled", "under_test"}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="QC report requires sampled lot")
+    _require_verified_sampling_act(db, lot)
     if db.query(QCReport).filter(QCReport.report_no == payload.report_no).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="QC report number already exists")
 
