@@ -24,6 +24,7 @@ import {
   updateSamplingAct,
   uploadSamplingScan,
 } from '../../lib/api'
+import { ScanButton } from '../../components/ui/ScanButton'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 import type {
@@ -385,6 +386,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50">
               <Printer size={15} /> {t('sampling.printPdf')}
             </button>
+            <ScanButton onScanned={(file) => void handleUpload(file)} disabled={busy} />
             <button type="button" disabled={busy} onClick={() => fileRef.current?.click()}
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50">
               <Upload size={15} /> {t('sampling.uploadScan')}

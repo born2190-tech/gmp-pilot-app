@@ -1,0 +1,4 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pywin32>=306
+pillow>=10.0

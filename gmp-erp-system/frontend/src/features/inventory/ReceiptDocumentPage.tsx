@@ -34,6 +34,7 @@ import type {
   WarehouseItem,
 } from '../../types/inventory'
 import { Button } from '../../components/ui/button'
+import { ScanButton } from '../../components/ui/ScanButton'
 import { useI18n } from '../../i18n/I18nProvider'
 
 interface ReceiptDocumentPageProps {
@@ -1313,6 +1314,7 @@ function CoaPanel({
             className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
           />
         </label>
+        <ScanButton onScanned={(file) => void handleUpload(file)} disabled={busy} />
         <button
           type="button"
           disabled={busy}
