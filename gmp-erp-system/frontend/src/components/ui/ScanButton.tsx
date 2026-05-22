@@ -8,6 +8,8 @@ interface ScanButtonProps {
   disabled?: boolean
   /** true — многостраничное сканирование в один PDF; иначе одна страница JPEG. */
   asPdf?: boolean
+  /** Колбэк для показа ошибки сканера в UI вызывающей панели. */
+  onError?: (message: string) => void
 }
 
 /**
@@ -15,7 +17,7 @@ interface ScanButtonProps {
  * локальный сканер-агент B21. Иначе показывается неактивной с подсказкой —
  * оператор пользуется загрузкой файла рядом.
  */
-export function ScanButton({ onScanned, disabled, asPdf }: ScanButtonProps) {
+export function ScanButton({ onScanned, disabled, asPdf, onError }: ScanButtonProps) {
   const { t } = useI18n()
   const [available, setAvailable] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
@@ -54,8 +56,8 @@ export function ScanButton({ onScanned, disabled, asPdf }: ScanButtonProps) {
         try {
           const file = asPdf ? await scanDocumentPdf() : await scanDocument()
           onScanned(file)
-        } catch {
-          /* агент сам показывает свои ошибки; здесь молча выходим */
+        } catch (err) {
+          onError?.(err instanceof Error ? err.message : t('scan.failed'))
         } finally {
           setBusy(false)
         }
