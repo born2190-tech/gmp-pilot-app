@@ -207,6 +207,8 @@ class QCReportListItem(BaseModel):
     internal_lot: str | None = None
     material_name: str | None = None
     manufacturer_name: str | None = None
+    scan_id: UUID | None = None
+    scan_sha256: str | None = None
 
 
 class QCReportsListResponse(BaseModel):

@@ -333,6 +333,35 @@ def lot_qc_report_pdf(
     return _qc_report_pdf_response(db, report, inline)
 
 
+@router.get("/lots/{lot_id}/qc-report/scan")
+def lot_qc_report_scan(
+    lot_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    """Скан подписанного аналитического листа (Ф-11) для партии."""
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.models.quality import QCReport
+    from app.services.qc_report_scans import latest_scan, load_scan_file
+
+    report = (
+        db.query(QCReport)
+        .filter(QCReport.lot_id == lot_id)
+        .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
+        .first()
+    )
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found for this lot")
+    scan = latest_scan(db, report.id)
+    if not scan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Скан аналитического листа ещё не приложен (приложите его в разделе ОКК)",
+        )
+    raw, mime = load_scan_file(db, current_user, scan.id)
+    return Response(content=raw, media_type=mime)
+
+
 @router.get("/qc-reports", response_model=QCReportsListResponse)
 def list_qc_reports_route(
     db: Session = Depends(get_db),
@@ -348,11 +377,14 @@ def list_qc_reports_route(
         .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
         .all()
     )
+    from app.services.qc_report_scans import latest_scan
+
     items: list[QCReportListItem] = []
     for r in reports:
         lot = db.get(Lot, r.lot_id)
         material = db.get(Material, lot.material_id) if lot else None
         manufacturer = db.get(Manufacturer, lot.manufacturer_id) if lot else None
+        scan = latest_scan(db, r.id)
         items.append(
             QCReportListItem(
                 id=r.id,
@@ -364,9 +396,55 @@ def list_qc_reports_route(
                 internal_lot=(lot.supplier_lot or lot.internal_lot) if lot else None,
                 material_name=material.name if material else None,
                 manufacturer_name=manufacturer.name if manufacturer else None,
+                scan_id=scan.id if scan else None,
+                scan_sha256=scan.sha256_hash if scan else None,
             )
         )
     return QCReportsListResponse(reports=items)
+
+
+@router.post("/qc-reports/{report_id}/scan", response_model=QCReportListItem)
+async def upload_qc_report_scan_route(
+    report_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCReportListItem:
+    """Загрузка скана подписанного аналитического листа (Ф-11)."""
+    from app.models.quality import QCReport
+    from app.services.qc_report_scans import latest_scan, upload_report_scan
+
+    await upload_report_scan(db, current_user, report_id, file)
+    r = db.get(QCReport, report_id)
+    lot = db.get(Lot, r.lot_id) if r else None
+    material = db.get(Material, lot.material_id) if lot else None
+    manufacturer = db.get(Manufacturer, lot.manufacturer_id) if lot else None
+    scan = latest_scan(db, report_id)
+    return QCReportListItem(
+        id=r.id,
+        lot_id=r.lot_id,
+        report_no=r.report_no,
+        status=r.status,
+        overall_result=r.overall_result,
+        submitted_at=r.submitted_at,
+        internal_lot=(lot.supplier_lot or lot.internal_lot) if lot else None,
+        material_name=material.name if material else None,
+        manufacturer_name=manufacturer.name if manufacturer else None,
+        scan_id=scan.id if scan else None,
+        scan_sha256=scan.sha256_hash if scan else None,
+    )
+
+
+@router.get("/qc-report-scans/{scan_id}/file")
+def download_qc_report_scan_route(
+    scan_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    from app.services.qc_report_scans import load_scan_file
+
+    raw, mime = load_scan_file(db, current_user, scan_id)
+    return Response(content=raw, media_type=mime)
 
 
 @router.get("/qc-reports/{report_id}/pdf")

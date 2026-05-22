@@ -36,6 +36,24 @@ class QCReportParameter(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     report: Mapped[QCReport] = relationship()
 
 
+class QCReportScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Скан подписанного аналитического листа (Ф-11) к протоколу ОКК.
+
+    Хранится на диске, в БД — путь + sha256. Именно этот скан выдаётся при
+    скачивании аналитического листа в реестре/дашборде (а не авто-PDF)."""
+
+    __tablename__ = "qc_report_scans"
+
+    report_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("qc_reports.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False, default="application/pdf")
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class QCNotification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "qc_notifications"
 

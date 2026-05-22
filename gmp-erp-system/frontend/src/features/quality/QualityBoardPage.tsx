@@ -10,19 +10,22 @@ import {
   FileText,
   FlaskConical,
   Inbox,
+  Upload,
   X,
 } from 'lucide-react'
 import {
   createQcReport,
-  downloadQcReportPdf,
+  downloadQcReportScan,
   listQaLots,
   listQcLots,
   listQcReports,
   listSamplingActs,
   submitQaDecision,
   submitQcReport,
+  uploadQcReportScan,
 } from '../../lib/api'
 import { DataTable } from '../../components/table/DataTable'
+import { ScanButton } from '../../components/ui/ScanButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n/I18nProvider'
@@ -408,7 +411,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
         )}
 
         {reportsModalOpen && (
-          <QcReportsModal token={token} reports={reports} locale={locale} t={t} onClose={() => setReportsModalOpen(false)} />
+          <QcReportsModal token={token} reports={reports} locale={locale} t={t} onReload={loadLots} onClose={() => setReportsModalOpen(false)} />
         )}
       </section>
     )
@@ -623,27 +626,47 @@ function QcReportsModal({
   reports,
   locale,
   t,
+  onReload,
   onClose,
 }: {
   token: string
   reports: QcReportListItem[]
   locale: string
   t: Translate
+  onReload: () => void
   onClose: () => void
 }) {
-  async function download(report: QcReportListItem) {
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
+
+  async function downloadScan(r: QcReportListItem) {
+    if (!r.scan_id) return
     try {
-      const blob = await downloadQcReportPdf(token, report.id)
+      const blob = await downloadQcReportScan(token, r.scan_id)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `analytical-sheet-${report.report_no}.pdf`
+      a.download = `analytical-sheet-${r.report_no}`
       document.body.appendChild(a)
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
     } catch {
       /* ignore */
+    }
+  }
+
+  async function upload(r: QcReportListItem, file: File) {
+    setBusyId(r.id)
+    setError(null)
+    try {
+      await uploadQcReportScan(token, r.id, file)
+      onReload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('qc.reportsModal.uploadFailed'))
+    } finally {
+      setBusyId(null)
     }
   }
 
@@ -662,6 +685,8 @@ function QcReportsModal({
         </div>
 
         <div className="overflow-y-auto px-5 py-4">
+          {error && <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-700">{error}</div>}
+          <p className="mb-3 text-[12px] text-slate-500">{t('qc.reportsModal.hint')}</p>
           {reports.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-500">{t('qc.reportsModal.empty')}</p>
           ) : (
@@ -669,13 +694,22 @@ function QcReportsModal({
               {reports.map((r) => {
                 const complies = (r.overall_result || '').toLowerCase() === 'complies'
                 return (
-                  <div key={r.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                  <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-[13px] font-semibold text-slate-900">{r.report_no}</span>
                         <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-medium ${complies ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                           {complies ? t('qc.reportsModal.complies') : t('qc.reportsModal.notComplies')}
                         </span>
+                        {r.scan_id ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-medium text-emerald-700">
+                            <CheckCircle2 size={11} /> {t('qc.reportsModal.scanAttached')}
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-medium text-amber-700">
+                            {t('qc.reportsModal.noScan')}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-0.5 flex flex-wrap gap-x-3 font-mono text-[11px] text-slate-500">
                         <span className="text-slate-800">{r.material_name || '—'}</span>
@@ -683,13 +717,33 @@ function QcReportsModal({
                         <span>{r.submitted_at ? new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(r.submitted_at)) : ''}</span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => download(r)}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50"
-                    >
-                      <Download size={15} /> {t('qc.reportsModal.download')}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {r.scan_id && (
+                        <button
+                          type="button"
+                          onClick={() => downloadScan(r)}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50"
+                        >
+                          <Download size={15} /> {t('qc.reportsModal.download')}
+                        </button>
+                      )}
+                      <ScanButton onScanned={(file) => void upload(r, file)} onError={setError} disabled={busyId === r.id} asPdf />
+                      <button
+                        type="button"
+                        disabled={busyId === r.id}
+                        onClick={() => fileRefs.current[r.id]?.click()}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50"
+                      >
+                        <Upload size={15} /> {r.scan_id ? t('qc.reportsModal.replace') : t('qc.reportsModal.upload')}
+                      </button>
+                      <input
+                        ref={(el) => { fileRefs.current[r.id] = el }}
+                        type="file"
+                        accept="image/jpeg,image/png,application/pdf"
+                        className="hidden"
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(r, f); e.target.value = '' }}
+                      />
+                    </div>
                   </div>
                 )
               })}

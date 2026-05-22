@@ -692,6 +692,8 @@ export interface QcReportListItem {
   internal_lot: string | null
   material_name: string | null
   manufacturer_name: string | null
+  scan_id: string | null
+  scan_sha256: string | null
 }
 
 export interface QcReportsListResponse {

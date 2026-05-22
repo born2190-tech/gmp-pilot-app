@@ -443,8 +443,44 @@ export async function downloadLotQcReportPdf(token: string, lotId: string): Prom
   return response.blob()
 }
 
+// Скан подписанного аналитического листа по партии (для реестра).
+export async function downloadLotQcReportScan(token: string, lotId: string): Promise<Blob> {
+  const response = await fetch(`/api/quality/lots/${lotId}/qc-report/scan`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
+  return response.blob()
+}
+
 export function listQcReports(token: string): Promise<QcReportsListResponse> {
   return request<QcReportsListResponse>('/api/quality/qc-reports', 'GET', { token })
+}
+
+export async function uploadQcReportScan(token: string, reportId: string, file: File): Promise<void> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetch(`/api/quality/qc-reports/${reportId}/scan`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
+}
+
+export async function downloadQcReportScan(token: string, scanId: string): Promise<Blob> {
+  const response = await fetch(`/api/quality/qc-report-scans/${scanId}/file`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
 }
 
 export async function downloadQcReportPdf(token: string, reportId: string): Promise<Blob> {
