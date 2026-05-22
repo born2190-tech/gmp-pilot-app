@@ -47,6 +47,31 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def allow_private_network(request, call_next):
+    """Разрешает запросы к loopback (127.0.0.1) со страниц, открытых по
+    «внешнему» адресу — например по Tailscale-IP (100.x). Без заголовка
+    Access-Control-Allow-Private-Network современный Chrome блокирует
+    такой запрос политикой Private Network Access.
+    """
+    # Префлайт PNA приходит как OPTIONS с заголовком
+    # Access-Control-Request-Private-Network: true — отвечаем сразу.
+    if request.method == "OPTIONS" and request.headers.get("access-control-request-private-network"):
+        from starlette.responses import Response as _Resp
+
+        resp = _Resp(status_code=200)
+        resp.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "*")
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "*"
+        resp.headers["Access-Control-Allow-Private-Network"] = "true"
+        resp.headers["Access-Control-Max-Age"] = "600"
+        return resp
+
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
+
+
 class ScanResult(BaseModel):
     filename: str
     mime_type: str
