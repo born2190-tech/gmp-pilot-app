@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import {
   downloadLotLedgerCardPdf,
+  downloadLotQcReportPdf,
   exportLotsXlsx,
   exportMovementsXlsx,
   listLots,
@@ -166,6 +167,22 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
     else if (dateType === 'operation') setDateType('arrival')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
+
+  async function handleQcReportDownload(lotId: string, reportNo: string) {
+    try {
+      const blob = await downloadLotQcReportPdf(token, lotId)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `analytical-sheet-${reportNo || lotId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('registry.qcReportDownloadFailed'))
+    }
+  }
 
   // Fetch
   async function fetchAll() {
@@ -606,6 +623,7 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
             selectedId={selectedLot?.id ?? null}
             locale={locale}
             t={t}
+            onDownloadQcReport={handleQcReportDownload}
           />
         ) : (
           <MovementsTable
@@ -741,9 +759,10 @@ interface SeriesTableProps {
   selectedId: string | null
   locale: string
   t: Translate
+  onDownloadQcReport: (lotId: string, reportNo: string) => void
 }
 
-function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t }: SeriesTableProps) {
+function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t, onDownloadQcReport }: SeriesTableProps) {
   return (
     <div className="max-h-[640px] overflow-auto">
       <table className="w-full min-w-[1100px] text-sm">
@@ -828,7 +847,22 @@ function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t }: Se
                   )}
                 </Td>
                 <Td>
-                  <div className="font-mono text-[11.5px] text-blue-700">{lot.qc_report_no || '—'}</div>
+                  {lot.qc_report_no ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDownloadQcReport(lot.id, lot.qc_report_no || '')
+                      }}
+                      title={t('registry.qcReportDownload')}
+                      className="inline-flex items-center gap-1 font-mono text-[11.5px] font-medium text-blue-700 hover:text-blue-900 hover:underline"
+                    >
+                      <FileDown size={12} />
+                      {lot.qc_report_no}
+                    </button>
+                  ) : (
+                    <div className="font-mono text-[11.5px] text-slate-400">—</div>
+                  )}
                   {lot.qc_result_received_at && (
                     <div className="font-mono text-[10.5px] text-slate-400">
                       {t('registry.qcReceivedHint', { date: formatDate(lot.qc_result_received_at, locale) })}

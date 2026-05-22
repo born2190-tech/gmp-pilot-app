@@ -433,6 +433,15 @@ export async function downloadRequisitionPdf(token: string, requisitionId: strin
 
 // ─── Sampling acts (СОП-533 / СОП-548 Ф-10) ─────────────────────────────────
 
+export async function downloadLotQcReportPdf(token: string, lotId: string): Promise<Blob> {
+  const response = await fetch(`/api/quality/lots/${lotId}/qc-report/pdf`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
 export function listSamplingActs(token: string, status?: string): Promise<SamplingActsResponse> {
   return request<SamplingActsResponse>('/api/quality/sampling-acts', 'GET', { token, query: { status } })
 }

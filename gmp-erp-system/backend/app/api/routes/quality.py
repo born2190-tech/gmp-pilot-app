@@ -257,6 +257,72 @@ def submit_qc_report_route(
     return qc_report_item(db, report.id)
 
 
+@router.get("/lots/{lot_id}/qc-report/pdf")
+def lot_qc_report_pdf(
+    lot_id: UUID,
+    inline: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    """Аналитический лист ОКК (Ф-11) для партии — последний поданный протокол."""
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.models.quality import QCReport
+    from app.services.qc_report_pdf import render_qc_report_pdf
+
+    report = (
+        db.query(QCReport)
+        .filter(QCReport.lot_id == lot_id)
+        .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
+        .first()
+    )
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found for this lot")
+
+    lot = db.get(Lot, lot_id)
+    material = db.get(Material, lot.material_id) if lot else None
+    manufacturer = db.get(Manufacturer, lot.manufacturer_id) if lot else None
+    warehouse = db.get(Warehouse, lot.warehouse_id) if lot else None
+    sop_form = "548" if (warehouse and warehouse.warehouse_type == "FG_WAREHOUSE") else "533"
+    params = (
+        db.query(QCReportParameter)
+        .filter(QCReportParameter.report_id == report.id)
+        .order_by(QCReportParameter.created_at)
+        .all()
+    )
+    data = {
+        "report_no": report.report_no,
+        "sop_form": sop_form,
+        "method_reference": report.method_reference,
+        "analysis_started_at": report.analysis_started_at,
+        "analysis_finished_at": report.analysis_finished_at,
+        "overall_result": report.overall_result,
+        "material_name": material.name if material else None,
+        "internal_lot": (lot.supplier_lot or lot.internal_lot) if lot else None,
+        "manufacturer_name": manufacturer.name if manufacturer else None,
+        "production_date": lot.production_date if lot else None,
+        "expiry_date": lot.expiry_date if lot else None,
+        "sampling_date": lot.sampling_date if lot else None,
+        "parameters": [
+            {
+                "parameter_name": p.parameter_name,
+                "specification": p.specification,
+                "result_value": p.result_value,
+                "unit": p.unit,
+                "complies": p.complies,
+            }
+            for p in params
+        ],
+    }
+    pdf_bytes = render_qc_report_pdf(data)
+    filename = f"analytical-sheet-{report.report_no}.pdf"
+    disposition = "inline" if inline else "attachment"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"{disposition}; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Sampling acts — СОП-533 / СОП-548 Ф-10
 # ---------------------------------------------------------------------------
