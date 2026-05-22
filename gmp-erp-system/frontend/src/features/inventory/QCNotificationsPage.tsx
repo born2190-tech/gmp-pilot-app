@@ -12,6 +12,7 @@ import {
   Search,
   Upload,
 } from 'lucide-react'
+import { ScanButton } from '../../components/ui/ScanButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
 import {
@@ -571,6 +572,7 @@ function ScansSection({ notification, locale, t, token, canUpload }: ScansSectio
               className="hidden"
               onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
             />
+            <ScanButton onScanned={(file) => void handleFile(file)} onError={setError} disabled={uploading} asPdf />
             <button
               type="button"
               disabled={uploading}
