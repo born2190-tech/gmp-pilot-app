@@ -101,6 +101,7 @@ class LotItem(BaseModel):
     qc_result_received_at: datetime | None
     qc_report_no: str | None = None
     qa_decision_at: datetime | None
+    has_certificate: bool = False
 
 
 class LotsResponse(BaseModel):

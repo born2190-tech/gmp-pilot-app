@@ -290,6 +290,40 @@ def download_receipt_certificate(
     return Response(content=raw, media_type=mime)
 
 
+@router.get("/lots/{lot_id}/certificate/file")
+def download_lot_certificate(
+    lot_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    """Сертификат CoA для партии — через RECEIPT-движение находим приход и
+    отдаём последний приложенный к нему сертификат."""
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.services.receipt_certificates import load_certificate_file
+
+    movement = (
+        db.query(InventoryMovement)
+        .filter(InventoryMovement.lot_id == lot_id, InventoryMovement.movement_type == "RECEIPT")
+        .order_by(InventoryMovement.created_at.asc())
+        .first()
+    )
+    if not movement:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt movement not found for this lot")
+    cert = (
+        db.query(ReceiptCertificate)
+        .filter(ReceiptCertificate.receipt_id == movement.document_id)
+        .order_by(ReceiptCertificate.uploaded_at.desc())
+        .first()
+    )
+    if not cert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Сертификат производителя (CoA) для этой партии не приложен",
+        )
+    raw, mime = load_certificate_file(db, current_user, cert.id)
+    return Response(content=raw, media_type=mime)
+
+
 @router.post("/lots/{lot_id}/transfer", response_model=LotOperationResponse)
 def transfer_lot_route(
     lot_id: UUID,
@@ -391,6 +425,15 @@ def list_lots(
         .correlate(Lot)
         .scalar_subquery()
     )
+    # Наличие сертификата CoA: партия → RECEIPT-движение (document_id =
+    # receipt) → сертификаты этого прихода.
+    has_certificate = (
+        db.query(ReceiptCertificate.id)
+        .join(InventoryMovement, InventoryMovement.document_id == ReceiptCertificate.receipt_id)
+        .filter(InventoryMovement.lot_id == Lot.id, InventoryMovement.movement_type == "RECEIPT")
+        .correlate(Lot)
+        .exists()
+    )
     query = (
         db.query(
             Lot.id,
@@ -420,6 +463,7 @@ def list_lots(
             Lot.qc_result_received_at,
             latest_qc_report_no.label("qc_report_no"),
             Lot.qa_decision_at,
+            has_certificate.label("has_certificate"),
         )
         .join(Material, Material.id == Lot.material_id)
         .outerjoin(Supplier, Supplier.id == Lot.supplier_id)

@@ -443,6 +443,19 @@ export async function downloadLotQcReportPdf(token: string, lotId: string): Prom
   return response.blob()
 }
 
+// Сертификат производителя (CoA) по партии (через приход).
+export async function downloadLotCertificate(token: string, lotId: string): Promise<Blob> {
+  const response = await fetch(`/api/inventory/lots/${lotId}/certificate/file`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
+  return response.blob()
+}
+
 // Скан подписанного аналитического листа по партии (для реестра).
 export async function downloadLotQcReportScan(token: string, lotId: string): Promise<Blob> {
   const response = await fetch(`/api/quality/lots/${lotId}/qc-report/scan`, {

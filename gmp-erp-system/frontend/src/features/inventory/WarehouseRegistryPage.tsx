@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import {
+  downloadLotCertificate,
   downloadLotLedgerCardPdf,
   downloadLotQcReportScan,
   exportLotsXlsx,
@@ -194,6 +195,34 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
       else URL.revokeObjectURL(url)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('registry.qcReportDownloadFailed'))
+    }
+  }
+
+  async function handleCertificateDownload(lotId: string) {
+    try {
+      const blob = await downloadLotCertificate(token, lotId)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `coa-${lotId}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('registry.certDownloadFailed'))
+    }
+  }
+
+  async function handleCertificatePrint(lotId: string) {
+    try {
+      const blob = await downloadLotCertificate(token, lotId)
+      const url = URL.createObjectURL(blob)
+      const win = window.open(url, '_blank', 'noopener,noreferrer')
+      if (win) window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      else URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('registry.certDownloadFailed'))
     }
   }
 
@@ -638,6 +667,8 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
             t={t}
             onDownloadQcReport={handleQcReportDownload}
             onPrintQcReport={handleQcReportPrint}
+            onDownloadCertificate={handleCertificateDownload}
+            onPrintCertificate={handleCertificatePrint}
           />
         ) : (
           <MovementsTable
@@ -775,9 +806,11 @@ interface SeriesTableProps {
   t: Translate
   onDownloadQcReport: (lotId: string, reportNo: string) => void
   onPrintQcReport: (lotId: string) => void
+  onDownloadCertificate: (lotId: string) => void
+  onPrintCertificate: (lotId: string) => void
 }
 
-function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t, onDownloadQcReport, onPrintQcReport }: SeriesTableProps) {
+function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t, onDownloadQcReport, onPrintQcReport, onDownloadCertificate, onPrintCertificate }: SeriesTableProps) {
   return (
     <div className="max-h-[640px] overflow-auto">
       <table className="w-full min-w-[1100px] text-sm">
@@ -791,6 +824,7 @@ function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t, onDo
             <Th>{t('registry.qualityStatus')}</Th>
             <Th><SortHeader label={t('registry.expiryDate')} sortKey="expiry_date" sort={sort} onSort={onSort} /></Th>
             <Th>{t('registry.qcReportNo')}</Th>
+            <Th>{t('registry.certificate')}</Th>
           </tr>
         </thead>
         <tbody>
@@ -889,6 +923,30 @@ function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t, onDo
                     <div className="font-mono text-[10.5px] text-slate-400">
                       {t('registry.qcReceivedHint', { date: formatDate(lot.qc_result_received_at, locale) })}
                     </div>
+                  )}
+                </Td>
+                <Td>
+                  {lot.has_certificate ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onDownloadCertificate(lot.id) }}
+                        title={t('registry.certDownload')}
+                        className="rounded p-1 text-blue-700 hover:bg-blue-50"
+                      >
+                        <FileDown size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onPrintCertificate(lot.id) }}
+                        title={t('registry.certPrint')}
+                        className="rounded p-1 text-slate-600 hover:bg-slate-100"
+                      >
+                        <Printer size={13} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="font-mono text-[11.5px] text-slate-400">—</div>
                   )}
                 </Td>
               </tr>

@@ -105,6 +105,7 @@ export interface LotItem {
   qc_result_received_at: string | null
   qc_report_no: string | null
   qa_decision_at: string | null
+  has_certificate?: boolean
 }
 
 export interface LotsResponse {
