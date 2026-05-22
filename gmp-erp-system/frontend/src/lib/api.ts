@@ -455,6 +455,10 @@ export function postSamplingAct(token: string, actId: string, payload: Signature
   return request<SamplingActItem>(`/api/quality/sampling-acts/${actId}/post`, 'POST', { token, body: payload })
 }
 
+export function cancelSamplingAct(token: string, actId: string): Promise<SamplingActItem> {
+  return request<SamplingActItem>(`/api/quality/sampling-acts/${actId}/cancel`, 'POST', { token })
+}
+
 export async function uploadSamplingScan(token: string, actId: string, file: File): Promise<SamplingActItem> {
   const form = new FormData()
   form.append('file', file)

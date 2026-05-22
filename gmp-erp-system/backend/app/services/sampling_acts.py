@@ -245,6 +245,37 @@ def get_sampling_act(db: Session, user: CurrentUser, act_id: UUID) -> SamplingAc
     return _get(db, act_id)
 
 
+def cancel_sampling_act(db: Session, user: CurrentUser, act_id: UUID) -> SamplingAct:
+    """Отмена черновика/загруженного скана акта (до подтверждения).
+
+    Подтверждённый (verified) акт отменить нельзя — он уже списал пробу
+    с партии; для отмены потребовалось бы сторнирующее движение, что вне
+    обычного сценария. Отмена возвращает партию в исходное состояние:
+    черновик не списывал — поэтому достаточно сменить статус.
+    """
+    require_permission(user, "ENTER_QC_RESULT")
+    act = _get(db, act_id)
+    if act.status == "verified":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Подтверждённый акт нельзя отменить — проба уже списана с партии",
+        )
+    if act.status == "cancelled":
+        return act
+    act.status = "cancelled"
+    write_audit(
+        db,
+        user,
+        object_type="sampling_act",
+        object_id=str(act.id),
+        action_type="CANCEL_SAMPLING_ACT",
+        new_value={"act_no": act.act_no, "status": "cancelled"},
+    )
+    db.commit()
+    db.refresh(act)
+    return act
+
+
 def get_act_for_lot(db: Session, lot_id: UUID) -> SamplingAct | None:
     return (
         db.query(SamplingAct)

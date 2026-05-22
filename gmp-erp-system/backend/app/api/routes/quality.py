@@ -336,6 +336,16 @@ def download_sampling_scan_route(
     return Response(content=raw, media_type=mime)
 
 
+@router.post("/sampling-acts/{act_id}/cancel", response_model=SamplingActItem)
+def cancel_sampling_act_route(
+    act_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActItem:
+    act = sampling_service.cancel_sampling_act(db, current_user, act_id)
+    return _sampling_item(db, act)
+
+
 @router.post("/sampling-acts/{act_id}/post", response_model=SamplingActItem)
 def post_sampling_act_route(
     act_id: UUID,

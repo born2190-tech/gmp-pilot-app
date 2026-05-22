@@ -11,15 +11,16 @@ import {
   ShieldCheck,
   Snowflake,
   TestTube2,
+  Trash2,
   Unlock,
   Upload,
 } from 'lucide-react'
 import {
+  cancelSamplingAct,
   createSamplingAct,
   downloadSamplingActPdf,
   getSamplingActForLot,
   postSamplingAct,
-  samplingActPdfUrl,
   updateSamplingAct,
   uploadSamplingScan,
 } from '../../lib/api'
@@ -186,6 +187,22 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
       onVerified?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : t('sampling.postFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleCancel() {
+    if (!act) return
+    if (!window.confirm(t('sampling.cancelConfirm'))) return
+    setBusy(true)
+    setError(null)
+    try {
+      await cancelSamplingAct(token, act.id)
+      onVerified?.() // перезагружаем дашборд — партия вернётся в «Новое извещение»
+      await reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('sampling.cancelFailed'))
     } finally {
       setBusy(false)
     }
@@ -374,6 +391,10 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
             </button>
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,application/pdf" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f); e.target.value = '' }} />
+            <button type="button" disabled={busy} onClick={handleCancel}
+              className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-md border border-rose-200 bg-white px-3 text-[13px] font-medium text-rose-700 hover:bg-rose-50">
+              <Trash2 size={15} /> {t('sampling.cancel')}
+            </button>
           </>
         )}
       </div>
