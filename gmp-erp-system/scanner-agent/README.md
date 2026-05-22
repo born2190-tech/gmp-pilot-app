@@ -32,17 +32,43 @@ python agent.py
 
 Агент выведет: `B21 Scanner Agent v0.1.0 → http://127.0.0.1:8765`
 
+## Автозапуск при входе в Windows (рекомендуется)
+
+Чтобы агент не запускать вручную каждый раз — настройте автостарт один раз:
+
+```bat
+install-autostart.bat
+```
+
+Скрипт создаёт ярлык в папке «Автозагрузка» текущего пользователя, который
+запускает агент **без окна консоли** (через `pythonw`/`pyw`) при каждом
+входе в систему. Отключить автозапуск:
+
+```bat
+uninstall-autostart.bat
+```
+
+После `install-autostart.bat` агент стартует при следующем логине. Чтобы
+поднять его сразу, без перезагрузки, скрипт печатает готовую команду
+`start "" pythonw ...agent.py`.
+
 ## Сборка автономного .exe (без Python на АРМ)
 
 На машине с Python:
 
 ```bat
 pip install pyinstaller
-pyinstaller --onefile --name b21-scanner-agent agent.py
+pyinstaller --onefile --noconsole --name b21-scanner-agent agent.py
 ```
 
-Готовый `dist\b21-scanner-agent.exe` копируется на АРМ. Для автозапуска —
-добавить ярлык в `shell:startup` или зарегистрировать как службу (NSSM).
+Готовый `dist\b21-scanner-agent.exe` копируется на АРМ. Варианты автозапуска:
+- ярлык на `.exe` в папке `shell:startup` (как делает `install-autostart.bat`,
+  но с .exe вместо pythonw), либо
+- регистрация как службы Windows через NSSM (`nssm install B21ScannerAgent
+  "C:\path\b21-scanner-agent.exe"`).
+
+Для прод-развёртывания .exe предпочтительнее: Python на АРМ не требуется,
+обновление = замена одного файла.
 
 ## API (для справки)
 
