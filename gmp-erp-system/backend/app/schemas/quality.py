@@ -195,6 +195,24 @@ class QCReportItem(BaseModel):
     parameters: list[QCReportParameterItem] = Field(default_factory=list)
 
 
+class QCReportListItem(BaseModel):
+    """Строка списка аналитических листов (для дашборда ОКК)."""
+
+    id: UUID
+    lot_id: UUID
+    report_no: str
+    status: str
+    overall_result: str | None
+    submitted_at: datetime | None
+    internal_lot: str | None = None
+    material_name: str | None = None
+    manufacturer_name: str | None = None
+
+
+class QCReportsListResponse(BaseModel):
+    reports: list[QCReportListItem]
+
+
 # ---------------------------------------------------------------------------
 # Sampling acts — СОП-533 / СОП-548 Ф-10
 # ---------------------------------------------------------------------------

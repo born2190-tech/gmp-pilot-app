@@ -63,6 +63,7 @@ import type {
   SamplingActCreate,
   SamplingActItem,
   SamplingActsResponse,
+  QcReportsListResponse,
 } from '../types/inventory'
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT'
@@ -435,6 +436,19 @@ export async function downloadRequisitionPdf(token: string, requisitionId: strin
 
 export async function downloadLotQcReportPdf(token: string, lotId: string): Promise<Blob> {
   const response = await fetch(`/api/quality/lots/${lotId}/qc-report/pdf`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+export function listQcReports(token: string): Promise<QcReportsListResponse> {
+  return request<QcReportsListResponse>('/api/quality/qc-reports', 'GET', { token })
+}
+
+export async function downloadQcReportPdf(token: string, reportId: string): Promise<Blob> {
+  const response = await fetch(`/api/quality/qc-reports/${reportId}/pdf`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   })

@@ -19,7 +19,9 @@ from app.schemas.quality import (
     QCNotificationsResponse,
     QCReportCreate,
     QCReportItem,
+    QCReportListItem,
     QCReportParameterItem,
+    QCReportsListResponse,
     QCResultRequest,
     QualityLotItem,
     QualityLotsResponse,
@@ -257,28 +259,9 @@ def submit_qc_report_route(
     return qc_report_item(db, report.id)
 
 
-@router.get("/lots/{lot_id}/qc-report/pdf")
-def lot_qc_report_pdf(
-    lot_id: UUID,
-    inline: bool = Query(False),
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
-) -> Response:
-    """Аналитический лист ОКК (Ф-11) для партии — последний поданный протокол."""
-    require_permission(current_user, "VIEW_WAREHOUSE")
-    from app.models.quality import QCReport
-    from app.services.qc_report_pdf import render_qc_report_pdf
-
-    report = (
-        db.query(QCReport)
-        .filter(QCReport.lot_id == lot_id)
-        .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
-        .first()
-    )
-    if not report:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found for this lot")
-
-    lot = db.get(Lot, lot_id)
+def _build_qc_report_data(db: Session, report) -> dict:
+    """Собирает данные для PDF аналитического листа из протокола + партии."""
+    lot = db.get(Lot, report.lot_id)
     material = db.get(Material, lot.material_id) if lot else None
     manufacturer = db.get(Manufacturer, lot.manufacturer_id) if lot else None
     warehouse = db.get(Warehouse, lot.warehouse_id) if lot else None
@@ -289,7 +272,7 @@ def lot_qc_report_pdf(
         .order_by(QCReportParameter.created_at)
         .all()
     )
-    data = {
+    return {
         "report_no": report.report_no,
         "sop_form": sop_form,
         "method_reference": report.method_reference,
@@ -313,7 +296,12 @@ def lot_qc_report_pdf(
             for p in params
         ],
     }
-    pdf_bytes = render_qc_report_pdf(data)
+
+
+def _qc_report_pdf_response(db: Session, report, inline: bool) -> Response:
+    from app.services.qc_report_pdf import render_qc_report_pdf
+
+    pdf_bytes = render_qc_report_pdf(_build_qc_report_data(db, report))
     filename = f"analytical-sheet-{report.report_no}.pdf"
     disposition = "inline" if inline else "attachment"
     return Response(
@@ -321,6 +309,81 @@ def lot_qc_report_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f"{disposition}; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"},
     )
+
+
+@router.get("/lots/{lot_id}/qc-report/pdf")
+def lot_qc_report_pdf(
+    lot_id: UUID,
+    inline: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    """Аналитический лист ОКК (Ф-11) для партии — последний поданный протокол."""
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.models.quality import QCReport
+
+    report = (
+        db.query(QCReport)
+        .filter(QCReport.lot_id == lot_id)
+        .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
+        .first()
+    )
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found for this lot")
+    return _qc_report_pdf_response(db, report, inline)
+
+
+@router.get("/qc-reports", response_model=QCReportsListResponse)
+def list_qc_reports_route(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCReportsListResponse:
+    """Список аналитических листов (поданные протоколы ОКК) для дашборда."""
+    require_permission(current_user, "VIEW_QC")
+    from app.models.quality import QCReport
+
+    reports = (
+        db.query(QCReport)
+        .filter(QCReport.status == "submitted")
+        .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
+        .all()
+    )
+    items: list[QCReportListItem] = []
+    for r in reports:
+        lot = db.get(Lot, r.lot_id)
+        material = db.get(Material, lot.material_id) if lot else None
+        manufacturer = db.get(Manufacturer, lot.manufacturer_id) if lot else None
+        items.append(
+            QCReportListItem(
+                id=r.id,
+                lot_id=r.lot_id,
+                report_no=r.report_no,
+                status=r.status,
+                overall_result=r.overall_result,
+                submitted_at=r.submitted_at,
+                internal_lot=(lot.supplier_lot or lot.internal_lot) if lot else None,
+                material_name=material.name if material else None,
+                manufacturer_name=manufacturer.name if manufacturer else None,
+            )
+        )
+    return QCReportsListResponse(reports=items)
+
+
+@router.get("/qc-reports/{report_id}/pdf")
+def qc_report_pdf_route(
+    report_id: UUID,
+    inline: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    """Аналитический лист ОКК (Ф-11) по конкретному протоколу."""
+    require_permission(current_user, "VIEW_QC")
+    from app.models.quality import QCReport
+
+    report = db.get(QCReport, report_id)
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found")
+    return _qc_report_pdf_response(db, report, inline)
 
 
 # ---------------------------------------------------------------------------

@@ -5,17 +5,29 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardSignature,
+  Download,
   FileScan,
+  FileText,
   FlaskConical,
   Inbox,
+  X,
 } from 'lucide-react'
-import { createQcReport, listQaLots, listQcLots, listSamplingActs, submitQaDecision, submitQcReport } from '../../lib/api'
+import {
+  createQcReport,
+  downloadQcReportPdf,
+  listQaLots,
+  listQcLots,
+  listQcReports,
+  listSamplingActs,
+  submitQaDecision,
+  submitQcReport,
+} from '../../lib/api'
 import { DataTable } from '../../components/table/DataTable'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
-import type { LotItem, QCReportItem, QCReportParameterCreate, SamplingActItem } from '../../types/inventory'
+import type { LotItem, QCReportItem, QcReportListItem, QCReportParameterCreate, SamplingActItem } from '../../types/inventory'
 import { SamplingActPanel } from './SamplingActPanel'
 
 type Phase = 'AWAITING_SAMPLING' | 'DRAFT' | 'SCAN_UPLOADED' | 'SAMPLING_VERIFIED' | 'RESULT_READY'
@@ -51,6 +63,8 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
   const { locale, t } = useI18n()
   const [lots, setLots] = useState<LotItem[]>([])
   const [acts, setActs] = useState<SamplingActItem[]>([])
+  const [reports, setReports] = useState<QcReportListItem[]>([])
+  const [reportsModalOpen, setReportsModalOpen] = useState(false)
   const [phaseFilter, setPhaseFilter] = useState<Phase | null>(null)
   const [collapsedPhases, setCollapsedPhases] = useState<Set<Phase>>(new Set())
   const [selectedLotId, setSelectedLotId] = useState('')
@@ -77,8 +91,9 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
       setLots(response.lots)
       setSelectedLotId((current) => current || response.lots[0]?.id || '')
       if (mode === 'qc') {
-        const actsResp = await listSamplingActs(token)
+        const [actsResp, reportsResp] = await Promise.all([listSamplingActs(token), listQcReports(token)])
         setActs(actsResp.sampling_acts)
+        setReports(reportsResp.reports)
       }
       setError(null)
     } catch (err) {
@@ -249,13 +264,14 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
         {success && <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p>}
 
         {/* KPI tiles */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <KpiTile icon={Inbox} accent="bg-slate-100 text-slate-700" label={t('qc.kpi.newNotifications')} sub={t('qc.kpi.newNotificationsSub')} value={kpi.AWAITING_SAMPLING} active={phaseFilter === 'AWAITING_SAMPLING'} onClick={() => setPhaseFilter((p) => (p === 'AWAITING_SAMPLING' ? null : 'AWAITING_SAMPLING'))} />
           <KpiTile icon={ClipboardSignature} accent="bg-amber-50 text-amber-700" label={t('qc.kpi.awaitingSampling')} sub={t('qc.kpi.awaitingSamplingSub')} value={kpi.DRAFT} active={phaseFilter === 'DRAFT'} onClick={() => setPhaseFilter((p) => (p === 'DRAFT' ? null : 'DRAFT'))} />
           <KpiTile icon={FileScan} accent="bg-sky-50 text-sky-700" label={t('qc.kpi.scanUploaded')} sub={t('qc.kpi.scanUploadedSub')} value={kpi.SCAN_UPLOADED} active={phaseFilter === 'SCAN_UPLOADED'} onClick={() => setPhaseFilter((p) => (p === 'SCAN_UPLOADED' ? null : 'SCAN_UPLOADED'))} />
           <KpiTile icon={FlaskConical} accent="bg-violet-50 text-violet-700" label={t('qc.kpi.inAnalysis')} sub={t('qc.kpi.inAnalysisSub')} value={kpi.SAMPLING_VERIFIED} active={phaseFilter === 'SAMPLING_VERIFIED'} onClick={() => setPhaseFilter((p) => (p === 'SAMPLING_VERIFIED' ? null : 'SAMPLING_VERIFIED'))} />
           <KpiTile icon={CheckCircle2} accent="bg-emerald-50 text-emerald-700" label={t('qc.kpi.resultReady')} sub={t('qc.kpi.resultReadySub')} value={kpi.RESULT_READY} active={phaseFilter === 'RESULT_READY'} onClick={() => setPhaseFilter((p) => (p === 'RESULT_READY' ? null : 'RESULT_READY'))} />
           <KpiTile icon={AlertTriangle} accent="bg-rose-50 text-rose-700" label={t('qc.kpi.overdue')} sub={t('qc.kpi.overdueSub')} value={kpi.overdue} />
+          <KpiTile icon={FileText} accent="bg-blue-50 text-blue-700" label={t('qc.kpi.analyticalSheets')} sub={t('qc.kpi.analyticalSheetsSub')} value={reports.length} onClick={() => setReportsModalOpen(true)} />
         </div>
 
         {/* Search */}
@@ -389,6 +405,10 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
               </Button>
             </div>
           </div>
+        )}
+
+        {reportsModalOpen && (
+          <QcReportsModal token={token} reports={reports} locale={locale} t={t} onClose={() => setReportsModalOpen(false)} />
         )}
       </section>
     )
@@ -590,6 +610,91 @@ function QcTaskCard({
             <ClipboardSignature size={15} />
             {cta.label}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Модалка списка аналитических листов ────────────────────────────────────
+
+function QcReportsModal({
+  token,
+  reports,
+  locale,
+  t,
+  onClose,
+}: {
+  token: string
+  reports: QcReportListItem[]
+  locale: string
+  t: Translate
+  onClose: () => void
+}) {
+  async function download(report: QcReportListItem) {
+    try {
+      const blob = await downloadQcReportPdf(token, report.id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `analytical-sheet-${report.report_no}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <div className="flex items-center gap-2">
+            <FileText size={18} className="text-blue-700" />
+            <h2 className="text-base font-semibold text-slate-950">{t('qc.reportsModal.title')}</h2>
+            <span className="text-[12px] font-medium text-slate-400">· {reports.length}</span>
+          </div>
+          <button type="button" onClick={onClose} aria-label="close" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4">
+          {reports.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-500">{t('qc.reportsModal.empty')}</p>
+          ) : (
+            <div className="space-y-2">
+              {reports.map((r) => {
+                const complies = (r.overall_result || '').toLowerCase() === 'complies'
+                return (
+                  <div key={r.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[13px] font-semibold text-slate-900">{r.report_no}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-medium ${complies ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                          {complies ? t('qc.reportsModal.complies') : t('qc.reportsModal.notComplies')}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-x-3 font-mono text-[11px] text-slate-500">
+                        <span className="text-slate-800">{r.material_name || '—'}</span>
+                        <span>серия: {r.internal_lot || '—'}</span>
+                        <span>{r.submitted_at ? new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(r.submitted_at)) : ''}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => download(r)}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50"
+                    >
+                      <Download size={15} /> {t('qc.reportsModal.download')}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

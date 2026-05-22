@@ -682,6 +682,22 @@ export interface SamplingActsResponse {
   sampling_acts: SamplingActItem[]
 }
 
+export interface QcReportListItem {
+  id: string
+  lot_id: string
+  report_no: string
+  status: string
+  overall_result: string | null
+  submitted_at: string | null
+  internal_lot: string | null
+  material_name: string | null
+  manufacturer_name: string | null
+}
+
+export interface QcReportsListResponse {
+  reports: QcReportListItem[]
+}
+
 // ─── Production Requisitions ───────────────────────────────────────────────
 
 export interface RequisitionAllocationLineItem {
