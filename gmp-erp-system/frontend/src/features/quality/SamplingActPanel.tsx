@@ -83,6 +83,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setAct(null) // сбрасываем состояние предыдущей партии, чтобы не «залипало»
     try {
       const found = await getSamplingActForLot(token, lot.id)
       setAct(found)

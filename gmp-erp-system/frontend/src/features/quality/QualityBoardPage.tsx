@@ -322,7 +322,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
 
         {selectedLot && (
           <div ref={panelRef}>
-            <SamplingActPanel token={token} user={user} lot={selectedLot} onVerified={() => void loadLots()} />
+            <SamplingActPanel key={selectedLot.id} token={token} user={user} lot={selectedLot} onVerified={() => void loadLots()} />
           </div>
         )}
 
