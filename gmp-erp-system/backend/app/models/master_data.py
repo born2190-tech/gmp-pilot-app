@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -47,6 +47,14 @@ class Material(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     item_type: Mapped[str] = mapped_column(String(64), nullable=False)
     default_unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Нормы отбора средней пробы (оцифровка Ф-1 к СОП-533/548). Заполняются
+    # ОКК при первом отборе материала и переиспользуются дальше. Не зависят
+    # от объёма партии — определяются методиками анализа.
+    sample_pc_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sample_micro_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sample_archive_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sample_stability_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sample_unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class Employee(UUIDPrimaryKeyMixin, TimestampMixin, Base):

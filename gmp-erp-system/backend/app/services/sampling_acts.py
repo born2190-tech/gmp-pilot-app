@@ -135,6 +135,38 @@ def _replace_lines(db: Session, act: SamplingAct, payload: SamplingActCreate) ->
         )
 
 
+def _learn_norms(db: Session, lot: Lot, payload: SamplingActCreate) -> None:
+    """Запоминаем нормы отбора в карточке материала (оцифровка Ф-1).
+
+    Пишем только если соответствующая норма в материале ещё пуста —
+    т.е. «первый раз ОКК ввёл → система запомнила». Дальнейшие правки
+    под конкретную партию стандарт не перезаписывают.
+    """
+    material = db.get(Material, lot.material_id)
+    if not material:
+        return
+    by_purpose = {ln.purpose: ln for ln in payload.lines}
+    mapping = {
+        "PHYSICOCHEMICAL": "sample_pc_qty",
+        "MICROBIOLOGICAL": "sample_micro_qty",
+        "ARCHIVE": "sample_archive_qty",
+        "STABILITY": "sample_stability_qty",
+    }
+    learned = False
+    for purpose, attr in mapping.items():
+        ln = by_purpose.get(purpose)
+        if ln and ln.quantity and getattr(material, attr) in (None, 0):
+            setattr(material, attr, ln.quantity)
+            learned = True
+    if not material.sample_unit:
+        any_line = next((ln for ln in payload.lines if ln.unit), None)
+        if any_line:
+            material.sample_unit = any_line.unit.strip()
+            learned = True
+    if learned:
+        db.add(material)
+
+
 def create_sampling_act(db: Session, user: CurrentUser, payload: SamplingActCreate) -> SamplingAct:
     require_permission(user, "ENTER_QC_RESULT")
     lot = _get_lot(db, payload.lot_id)
@@ -164,6 +196,7 @@ def create_sampling_act(db: Session, user: CurrentUser, payload: SamplingActCrea
     db.add(act)
     db.flush()
     _replace_lines(db, act, payload)
+    _learn_norms(db, lot, payload)
     write_audit(
         db,
         user,
@@ -184,6 +217,9 @@ def update_sampling_act(db: Session, user: CurrentUser, act_id: UUID, payload: S
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Verified act cannot be edited")
     _apply_fields(act, payload)
     _replace_lines(db, act, payload)
+    lot = db.get(Lot, act.lot_id)
+    if lot:
+        _learn_norms(db, lot, payload)
     write_audit(
         db,
         user,

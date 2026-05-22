@@ -48,13 +48,16 @@ const PURPOSE_META: Record<SamplingPurpose, { icon: typeof Beaker; key: string }
   STABILITY: { icon: Snowflake, key: 'sampling.purpose.stability' },
 }
 
-function defaultLines(sopForm: '533' | '548', unit: string): SamplingLineInput[] {
+// Стартовые строки: подставляем нормы Ф-1 из карточки материала, если они
+// заданы (lot.sample_*_qty). Единица берётся из нормы материала, иначе из лота.
+function defaultLines(sopForm: '533' | '548', lot: LotItem): SamplingLineInput[] {
+  const u = lot.sample_unit || lot.unit
   const base: SamplingLineInput[] = [
-    { purpose: 'PHYSICOCHEMICAL', quantity: 0, unit },
-    { purpose: 'MICROBIOLOGICAL', quantity: 0, unit },
-    { purpose: 'ARCHIVE', quantity: 0, unit },
+    { purpose: 'PHYSICOCHEMICAL', quantity: lot.sample_pc_qty ?? 0, unit: u },
+    { purpose: 'MICROBIOLOGICAL', quantity: lot.sample_micro_qty ?? 0, unit: u },
+    { purpose: 'ARCHIVE', quantity: lot.sample_archive_qty ?? 0, unit: u },
   ]
-  if (sopForm === '548') base.push({ purpose: 'STABILITY', quantity: 0, unit })
+  if (sopForm === '548') base.push({ purpose: 'STABILITY', quantity: lot.sample_stability_qty ?? 0, unit: u })
   return base
 }
 
@@ -87,7 +90,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
         setLines(
           found.lines.length
             ? found.lines.map((l) => ({ purpose: l.purpose, quantity: l.quantity, unit: l.unit }))
-            : defaultLines(found.sop_form, lot.unit),
+            : defaultLines(found.sop_form, lot),
         )
         setSamplingDate(found.sampling_date ?? new Date().toISOString().slice(0, 10))
         setLocation(found.sampling_location ?? 'Пробоотборник №1')
@@ -95,7 +98,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
         setHumidity(found.humidity_pct != null ? String(found.humidity_pct) : '')
         setSpecRef(found.specification_ref ?? '')
       } else {
-        setLines(defaultLines(sopForm, lot.unit))
+        setLines(defaultLines(sopForm, lot))
         setSamplingDate(new Date().toISOString().slice(0, 10))
       }
     } catch (err) {

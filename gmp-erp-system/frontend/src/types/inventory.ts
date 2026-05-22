@@ -94,6 +94,12 @@ export interface LotItem {
   production_date: string | null
   production_year: number
   expiry_date: string
+  // Нормы отбора Ф-1 из карточки материала (только в QC-ленте).
+  sample_pc_qty?: number | null
+  sample_micro_qty?: number | null
+  sample_archive_qty?: number | null
+  sample_stability_qty?: number | null
+  sample_unit?: string | null
   incoming_control_notified_at: string | null
   sampling_date: string | null
   qc_result_received_at: string | null

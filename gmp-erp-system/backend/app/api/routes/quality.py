@@ -63,6 +63,11 @@ def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
             Lot.sampling_date,
             Lot.qc_result_received_at,
             Lot.qa_decision_at,
+            Material.sample_pc_qty,
+            Material.sample_micro_qty,
+            Material.sample_archive_qty,
+            Material.sample_stability_qty,
+            Material.sample_unit,
         )
         .join(Material, Material.id == Lot.material_id)
         .outerjoin(Supplier, Supplier.id == Lot.supplier_id)
@@ -140,6 +145,11 @@ def list_qc_lots(
             Lot.sampling_date,
             Lot.qc_result_received_at,
             Lot.qa_decision_at,
+            Material.sample_pc_qty,
+            Material.sample_micro_qty,
+            Material.sample_archive_qty,
+            Material.sample_stability_qty,
+            Material.sample_unit,
         )
         .join(Material, Material.id == Lot.material_id)
         .outerjoin(Supplier, Supplier.id == Lot.supplier_id)

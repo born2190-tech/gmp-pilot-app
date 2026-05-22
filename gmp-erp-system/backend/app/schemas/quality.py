@@ -40,6 +40,12 @@ class QualityLotItem(BaseModel):
     sampling_date: datetime | None
     qc_result_received_at: datetime | None
     qa_decision_at: datetime | None
+    # Нормы отбора Ф-1 (из карточки материала) — для авто-подстановки в акт.
+    sample_pc_qty: float | None = None
+    sample_micro_qty: float | None = None
+    sample_archive_qty: float | None = None
+    sample_stability_qty: float | None = None
+    sample_unit: str | None = None
 
 
 class QualityLotsResponse(BaseModel):
