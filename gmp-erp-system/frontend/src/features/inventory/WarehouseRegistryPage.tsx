@@ -27,6 +27,7 @@ import {
   listLots,
   listMovements,
 } from '../../lib/api'
+import { printBlob } from '../../lib/print'
 import { translatedLocation } from '../../lib/display'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
@@ -189,10 +190,7 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
   async function handleQcReportPrint(lotId: string) {
     try {
       const blob = await downloadLotQcReportScan(token, lotId)
-      const url = URL.createObjectURL(blob)
-      const win = window.open(url, '_blank', 'noopener,noreferrer')
-      if (win) window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-      else URL.revokeObjectURL(url)
+      printBlob(blob)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('registry.qcReportDownloadFailed'))
     }
@@ -217,10 +215,7 @@ export function WarehouseRegistryPage({ token }: WarehouseRegistryPageProps) {
   async function handleCertificatePrint(lotId: string) {
     try {
       const blob = await downloadLotCertificate(token, lotId)
-      const url = URL.createObjectURL(blob)
-      const win = window.open(url, '_blank', 'noopener,noreferrer')
-      if (win) window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-      else URL.revokeObjectURL(url)
+      printBlob(blob)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('registry.certDownloadFailed'))
     }
