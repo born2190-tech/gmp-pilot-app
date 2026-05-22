@@ -1077,6 +1077,16 @@ function LotDetailPanel({ lot, onClose, locale, t, token }: LotDetailPanelProps)
       setPdfError(err instanceof Error ? err.message : t('registry.ledgerCardFailed'))
     }
   }
+  async function handleLedgerCardPrint() {
+    if (!lot) return
+    setPdfError(null)
+    try {
+      const blob = await downloadLotLedgerCardPdf(token, lot.id)
+      printBlob(blob)
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : t('registry.ledgerCardFailed'))
+    }
+  }
   return (
     <>
       <div
@@ -1114,6 +1124,15 @@ function LotDetailPanel({ lot, onClose, locale, t, token }: LotDetailPanelProps)
                 >
                   <FileDown size={13} />
                   {t('registry.ledgerCard')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleLedgerCardPrint()}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  title={t('registry.ledgerCardPrint')}
+                >
+                  <Printer size={13} />
+                  {t('registry.print')}
                 </button>
                 <button
                   type="button"
