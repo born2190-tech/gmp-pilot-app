@@ -17,6 +17,7 @@ from app.models.inventory import (
     InventoryCountWaveLine,
     InventoryMovement,
     Lot,
+    ReceiptCertificate,
     ReceiptDefect,
     ReceiptDefectPhoto,
     ReceiptDocument,
@@ -54,6 +55,8 @@ from app.schemas.inventory import (
     LotsResponse,
     MovementsResponse,
     PostReceiptResponse,
+    ReceiptCertificateItem,
+    ReceiptCertificatesResponse,
     ReceiptCreate,
     ReceiptResponse,
     SignatureRequest,
@@ -242,6 +245,49 @@ def post_receipt_route(
 ) -> PostReceiptResponse:
     receipt, lots_created = post_receipt(db, current_user, receipt_id, payload)
     return PostReceiptResponse(id=receipt.id, document_no=receipt.document_no, status=receipt.status, lots_created=lots_created)
+
+
+def _certificate_item(cert: ReceiptCertificate) -> ReceiptCertificateItem:
+    return ReceiptCertificateItem.model_validate(cert)
+
+
+@router.get("/receipts/{receipt_id}/certificates", response_model=ReceiptCertificatesResponse)
+def list_receipt_certificates(
+    receipt_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReceiptCertificatesResponse:
+    from app.services.receipt_certificates import list_certificates
+
+    certs = list_certificates(db, current_user, receipt_id)
+    return ReceiptCertificatesResponse(receipt_id=receipt_id, certificates=[_certificate_item(c) for c in certs])
+
+
+@router.post("/receipts/{receipt_id}/certificates", response_model=ReceiptCertificateItem)
+async def upload_receipt_certificate(
+    receipt_id: UUID,
+    file: UploadFile = File(...),
+    certificate_no: str | None = Query(default=None),
+    note: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ReceiptCertificateItem:
+    from app.services.receipt_certificates import upload_certificate
+
+    cert = await upload_certificate(db, current_user, receipt_id, file, certificate_no, note)
+    return _certificate_item(cert)
+
+
+@router.get("/receipt-certificates/{certificate_id}/file")
+def download_receipt_certificate(
+    certificate_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    from app.services.receipt_certificates import load_certificate_file
+
+    raw, mime = load_certificate_file(db, current_user, certificate_id)
+    return Response(content=raw, media_type=mime)
 
 
 @router.post("/lots/{lot_id}/transfer", response_model=LotOperationResponse)

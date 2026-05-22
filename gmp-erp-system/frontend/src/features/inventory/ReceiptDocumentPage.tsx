@@ -11,11 +11,13 @@ import {
   listLocations,
   listManufacturers,
   listMaterials,
+  listReceiptCertificates,
   listReceiptDefects,
   listSuppliers,
   listWarehouses,
   postReceipt,
   setReceiptDefectStatus,
+  uploadReceiptCertificate,
   uploadReceiptDefectPhoto,
 } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
@@ -24,6 +26,7 @@ import type {
   LocationItem,
   ManufacturerItem,
   MaterialItem,
+  ReceiptCertificateItem,
   ReceiptCreate,
   ReceiptDefectItem,
   ReceiptDefectSeverity,
@@ -79,6 +82,13 @@ interface PostedSummary {
   notificationNo?: string
 }
 
+interface PendingDraft {
+  id: string
+  documentNo: string
+  password: string
+  reason: string
+}
+
 type ReferenceDialogType = 'material' | 'manufacturer' | 'supplier'
 
 interface CreateReferenceDialogState {
@@ -121,6 +131,8 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [postedSummary, setPostedSummary] = useState<PostedSummary | null>(null)
+  // Черновик субстанционного прихода, ожидающий приложения CoA перед проведением.
+  const [pendingDraft, setPendingDraft] = useState<PendingDraft | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [createReferenceDialog, setCreateReferenceDialog] = useState<CreateReferenceDialogState | null>(null)
   const [referenceDraft, setReferenceDraft] = useState({ code: '', name: '', item_type: 'raw_material' })
@@ -292,6 +304,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
     setSelectedLineId(null)
     setExpandedLineIds(new Set())
     setPostedSummary(null)
+    setPendingDraft(null)
     setError(null)
   }
 
@@ -376,6 +389,18 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         })),
       }
       const receipt = await createReceipt(token, payload)
+      // СОП-533: для субстанций обязателен сертификат производителя (CoA).
+      // Создаём черновик и останавливаемся на шаге приложения CoA — провести
+      // приход можно только после загрузки сертификата.
+      if (selectedWarehouse?.warehouse_type === 'SUBSTANCE_WAREHOUSE') {
+        setPendingDraft({
+          id: receipt.id,
+          documentNo: receipt.document_no,
+          password: values.signature_password,
+          reason: values.reason,
+        })
+        return
+      }
       const posted = await postReceipt(token, receipt.id, {
         username,
         password: values.signature_password,
@@ -388,6 +413,32 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         lotsCreated: posted.lots_created,
         warehouseType: selectedWarehouse?.warehouse_type ?? '',
       })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('receipt.postFailed'))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Завершение проведения субстанционного прихода после приложения CoA.
+  async function finalizePost() {
+    if (!pendingDraft) return
+    setError(null)
+    setIsLoading(true)
+    try {
+      const posted = await postReceipt(token, pendingDraft.id, {
+        username,
+        password: pendingDraft.password,
+        meaning: t('receipt.postMeaning'),
+        reason: pendingDraft.reason,
+      })
+      setPostedSummary({
+        receiptId: pendingDraft.id,
+        documentNo: posted.document_no,
+        lotsCreated: posted.lots_created,
+        warehouseType: 'SUBSTANCE_WAREHOUSE',
+      })
+      setPendingDraft(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('receipt.postFailed'))
     } finally {
@@ -458,6 +509,17 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         />
       )}
 
+      {pendingDraft && !postedSummary && (
+        <CoaPanel
+          token={token}
+          draft={pendingDraft}
+          isLoading={isLoading}
+          onCancel={resetDocument}
+          onFinalize={finalizePost}
+        />
+      )}
+
+      {!pendingDraft && (
       <form className="space-y-5" onSubmit={form.handleSubmit(submit)}>
         <SectionBlock title={t('receipt.sectionDocument')}>
           <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_minmax(220px,1fr)]">
@@ -570,6 +632,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
           <Button disabled={isLoading || !masterDataReady || hasLineErrors} type="submit">{isLoading ? t('receipt.posting') : t('receipt.post')}</Button>
         </div>
       </form>
+      )}
       <CreateReferenceDialog
         draft={referenceDraft}
         onChange={setReferenceDraft}
@@ -1127,6 +1190,161 @@ const SEVERITY_COLOR: Record<ReceiptDefectSeverity, string> = {
   critical: 'border-rose-200 bg-rose-50 text-rose-800',
   significant: 'border-amber-200 bg-amber-50 text-amber-800',
   minor: 'border-slate-200 bg-slate-50 text-slate-700',
+}
+
+// Шаг приложения сертификата качества производителя (CoA) — обязателен для
+// субстанций перед проведением прихода (СОП-533). Источник файла — загрузка
+// или нативный сканер-агент (позже).
+function CoaPanel({
+  token,
+  draft,
+  isLoading,
+  onCancel,
+  onFinalize,
+}: {
+  token: string
+  draft: { id: string; documentNo: string }
+  isLoading: boolean
+  onCancel: () => void
+  onFinalize: () => void
+}) {
+  const { t } = useI18n()
+  const [certs, setCerts] = useState<ReceiptCertificateItem[]>([])
+  const [certNo, setCertNo] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const reload = useCallback(async () => {
+    try {
+      const resp = await listReceiptCertificates(token, draft.id)
+      setCerts(resp.certificates)
+    } catch {
+      /* ignore */
+    }
+  }, [token, draft.id])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  async function handleUpload(file: File) {
+    setBusy(true)
+    setError(null)
+    try {
+      await uploadReceiptCertificate(token, draft.id, file, certNo.trim() || undefined)
+      setCertNo('')
+      await reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('receipt.coa.uploadFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border-2 border-amber-300 bg-amber-50/40 p-5 shadow-sm">
+      <div className="flex items-start gap-3 border-b border-amber-200 pb-3">
+        <span className="grid h-9 w-9 place-items-center rounded-md bg-amber-100 text-amber-700">
+          <Paperclip size={17} />
+        </span>
+        <div className="flex-1">
+          <h2 className="text-[15px] font-semibold text-amber-900">{t('receipt.coa.title')}</h2>
+          <p className="text-[12.5px] text-amber-900/80">
+            {t('receipt.coa.subtitle', { docNo: draft.documentNo })}
+          </p>
+        </div>
+        <span className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-700">
+          {t('receipt.statusDraft')}
+        </span>
+      </div>
+
+      {error && <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+
+      {/* Uploaded certificates */}
+      <div className="mt-4 space-y-2">
+        {certs.length === 0 ? (
+          <p className="rounded-md border border-dashed border-amber-300 bg-white/60 px-3 py-3 text-center text-[13px] text-amber-800">
+            {t('receipt.coa.empty')}
+          </p>
+        ) : (
+          certs.map((c) => (
+            <div key={c.id} className="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2">
+              <FileDown size={15} className="text-emerald-700" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium text-slate-900">
+                  {c.certificate_no || t('receipt.coa.noNumber')}
+                </div>
+                <div className="font-mono text-[10.5px] text-slate-500">
+                  sha256: {c.sha256_hash.slice(0, 12)}… · {(c.file_size / 1024).toFixed(0)} КБ
+                </div>
+              </div>
+              <a
+                href={`/api/inventory/receipt-certificates/${c.id}/file`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[12px] font-medium text-blue-700 hover:underline"
+                onClick={async (e) => {
+                  // токен в заголовке нужен — качаем blob программно
+                  e.preventDefault()
+                  const resp = await fetch(`/api/inventory/receipt-certificates/${c.id}/file`, { headers: { Authorization: `Bearer ${token}` } })
+                  if (resp.ok) {
+                    const url = URL.createObjectURL(await resp.blob())
+                    window.open(url, '_blank', 'noopener,noreferrer')
+                    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+                  }
+                }}
+              >
+                {t('receipt.coa.view')}
+              </a>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Upload control */}
+      <div className="mt-4 flex flex-wrap items-end gap-2">
+        <label className="flex-1 min-w-[200px] text-[12px] text-slate-700">
+          <span className="mb-1 block">{t('receipt.coa.certNo')}</span>
+          <input
+            value={certNo}
+            onChange={(e) => setCertNo(e.target.value)}
+            placeholder={t('receipt.coa.certNoPlaceholder')}
+            className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50"
+        >
+          <Paperclip size={15} /> {t('receipt.coa.upload')}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) void handleUpload(f)
+            e.target.value = ''
+          }}
+        />
+      </div>
+
+      <p className="mt-2 text-[11.5px] text-amber-900/70">{t('receipt.coa.hint')}</p>
+
+      {/* Footer actions */}
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-amber-200 pt-4">
+        <Button type="button" variant="secondary" onClick={onCancel}>{t('common.cancel')}</Button>
+        <Button type="button" disabled={isLoading || certs.length === 0} onClick={onFinalize}>
+          {isLoading ? t('receipt.posting') : t('receipt.coa.finalize')}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 function DefectsPanel({

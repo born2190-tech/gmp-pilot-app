@@ -111,6 +111,25 @@ class LotOperationResponse(LotItem):
     pass
 
 
+class ReceiptCertificateItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    receipt_id: UUID
+    certificate_no: str | None
+    note: str | None
+    file_size: int
+    mime_type: str
+    sha256_hash: str
+    uploaded_at: datetime
+    uploaded_by: UUID
+
+
+class ReceiptCertificatesResponse(BaseModel):
+    receipt_id: UUID
+    certificates: list[ReceiptCertificateItem]
+
+
 class TransferLotRequest(SignatureRequest):
     to_location_id: UUID
     # `reason` уже унаследовано из SignatureRequest как str | None; здесь

@@ -44,6 +44,8 @@ import type {
   QCReportCreate,
   QCReportItem,
   QualityLotsResponse,
+  ReceiptCertificateItem,
+  ReceiptCertificatesResponse,
   ReceiptCreate,
   ReceiptResponse,
   SampleLotRequest,
@@ -485,6 +487,31 @@ export async function downloadSamplingActPdf(token: string, actId: string): Prom
   })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   return response.blob()
+}
+
+export function listReceiptCertificates(token: string, receiptId: string): Promise<ReceiptCertificatesResponse> {
+  return request<ReceiptCertificatesResponse>(`/api/inventory/receipts/${receiptId}/certificates`, 'GET', { token })
+}
+
+export async function uploadReceiptCertificate(
+  token: string,
+  receiptId: string,
+  file: File,
+  certificateNo?: string,
+): Promise<ReceiptCertificateItem> {
+  const form = new FormData()
+  form.append('file', file)
+  const qs = certificateNo ? `?certificate_no=${encodeURIComponent(certificateNo)}` : ''
+  const response = await fetch(`/api/inventory/receipts/${receiptId}/certificates${qs}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
+  return response.json()
 }
 
 export function createReceipt(token: string, payload: ReceiptCreate): Promise<ReceiptResponse> {

@@ -179,6 +179,20 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             ),
         )
 
+    # СОП-533: для склада субстанций обязателен сертификат качества
+    # производителя (CoA). Проведение прихода без приложенного CoA запрещено.
+    if warehouse.warehouse_type == "SUBSTANCE_WAREHOUSE":
+        from app.services.receipt_certificates import has_certificate
+
+        if not has_certificate(db, receipt.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Невозможно провести приход субстанции без сертификата "
+                    "качества производителя (CoA). Приложите скан/фото сертификата."
+                ),
+            )
+
     validate_signature(db, user, signature, "POST_RECEIPT", "receipt_document", str(receipt.id))
     receipt.status = "posted"
     receipt.posted_by = user.id

@@ -64,6 +64,30 @@ class ReceiptDefectPhoto(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class ReceiptCertificate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Сертификат качества производителя (CoA), приложенный при приёмке.
+
+    Для склада субстанций — обязателен: проведение прихода блокируется,
+    пока не приложен хотя бы один CoA. Файл хранится на диске (как и прочие
+    скан-копии), в БД — путь + sha256 для контроля целостности. Источник
+    файла — загрузка или (в будущем) нативный сканер-агент.
+    """
+
+    __tablename__ = "receipt_certificates"
+
+    receipt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_documents.id"), nullable=False)
+    # Опционально — к какой строке/материалу относится сертификат.
+    receipt_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_lines.id"), nullable=True)
+    certificate_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_size: Mapped[int] = mapped_column(nullable=False)
+    sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ReceiptLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "receipt_lines"
 

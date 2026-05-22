@@ -554,6 +554,23 @@ export interface ReceiptResponse {
   status: string
 }
 
+export interface ReceiptCertificateItem {
+  id: string
+  receipt_id: string
+  certificate_no: string | null
+  note: string | null
+  file_size: number
+  mime_type: string
+  sha256_hash: string
+  uploaded_at: string
+  uploaded_by: string
+}
+
+export interface ReceiptCertificatesResponse {
+  receipt_id: string
+  certificates: ReceiptCertificateItem[]
+}
+
 export interface SignatureRequest {
   username: string
   password: string
