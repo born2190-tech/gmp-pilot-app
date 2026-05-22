@@ -99,6 +99,56 @@ def _wia_scan_to_jpeg_bytes(show_ui: bool = True) -> bytes:
         pythoncom.CoUninitialize()
 
 
+def _wia_scan_pages_to_pdf_bytes() -> bytes:
+    """Многостраничное сканирование в один PDF.
+
+    Окно сканирования Windows показывается на каждую страницу. Оператор
+    сканирует страницу за страницей; когда страниц больше нет — нажимает
+    «Отмена» в окне сканера, и собранные страницы объединяются в один PDF.
+    Требуется хотя бы одна страница.
+    """
+    import pythoncom
+    import win32com.client
+    from PIL import Image
+
+    pythoncom.CoInitialize()
+    pages: list[bytes] = []
+    try:
+        wia = win32com.client.Dispatch("WIA.CommonDialog")
+        while True:
+            image = wia.ShowAcquireImage(
+                WIA_DEVICE_TYPE_SCANNER,
+                0,
+                0,
+                WIA_FORMAT_JPEG,
+                False,
+                True,   # показать стандартное окно сканирования
+                False,  # отмена → None (не исключение)
+            )
+            if image is None:
+                # Оператор закрыл окно — завершаем набор страниц.
+                break
+            tmp = Path(tempfile.gettempdir()) / "b21_scan_page.jpg"
+            if tmp.exists():
+                tmp.unlink()
+            image.SaveFile(str(tmp))
+            pages.append(tmp.read_bytes())
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
+        if not pages:
+            raise HTTPException(status_code=499, detail="Сканирование отменено — нет ни одной страницы")
+
+        imgs = [Image.open(io.BytesIO(p)).convert("RGB") for p in pages]
+        buf = io.BytesIO()
+        imgs[0].save(buf, format="PDF", save_all=True, append_images=imgs[1:], resolution=200.0)
+        return buf.getvalue()
+    finally:
+        pythoncom.CoUninitialize()
+
+
 def _list_wia_scanners() -> list[ScannerInfo]:
     import pythoncom
     import win32com.client
@@ -167,6 +217,27 @@ def scan() -> ScanResult:
     return ScanResult(
         filename="scan.jpg",
         mime_type="image/jpeg",
+        data_base64=base64.b64encode(raw).decode("ascii"),
+        size=len(raw),
+    )
+
+
+@app.post("/scan-pdf", response_model=ScanResult)
+def scan_pdf() -> ScanResult:
+    """Сканирует одну или несколько страниц и возвращает единый PDF (base64).
+
+    Окно сканера появляется на каждую страницу; «Отмена» завершает набор.
+    """
+    try:
+        raw = _wia_scan_pages_to_pdf_bytes()
+    except HTTPException:
+        raise
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"Ошибка сканирования: {exc}") from exc
+
+    return ScanResult(
+        filename="scan.pdf",
+        mime_type="application/pdf",
         data_base64=base64.b64encode(raw).decode("ascii"),
         size=len(raw),
     )

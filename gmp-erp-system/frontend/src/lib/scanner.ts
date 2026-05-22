@@ -27,17 +27,30 @@ export async function isScannerAgentAvailable(timeoutMs = 1200): Promise<boolean
   }
 }
 
-/** Запускает сканирование одной страницы. Открывает окно WIA на станции. */
+/** Запускает сканирование одной страницы (JPEG). Открывает окно WIA. */
 export async function scanDocument(): Promise<File> {
-  const resp = await fetch(`${AGENT_BASE}/scan`, { method: 'POST' })
+  return scanVia('/scan', 'scan.jpg', 'image/jpeg')
+}
+
+/**
+ * Многостраничное сканирование в один PDF. Окно сканера появляется на каждую
+ * страницу; «Отмена» в окне сканера завершает набор и собирает страницы в PDF.
+ */
+export async function scanDocumentPdf(): Promise<File> {
+  return scanVia('/scan-pdf', 'scan.pdf', 'application/pdf')
+}
+
+async function scanVia(path: string, fallbackName: string, fallbackMime: string): Promise<File> {
+  const resp = await fetch(`${AGENT_BASE}${path}`, { method: 'POST' })
   if (!resp.ok) {
     const detail = await resp.json().catch(() => null)
     throw new Error(detail?.detail || `Сканер: HTTP ${resp.status}`)
   }
   const result: ScanResult = await resp.json()
   const bytes = base64ToBytes(result.data_base64)
-  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: result.mime_type || 'image/jpeg' })
-  return new File([blob], result.filename || 'scan.jpg', { type: result.mime_type || 'image/jpeg' })
+  const mime = result.mime_type || fallbackMime
+  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mime })
+  return new File([blob], result.filename || fallbackName, { type: mime })
 }
 
 function base64ToBytes(b64: string): Uint8Array {

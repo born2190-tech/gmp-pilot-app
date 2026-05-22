@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ScanLine } from 'lucide-react'
-import { isScannerAgentAvailable, scanDocument } from '../../lib/scanner'
+import { isScannerAgentAvailable, scanDocument, scanDocumentPdf } from '../../lib/scanner'
 import { useI18n } from '../../i18n/I18nProvider'
 
 interface ScanButtonProps {
   onScanned: (file: File) => void
   disabled?: boolean
+  /** true — многостраничное сканирование в один PDF; иначе одна страница JPEG. */
+  asPdf?: boolean
 }
 
 /**
@@ -13,7 +15,7 @@ interface ScanButtonProps {
  * локальный сканер-агент B21. Иначе показывается неактивной с подсказкой —
  * оператор пользуется загрузкой файла рядом.
  */
-export function ScanButton({ onScanned, disabled }: ScanButtonProps) {
+export function ScanButton({ onScanned, disabled, asPdf }: ScanButtonProps) {
   const { t } = useI18n()
   const [available, setAvailable] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
@@ -50,7 +52,7 @@ export function ScanButton({ onScanned, disabled }: ScanButtonProps) {
       onClick={async () => {
         setBusy(true)
         try {
-          const file = await scanDocument()
+          const file = asPdf ? await scanDocumentPdf() : await scanDocument()
           onScanned(file)
         } catch {
           /* агент сам показывает свои ошибки; здесь молча выходим */
