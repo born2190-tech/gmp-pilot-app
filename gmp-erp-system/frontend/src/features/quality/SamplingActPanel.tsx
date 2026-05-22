@@ -25,6 +25,7 @@ import {
   uploadSamplingScan,
 } from '../../lib/api'
 import { ScanButton } from '../../components/ui/ScanButton'
+import { printBlob } from '../../lib/print'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 import type {
@@ -209,23 +210,6 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
     }
   }
 
-  async function handleDownloadPdf() {
-    if (!act) return
-    try {
-      const blob = await downloadSamplingActPdf(token, act.id)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `sampling-act-${act.act_no}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-    } catch {
-      /* ignore */
-    }
-  }
-
   async function handlePreviewPdf() {
     if (!act) return
     try {
@@ -234,6 +218,16 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
       const win = window.open(url, '_blank', 'noopener,noreferrer')
       if (win) window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
       else URL.revokeObjectURL(url)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function handlePrintPdf() {
+    if (!act) return
+    try {
+      const blob = await downloadSamplingActPdf(token, act.id)
+      printBlob(blob)
     } catch {
       /* ignore */
     }
@@ -382,7 +376,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50">
               <FileText size={15} /> {t('sampling.previewPdf')}
             </button>
-            <button type="button" onClick={handleDownloadPdf}
+            <button type="button" onClick={handlePrintPdf}
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50">
               <Printer size={15} /> {t('sampling.printPdf')}
             </button>
