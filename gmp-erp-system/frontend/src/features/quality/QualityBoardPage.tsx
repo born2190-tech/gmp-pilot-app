@@ -3,6 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   ClipboardSignature,
   FileScan,
   FlaskConical,
@@ -51,6 +52,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
   const [lots, setLots] = useState<LotItem[]>([])
   const [acts, setActs] = useState<SamplingActItem[]>([])
   const [phaseFilter, setPhaseFilter] = useState<Phase | null>(null)
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<Phase>>(new Set())
   const [selectedLotId, setSelectedLotId] = useState('')
   const [filter, setFilter] = useState('')
   const panelRef = useRef<HTMLDivElement>(null)
@@ -273,13 +275,31 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
             <p className="text-sm font-medium text-slate-700">{t('qc.emptyTasks')}</p>
           </div>
         ) : (
-          groupedQc.map((group) => (
+          groupedQc.map((group) => {
+            const collapsed = collapsedPhases.has(group.phase)
+            return (
             <div key={group.phase} className="space-y-2">
-              <div className="flex items-center gap-2 px-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setCollapsedPhases((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(group.phase)) next.delete(group.phase)
+                    else next.add(group.phase)
+                    return next
+                  })
+                }
+                className="flex w-full items-center gap-2 px-1 text-left"
+              >
+                <ChevronDown size={14} className={`text-slate-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
                 <span className={`h-1.5 w-1.5 rounded-full ${PHASE_DOT[group.phase]}`} />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t(SECTION_KEY[group.phase] as never)}</span>
                 <span className="text-[11px] font-medium text-slate-400">· {group.lots.length}</span>
-              </div>
+                <span className="ml-auto text-[11px] font-medium text-slate-400">
+                  {collapsed ? t('common.expand') : t('common.collapse')}
+                </span>
+              </button>
+              {!collapsed && (
               <div className="space-y-2">
                 {group.lots.map((lot) => (
                   <QcTaskCard
@@ -294,8 +314,10 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
                   />
                 ))}
               </div>
+              )}
             </div>
-          ))
+            )
+          })
         )}
 
         {selectedLot && (
