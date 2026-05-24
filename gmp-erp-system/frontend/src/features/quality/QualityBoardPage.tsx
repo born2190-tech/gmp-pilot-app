@@ -302,7 +302,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
         )}
 
         {/* Аналитический лист — рабочее место ОКК (после подтверждения акта отбора) */}
-        {selectedLot && lotPhases.get(selectedLot.id) === 'SAMPLING_VERIFIED' && (
+        {selectedLot && (lotPhases.get(selectedLot.id) === 'SAMPLING_VERIFIED' || lotPhases.get(selectedLot.id) === 'RESULT_READY') && (
           <QcAnalysisWorkspace
             key={selectedLot.id}
             token={token}
