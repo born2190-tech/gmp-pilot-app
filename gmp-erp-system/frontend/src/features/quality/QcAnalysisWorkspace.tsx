@@ -17,6 +17,7 @@ import {
   RefreshCw,
   ScanLine,
   ShieldCheck,
+  Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -45,6 +46,89 @@ interface ParamRow {
   unit: string
   method_reference: string
   complies: boolean | null
+  // true — соответствие определено системой автоматически (по норме + результату).
+  auto?: boolean
+}
+
+// ── Авто-оценка соответствия по норме (НД) и введённому результату ──────────────
+// Возвращает true/false, либо null если норму нельзя оценить численно
+// (описательные показатели — цвет, форма и т.п. — остаются на ручном переключателе).
+const SUPERSCRIPT: Record<string, string> = {
+  '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+}
+
+// Извлекает числовую величину из фрагмента: «0,47», «10³», «< 10²», «92», «1e3».
+function parseMagnitude(fragment: string): number | null {
+  const s = fragment.trim()
+  const sup = s.match(/(\d+)\s*([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/)
+  if (sup) {
+    const base = Number(sup[1])
+    const exp = Number(sup[2].split('').map((c) => SUPERSCRIPT[c] ?? '').join(''))
+    if (!Number.isNaN(base) && !Number.isNaN(exp)) return base ** exp
+  }
+  const num = s.replace(',', '.').match(/-?\d+(?:\.\d+)?(?:[eE]-?\d+)?/)
+  return num ? Number(num[0]) : null
+}
+
+export function evaluateCompliance(spec: string, result: string): boolean | null {
+  const s = (spec || '').trim()
+  const r = (result || '').trim()
+  if (!s || !r) return null
+  const sl = s.toLowerCase()
+  const rl = r.toLowerCase()
+
+  // 1. Качественно: «Отсутствие» (патогены).
+  if (/отсутств|absent/.test(sl)) {
+    if (/отсутств|не обнаруж|absent/.test(rl) || /^[<≤]/.test(r)) return true
+    if (/обнаруж|присут|detected|present|\+/.test(rl)) return false
+    return null
+  }
+  // 2. Качественно/описательно: норма без чисел («Соответствие РСО», «Белый порошок»).
+  if (!/[0-9]/.test(s)) {
+    if (/не\s*соответ|несоответ|fail/.test(rl)) return false
+    if (/соответ|pass|годен/.test(rl)) return true
+    return null // описание (цвет, форма) — оценивает аналитик
+  }
+
+  const rval = parseMagnitude(r)
+  if (rval === null) return null
+  const EPS = 1e-9
+
+  // 3. Допуск «X ± p %» или «X ± a».
+  const tol = s.match(/([\d.,]+)[^±]*?±\s*([\d.,]+)\s*(%?)/)
+  if (tol) {
+    const center = Number(tol[1].replace(',', '.'))
+    const delta = Number(tol[2].replace(',', '.'))
+    if (!Number.isNaN(center) && !Number.isNaN(delta)) {
+      const span = tol[3] === '%' ? (center * delta) / 100 : delta
+      return rval >= center - span - EPS && rval <= center + span + EPS
+    }
+  }
+
+  // 4. Диапазон «a — b» / «от a до b».
+  const range = s.match(/([\d.,]+)\s*(?:—|–|-|\bдо\b|\bto\b)\s*([\d.,]+)/)
+  if (range) {
+    const a = Number(range[1].replace(',', '.'))
+    const b = Number(range[2].replace(',', '.'))
+    if (!Number.isNaN(a) && !Number.isNaN(b)) {
+      const lo = Math.min(a, b)
+      const hi = Math.max(a, b)
+      return rval >= lo - EPS && rval <= hi + EPS
+    }
+  }
+
+  // 5. Верхняя граница (≤, <, «не более», max).
+  if (/[≤<]|не\s*более|не\s*выше|не\s*должно\s*превыш|max|макс/.test(sl)) {
+    const bound = parseMagnitude(s)
+    if (bound !== null) return rval <= bound + EPS
+  }
+  // 6. Нижняя граница (≥, >, «не менее», min).
+  if (/[≥>]|не\s*менее|не\s*ниже|min/.test(sl)) {
+    const bound = parseMagnitude(s)
+    if (bound !== null) return rval >= bound - EPS
+  }
+
+  return null
 }
 
 let keySeq = 0
@@ -160,6 +244,19 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
   }
   function patchMicro(key: string, patch: Partial<ParamRow>) {
     setMicroParams((prev) => prev.map((p) => (p.key === key ? { ...p, ...patch } : p)))
+  }
+
+  // Авто-оценка при вводе результата.
+  function resultPatch(spec: string, value: string): Partial<ParamRow> {
+    if (!value.trim()) return { result_value: value, complies: null, auto: false }
+    const auto = evaluateCompliance(spec, value)
+    return auto === null ? { result_value: value } : { result_value: value, complies: auto, auto: true }
+  }
+  // Пересчёт при правке нормы (если результат уже введён).
+  function specPatch(spec: string, result: string): Partial<ParamRow> {
+    if (!result.trim()) return { specification: spec }
+    const auto = evaluateCompliance(spec, result)
+    return auto === null ? { specification: spec } : { specification: spec, complies: auto, auto: true }
   }
 
   function toIso(local: string): string | null {
@@ -422,7 +519,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                       </td>
                       <td className="px-3 py-2.5">
                         {locked ? <span className="text-slate-700">{p.specification}</span>
-                          : <GhostInput value={p.specification} onChange={(v) => patchPc(p.key, { specification: v })} placeholder={t('quality.specification')} />}
+                          : <GhostInput value={p.specification} onChange={(v) => patchPc(p.key, specPatch(v, p.result_value))} placeholder={t('quality.specification')} />}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">
                         {locked ? p.method_reference
@@ -430,7 +527,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                       </td>
                       <td className="px-3 py-2.5">
                         {locked ? <span className="font-mono tabular-nums text-slate-900">{p.result_value}</span>
-                          : <input value={p.result_value} onChange={(e) => patchPc(p.key, { result_value: e.target.value })} placeholder="—"
+                          : <input value={p.result_value} onChange={(e) => patchPc(p.key, resultPatch(p.specification, e.target.value))} placeholder="—"
                               className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 font-mono text-[12.5px] tabular-nums text-slate-900 outline-none focus:border-slate-400" />}
                       </td>
                       <td className="px-3 py-2.5">
@@ -438,7 +535,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                           : <GhostInput value={p.unit} onChange={(v) => patchPc(p.key, { unit: v })} placeholder="—" mono />}
                       </td>
                       <td className="px-3 py-2.5">
-                        <ComplianceToggle value={p.complies} onChange={locked ? null : (v) => patchPc(p.key, { complies: v })} t={t} />
+                        <ComplianceToggle value={p.complies} auto={p.auto} onChange={locked ? null : (v) => patchPc(p.key, { complies: v, auto: false })} t={t} />
                       </td>
                       {!locked && (
                         <td className="px-2 py-2.5">
@@ -504,15 +601,15 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                           </td>
                           <td className="px-3 py-2.5 text-slate-700">
                             {locked ? p.specification
-                              : <GhostInput value={p.specification} onChange={(v) => patchMicro(p.key, { specification: v })} placeholder={t('qcws.colNorm')} />}
+                              : <GhostInput value={p.specification} onChange={(v) => patchMicro(p.key, specPatch(v, p.result_value))} placeholder={t('qcws.colNorm')} />}
                           </td>
                           <td className="px-3 py-2.5">
                             {locked ? <span className="font-mono tabular-nums text-slate-900">{p.result_value}</span>
-                              : <input value={p.result_value} onChange={(e) => patchMicro(p.key, { result_value: e.target.value })} placeholder="—"
+                              : <input value={p.result_value} onChange={(e) => patchMicro(p.key, resultPatch(p.specification, e.target.value))} placeholder="—"
                                   className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 font-mono text-[12.5px] tabular-nums text-slate-900 outline-none focus:border-slate-400" />}
                           </td>
                           <td className="px-3 py-2.5">
-                            <ComplianceToggle value={p.complies} onChange={locked ? null : (v) => patchMicro(p.key, { complies: v })} t={t} />
+                            <ComplianceToggle value={p.complies} auto={p.auto} onChange={locked ? null : (v) => patchMicro(p.key, { complies: v, auto: false })} t={t} />
                           </td>
                           {!locked && (
                             <td className="px-2 py-2.5">
@@ -726,18 +823,25 @@ function GhostInput({ value, onChange, placeholder, mono }: { value: string; onC
   )
 }
 
-function ComplianceToggle({ value, onChange, t }: { value: boolean | null; onChange: ((v: boolean) => void) | null; t: Translate }) {
+function ComplianceToggle({ value, onChange, auto, t }: { value: boolean | null; onChange: ((v: boolean) => void) | null; auto?: boolean; t: Translate }) {
   return (
-    <div className="inline-flex h-7 overflow-hidden rounded-md border border-slate-200 bg-white">
-      <button type="button" onClick={() => onChange?.(true)}
-        className={`flex h-full w-10 items-center justify-center text-[11.5px] font-semibold transition ${value === true ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-700'}`}>
-        {t('qcws.yes')}
-      </button>
-      <div className="w-px bg-slate-200" />
-      <button type="button" onClick={() => onChange?.(false)}
-        className={`flex h-full w-10 items-center justify-center text-[11.5px] font-semibold transition ${value === false ? 'bg-rose-600 text-white' : 'text-slate-500 hover:bg-rose-50 hover:text-rose-700'}`}>
-        {t('qcws.no')}
-      </button>
+    <div className="flex items-center gap-1.5">
+      <div className="inline-flex h-7 overflow-hidden rounded-md border border-slate-200 bg-white">
+        <button type="button" onClick={() => onChange?.(true)}
+          className={`flex h-full w-10 items-center justify-center text-[11.5px] font-semibold transition ${value === true ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-700'}`}>
+          {t('qcws.yes')}
+        </button>
+        <div className="w-px bg-slate-200" />
+        <button type="button" onClick={() => onChange?.(false)}
+          className={`flex h-full w-10 items-center justify-center text-[11.5px] font-semibold transition ${value === false ? 'bg-rose-600 text-white' : 'text-slate-500 hover:bg-rose-50 hover:text-rose-700'}`}>
+          {t('qcws.no')}
+        </button>
+      </div>
+      {auto && value !== null && (
+        <span title={t('qcws.autoHint')} className="inline-flex items-center gap-0.5 rounded bg-slate-100 px-1 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-slate-500">
+          <Sparkles size={9} /> {t('qcws.auto')}
+        </span>
+      )}
     </div>
   )
 }
