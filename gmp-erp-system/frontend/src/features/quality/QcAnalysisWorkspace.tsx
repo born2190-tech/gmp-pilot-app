@@ -30,6 +30,7 @@ import {
 } from '../../lib/api'
 import { printBlob } from '../../lib/print'
 import { ScanButton } from '../../components/ui/ScanButton'
+import { resolveSpecTemplate } from './qcSpecTemplates'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 import type { LotItem, QCParamCategory, QCReportItem } from '../../types/inventory'
@@ -259,6 +260,28 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
     return auto === null ? { specification: spec } : { specification: spec, complies: auto, auto: true }
   }
 
+  // Шаблон спецификации по материалу партии (если есть в справочнике НД).
+  const tpl = useMemo(() => resolveSpecTemplate(lot.material_name, lot.material_code), [lot.material_name, lot.material_code])
+
+  // «Загрузить шаблон»: подставляет полный перечень показателей с нормами.
+  function loadTemplate() {
+    if (tpl) {
+      setPcParams(tpl.pc.map((s) => ({
+        key: newKey(), category: 'physicochemical', parameter_name: s.name, specification: s.spec,
+        result_value: '', unit: s.unit, method_reference: s.method, complies: null,
+      })))
+      setMicroParams(tpl.micro.map((s) => ({
+        key: newKey(), category: 'microbiological', parameter_name: s.name, specification: s.spec,
+        result_value: '', unit: '—', method_reference: '', complies: null,
+      })))
+      setMicroRequired(tpl.microRequired)
+      setMicroMethodRef(tpl.microMethodRef)
+      setMethodReference((prev) => prev || tpl.specRef)
+    } else {
+      setPcParams(fromTemplate(isFg ? PC_TEMPLATE_548 : PC_TEMPLATE_533, 'physicochemical'))
+    }
+  }
+
   function toIso(local: string): string | null {
     return local ? new Date(local).toISOString() : null
   }
@@ -480,13 +503,14 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
               accent="cyan"
               eyebrow={`СОП-${sopForm} Ф-11 · ${t('qcws.sectionA')}`}
               title={t('qcws.pcTitle')}
+              sub={tpl ? `${t('qcws.templateMatched')}: ${tpl.label} · ${tpl.specRef}` : undefined}
               right={
                 locked ? (
                   <LockedChip t={t} />
                 ) : (
                   <>
-                    <PillButton tone="quiet" icon={Layers} onClick={() => setPcParams(fromTemplate(isFg ? PC_TEMPLATE_548 : PC_TEMPLATE_533, 'physicochemical'))}>
-                      {t('qcws.loadTemplate')}
+                    <PillButton tone="quiet" icon={Layers} onClick={loadTemplate}>
+                      {tpl ? `${t('qcws.loadTemplateFor')}: ${tpl.label}` : t('qcws.loadTemplate')}
                     </PillButton>
                     <PillButton tone="neutral" icon={Plus} onClick={() => setPcParams((p) => [...p, blankPc()])}>
                       {t('quality.addParameter')}
