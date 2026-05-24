@@ -145,32 +145,97 @@ def render_qc_report_pdf(data: dict) -> bytes:
     elements.append(meta)
     elements.append(Spacer(1, 3 * mm))
 
-    # Таблица результатов
-    rows = [[
-        Paragraph("№", cell_b), Paragraph("Тест", cell_b),
-        Paragraph("Спецификация", cell_b), Paragraph("Результат", cell_b),
-        Paragraph("Соотв. НД", cell_b),
-    ]]
-    for idx, p in enumerate(data.get("parameters", []), start=1):
-        unit = f" {p['unit']}" if p.get("unit") else ""
-        rows.append([
-            Paragraph(str(idx), cell),
-            Paragraph(p.get("parameter_name", ""), cell),
-            Paragraph(p.get("specification", ""), cell),
-            Paragraph(f"{p.get('result_value', '')}{unit}", cell),
-            Paragraph("Да" if p.get("complies") else "НЕТ", cell_b),
-        ])
-    table = Table(rows, colWidths=[10 * mm, 52 * mm, 50 * mm, 45 * mm, 25 * mm], repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.black),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (4, 1), (4, -1), "CENTER"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ]))
-    elements.append(table)
+    # Условия проведения анализа / оборудование.
+    cond_pairs = []
+    if data.get("room_temp"):
+        cond_pairs.append(("Температура в помещении", str(data.get("room_temp"))))
+    if data.get("humidity"):
+        cond_pairs.append(("Относительная влажность", str(data.get("humidity"))))
+    if data.get("equipment"):
+        cond_pairs.append(("Оборудование (КИП)", str(data.get("equipment"))))
+    if cond_pairs:
+        cond = Table([[Paragraph(k, cell), Paragraph(v, cell)] for k, v in cond_pairs],
+                     colWidths=[45 * mm, 137 * mm])
+        cond.setStyle(TableStyle([
+            ("BOX", (0, 0), (-1, -1), 0.4, colors.black),
+            ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f8fafc")),
+        ]))
+        elements.append(cond)
+        elements.append(Spacer(1, 3 * mm))
+
+    section_style = ParagraphStyle("section", fontName=bold_font, fontSize=10, leading=13)
+
+    def _results_table(params: list) -> Table:
+        rows = [[
+            Paragraph("№", cell_b), Paragraph("Тест", cell_b),
+            Paragraph("Спецификация", cell_b), Paragraph("Результат", cell_b),
+            Paragraph("Соотв. НД", cell_b),
+        ]]
+        for idx, p in enumerate(params, start=1):
+            unit = f" {p['unit']}" if p.get("unit") else ""
+            rows.append([
+                Paragraph(str(idx), cell),
+                Paragraph(p.get("parameter_name", ""), cell),
+                Paragraph(p.get("specification", ""), cell),
+                Paragraph(f"{p.get('result_value', '')}{unit}", cell),
+                Paragraph("Да" if p.get("complies") else "НЕТ", cell_b),
+            ])
+        table = Table(rows, colWidths=[10 * mm, 52 * mm, 50 * mm, 45 * mm, 25 * mm], repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
+            ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.black),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (4, 1), (4, -1), "CENTER"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3), ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        return table
+
+    # Раздельные списки ФХ / микро; при их отсутствии — общий список.
+    pc_params = data.get("pc_parameters")
+    micro_params = data.get("micro_parameters")
+    if pc_params is None and micro_params is None:
+        pc_params = data.get("parameters", [])
+        micro_params = []
+    pc_params = pc_params or []
+    micro_params = micro_params or []
+
+    all_params = list(pc_params) + list(micro_params)
+
+    # Физико-химические показатели.
+    elements.append(Paragraph("1. Физико-химические показатели", section_style))
+    elements.append(Spacer(1, 2 * mm))
+    elements.append(_results_table(pc_params))
     elements.append(Spacer(1, 4 * mm))
+
+    # Микробиологическая чистота (СОП-514).
+    if data.get("micro_required", True):
+        title_micro = "2. Микробиологическая чистота (СОП-514)"
+        micro_ref = data.get("micro_method_reference")
+        if micro_ref:
+            title_micro += f" — {micro_ref}"
+        elements.append(Paragraph(title_micro, section_style))
+        micro_window = []
+        if data.get("micro_started_at"):
+            micro_window.append(f"начало {_fmt_dt(data.get('micro_started_at'))}")
+        if data.get("micro_finished_at"):
+            micro_window.append(f"окончание {_fmt_dt(data.get('micro_finished_at'))}")
+        if micro_window:
+            elements.append(Paragraph(" · ".join(micro_window), small))
+        elements.append(Spacer(1, 2 * mm))
+        if micro_params:
+            elements.append(_results_table(micro_params))
+        else:
+            elements.append(Paragraph("Результаты микробиологического анализа вносятся отдельно.", body))
+        elements.append(Spacer(1, 4 * mm))
+    else:
+        elements.append(Paragraph(
+            "2. Микробиологическая чистота — не требуется согласно НД.", body))
+        elements.append(Spacer(1, 4 * mm))
 
     # Заключение
     overall = (data.get("overall_result") or "").lower()
@@ -179,7 +244,7 @@ def render_qc_report_pdf(data: dict) -> bytes:
     elif overall in ("fail", "failed", "не соответствует"):
         verdict = "НЕ соответствует требованиям НД"
     else:
-        all_ok = all(p.get("complies") for p in data.get("parameters", [])) if data.get("parameters") else False
+        all_ok = all(p.get("complies") for p in all_params) if all_params else False
         verdict = "Соответствует требованиям НД" if all_ok else "НЕ соответствует требованиям НД"
     elements.append(Paragraph(f"<b>Заключение:</b> {verdict}", body))
     elements.append(Spacer(1, 8 * mm))

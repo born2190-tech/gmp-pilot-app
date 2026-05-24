@@ -21,11 +21,23 @@ class QCReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     submitted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Условия проведения анализа (шапка аналитического листа Ф-11).
+    equipment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    room_temp: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    humidity: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Микробиологический раздел (СОП-514). Для ГП по НД может не требоваться.
+    micro_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    micro_method_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    micro_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    micro_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
 
 class QCReportParameter(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "qc_report_parameters"
 
     report_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("qc_reports.id"), nullable=False)
+    # 'physicochemical' (ФХ) | 'microbiological' (микро, СОП-514)
+    category: Mapped[str] = mapped_column(String(20), nullable=False, default="physicochemical")
     parameter_name: Mapped[str] = mapped_column(String(255), nullable=False)
     specification: Mapped[str] = mapped_column(Text, nullable=False)
     result_value: Mapped[str] = mapped_column(Text, nullable=False)

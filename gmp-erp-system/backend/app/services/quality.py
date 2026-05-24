@@ -150,6 +150,13 @@ def create_qc_report(db: Session, user: CurrentUser, payload: QCReportCreate) ->
         method_reference=payload.method_reference,
         analysis_started_at=payload.analysis_started_at,
         analysis_finished_at=payload.analysis_finished_at,
+        equipment=payload.equipment,
+        room_temp=payload.room_temp,
+        humidity=payload.humidity,
+        micro_required=payload.micro_required,
+        micro_method_reference=payload.micro_method_reference,
+        micro_started_at=payload.micro_started_at,
+        micro_finished_at=payload.micro_finished_at,
     )
     db.add(report)
     db.flush()
@@ -157,6 +164,7 @@ def create_qc_report(db: Session, user: CurrentUser, payload: QCReportCreate) ->
         db.add(
             QCReportParameter(
                 report_id=report.id,
+                category=parameter.category,
                 parameter_name=parameter.parameter_name,
                 specification=parameter.specification,
                 result_value=parameter.result_value,

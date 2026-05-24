@@ -151,6 +151,7 @@ class QCPendingScansResponse(BaseModel):
 
 
 class QCReportParameterCreate(BaseModel):
+    category: str = Field(default="physicochemical", pattern="^(physicochemical|microbiological)$")
     parameter_name: str = Field(min_length=1, max_length=255)
     specification: str = Field(min_length=1)
     result_value: str = Field(min_length=1)
@@ -165,6 +166,13 @@ class QCReportCreate(BaseModel):
     analysis_started_at: datetime | None = None
     analysis_finished_at: datetime | None = None
     method_reference: str | None = Field(default=None, max_length=255)
+    equipment: str | None = None
+    room_temp: str | None = Field(default=None, max_length=32)
+    humidity: str | None = Field(default=None, max_length=32)
+    micro_required: bool = True
+    micro_method_reference: str | None = Field(default=None, max_length=255)
+    micro_started_at: datetime | None = None
+    micro_finished_at: datetime | None = None
     parameters: list[QCReportParameterCreate] = Field(min_length=1)
 
 
@@ -172,6 +180,7 @@ class QCReportParameterItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    category: str
     parameter_name: str
     specification: str
     result_value: str
@@ -192,6 +201,13 @@ class QCReportItem(BaseModel):
     analysis_finished_at: datetime | None
     overall_result: str | None
     submitted_at: datetime | None
+    equipment: str | None = None
+    room_temp: str | None = None
+    humidity: str | None = None
+    micro_required: bool = True
+    micro_method_reference: str | None = None
+    micro_started_at: datetime | None = None
+    micro_finished_at: datetime | None = None
     parameters: list[QCReportParameterItem] = Field(default_factory=list)
 
 

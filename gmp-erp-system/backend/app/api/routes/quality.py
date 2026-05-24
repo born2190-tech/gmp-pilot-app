@@ -272,6 +272,18 @@ def _build_qc_report_data(db: Session, report) -> dict:
         .order_by(QCReportParameter.created_at)
         .all()
     )
+    def _serialize(p) -> dict:
+        return {
+            "parameter_name": p.parameter_name,
+            "specification": p.specification,
+            "result_value": p.result_value,
+            "unit": p.unit,
+            "method_reference": p.method_reference,
+            "complies": p.complies,
+        }
+
+    pc_params = [_serialize(p) for p in params if (getattr(p, "category", None) or "physicochemical") != "microbiological"]
+    micro_params = [_serialize(p) for p in params if getattr(p, "category", None) == "microbiological"]
     return {
         "report_no": report.report_no,
         "sop_form": sop_form,
@@ -279,22 +291,23 @@ def _build_qc_report_data(db: Session, report) -> dict:
         "analysis_started_at": report.analysis_started_at,
         "analysis_finished_at": report.analysis_finished_at,
         "overall_result": report.overall_result,
+        "equipment": report.equipment,
+        "room_temp": report.room_temp,
+        "humidity": report.humidity,
+        "micro_required": report.micro_required,
+        "micro_method_reference": report.micro_method_reference,
+        "micro_started_at": report.micro_started_at,
+        "micro_finished_at": report.micro_finished_at,
         "material_name": material.name if material else None,
         "internal_lot": (lot.supplier_lot or lot.internal_lot) if lot else None,
         "manufacturer_name": manufacturer.name if manufacturer else None,
         "production_date": lot.production_date if lot else None,
         "expiry_date": lot.expiry_date if lot else None,
         "sampling_date": lot.sampling_date if lot else None,
-        "parameters": [
-            {
-                "parameter_name": p.parameter_name,
-                "specification": p.specification,
-                "result_value": p.result_value,
-                "unit": p.unit,
-                "complies": p.complies,
-            }
-            for p in params
-        ],
+        # Обратная совместимость: общий список + раздельные ФХ/микро.
+        "parameters": pc_params + micro_params,
+        "pc_parameters": pc_params,
+        "micro_parameters": micro_params,
     }
 
 

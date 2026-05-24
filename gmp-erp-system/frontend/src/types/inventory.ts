@@ -215,7 +215,10 @@ export interface QCResultRequest extends SignatureRequest {
   result_summary: string
 }
 
+export type QCParamCategory = 'physicochemical' | 'microbiological'
+
 export interface QCReportParameterCreate {
+  category?: QCParamCategory
   parameter_name: string
   specification: string
   result_value: string
@@ -230,6 +233,13 @@ export interface QCReportCreate {
   analysis_started_at: string | null
   analysis_finished_at: string | null
   method_reference: string | null
+  equipment?: string | null
+  room_temp?: string | null
+  humidity?: string | null
+  micro_required?: boolean
+  micro_method_reference?: string | null
+  micro_started_at?: string | null
+  micro_finished_at?: string | null
   parameters: QCReportParameterCreate[]
 }
 
@@ -243,6 +253,13 @@ export interface QCReportItem {
   analysis_finished_at: string | null
   overall_result: string | null
   submitted_at: string | null
+  equipment?: string | null
+  room_temp?: string | null
+  humidity?: string | null
+  micro_required?: boolean
+  micro_method_reference?: string | null
+  micro_started_at?: string | null
+  micro_finished_at?: string | null
   parameters: Array<QCReportParameterCreate & { id: string }>
 }
 
