@@ -232,6 +232,80 @@ class QCReportsListResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Material specifications (НД) registry
+# ---------------------------------------------------------------------------
+
+
+class SpecificationParameterInput(BaseModel):
+    category: str = Field(default="physicochemical", pattern="^(physicochemical|microbiological)$")
+    parameter_name: str = Field(min_length=1, max_length=255)
+    specification: str = Field(min_length=1)
+    method_reference: str | None = Field(default=None, max_length=255)
+    unit: str | None = Field(default=None, max_length=32)
+
+
+class SpecificationParameterItem(SpecificationParameterInput):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    ordinal: int
+
+
+class MaterialSpecificationInput(BaseModel):
+    nd_code: str = Field(min_length=1, max_length=128)
+    revision: str | None = Field(default=None, max_length=32)
+    material_name: str = Field(min_length=1, max_length=255)
+    material_id: UUID | None = None
+    match_keywords: str | None = Field(default=None, max_length=512)
+    sop_form: str = Field(default="533", max_length=8)
+    micro_required: bool = True
+    micro_method_ref: str | None = Field(default=None, max_length=255)
+    is_active: bool = True
+    effective_date: date | None = None
+    notes: str | None = None
+    parameters: list[SpecificationParameterInput] = Field(default_factory=list)
+
+
+class MaterialSpecificationItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nd_code: str
+    revision: str | None
+    material_name: str
+    material_id: UUID | None
+    match_keywords: str | None
+    sop_form: str
+    micro_required: bool
+    micro_method_ref: str | None
+    is_active: bool
+    effective_date: date | None
+    notes: str | None
+    parameters: list[SpecificationParameterItem] = Field(default_factory=list)
+
+
+class MaterialSpecificationListItem(BaseModel):
+    """Краткая строка для списка справочника НД (без параметров)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nd_code: str
+    revision: str | None
+    material_name: str
+    material_id: UUID | None
+    sop_form: str
+    micro_required: bool
+    is_active: bool
+    effective_date: date | None
+    parameters_count: int = 0
+
+
+class MaterialSpecificationsResponse(BaseModel):
+    specifications: list[MaterialSpecificationListItem]
+
+
+# ---------------------------------------------------------------------------
 # Sampling acts — СОП-533 / СОП-548 Ф-10
 # ---------------------------------------------------------------------------
 

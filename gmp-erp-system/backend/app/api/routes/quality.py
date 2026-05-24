@@ -13,6 +13,10 @@ from app.models.master_data import Location, Manufacturer, Material, Supplier, W
 from app.models.quality import QCNotification, QCNotificationLine, QCReportParameter
 from app.schemas.inventory import SignatureRequest
 from app.schemas.quality import (
+    MaterialSpecificationInput,
+    MaterialSpecificationItem,
+    MaterialSpecificationListItem,
+    MaterialSpecificationsResponse,
     QADecisionRequest,
     QCNotificationItem,
     QCNotificationLineItem,
@@ -34,6 +38,7 @@ from app.schemas.quality import (
 from app.services.permissions import require_permission
 from app.services.quality import create_qc_report, qa_decision, sample_lot, submit_qc_report, submit_qc_result
 from app.services import sampling_acts as sampling_service
+from app.services import specifications as spec_service
 from app.services.sampling_act_pdf import render_sampling_act_pdf
 
 router = APIRouter(prefix="/api/quality", tags=["quality"])
@@ -598,3 +603,91 @@ def sampling_act_pdf_route(
             )
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Material specifications (НД) registry
+# ---------------------------------------------------------------------------
+
+
+def _spec_list_item(spec) -> MaterialSpecificationListItem:
+    return MaterialSpecificationListItem(
+        id=spec.id,
+        nd_code=spec.nd_code,
+        revision=spec.revision,
+        material_name=spec.material_name,
+        material_id=spec.material_id,
+        sop_form=spec.sop_form,
+        micro_required=spec.micro_required,
+        is_active=spec.is_active,
+        effective_date=spec.effective_date,
+        parameters_count=len(spec.parameters),
+    )
+
+
+@router.get("/specifications", response_model=MaterialSpecificationsResponse)
+def list_specifications_route(
+    include_inactive: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MaterialSpecificationsResponse:
+    require_permission(current_user, "VIEW_QC")
+    specs = spec_service.list_specifications(db, include_inactive=include_inactive)
+    return MaterialSpecificationsResponse(specifications=[_spec_list_item(s) for s in specs])
+
+
+@router.get("/specifications/{spec_id}", response_model=MaterialSpecificationItem)
+def get_specification_route(
+    spec_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MaterialSpecificationItem:
+    require_permission(current_user, "VIEW_QC")
+    spec = spec_service.get_specification(db, spec_id)
+    return MaterialSpecificationItem.model_validate(spec)
+
+
+@router.post("/specifications", response_model=MaterialSpecificationItem, status_code=201)
+def create_specification_route(
+    payload: MaterialSpecificationInput,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MaterialSpecificationItem:
+    spec = spec_service.create_specification(db, current_user, payload)
+    return MaterialSpecificationItem.model_validate(spec)
+
+
+@router.put("/specifications/{spec_id}", response_model=MaterialSpecificationItem)
+def update_specification_route(
+    spec_id: UUID,
+    payload: MaterialSpecificationInput,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MaterialSpecificationItem:
+    spec = spec_service.update_specification(db, current_user, spec_id, payload)
+    return MaterialSpecificationItem.model_validate(spec)
+
+
+@router.delete("/specifications/{spec_id}", status_code=204)
+def delete_specification_route(
+    spec_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    spec_service.delete_specification(db, current_user, spec_id)
+    return Response(status_code=204)
+
+
+@router.get("/lots/{lot_id}/specification", response_model=MaterialSpecificationItem | None)
+def resolve_lot_specification_route(
+    lot_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MaterialSpecificationItem | None:
+    """Подбирает спецификацию (НД) для материала партии — для «Загрузить шаблон»."""
+    require_permission(current_user, "VIEW_QC")
+    lot = db.get(Lot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lot not found")
+    spec = spec_service.resolve_for_lot(db, lot)
+    return MaterialSpecificationItem.model_validate(spec) if spec else None

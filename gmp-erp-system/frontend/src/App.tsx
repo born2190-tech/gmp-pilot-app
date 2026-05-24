@@ -14,6 +14,7 @@ import { RequisitionsPage } from './features/inventory/RequisitionsPage'
 import { MasterDataPage } from './features/master-data/MasterDataPage'
 import { QualityBoardPage } from './features/quality/QualityBoardPage'
 import { QCScanVerificationPage } from './features/quality/QCScanVerificationPage'
+import { SpecificationsAdminPage } from './features/quality/SpecificationsAdminPage'
 import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
 import { login, logout, me } from './lib/api'
 import { getVisibleNavItems } from './lib/permissions'
@@ -109,6 +110,8 @@ export function App() {
       <MasterDataPage token={token} user={user} />
     ) : route === 'qc-tasks' ? (
       <QualityBoardPage mode="qc" token={token} user={user} />
+    ) : route === 'qc-specifications' ? (
+      <SpecificationsAdminPage token={token} user={user} />
     ) : route === 'qa-decisions' ? (
       <QualityBoardPage mode="qa" token={token} user={user} />
     ) : route === 'qa-scan-verification' ? (

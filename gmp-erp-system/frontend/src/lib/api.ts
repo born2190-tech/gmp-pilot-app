@@ -64,6 +64,9 @@ import type {
   SamplingActItem,
   SamplingActsResponse,
   QcReportsListResponse,
+  MaterialSpecificationInput,
+  MaterialSpecificationItem,
+  MaterialSpecificationsResponse,
 } from '../types/inventory'
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT'
@@ -691,6 +694,39 @@ export function submitQcReport(token: string, reportId: string, payload: Signatu
 
 export function submitQaDecision(token: string, lotId: string, payload: QADecisionRequest): Promise<QualityLotsResponse['lots'][number]> {
   return request<QualityLotsResponse['lots'][number]>(`/api/quality/lots/${lotId}/qa-decision`, 'POST', { token, body: payload })
+}
+
+// ─── Спецификации (НД) ──────────────────────────────────────────────────────
+
+export function listSpecifications(token: string): Promise<MaterialSpecificationsResponse> {
+  return request<MaterialSpecificationsResponse>('/api/quality/specifications', 'GET', { token })
+}
+
+export function getSpecification(token: string, specId: string): Promise<MaterialSpecificationItem> {
+  return request<MaterialSpecificationItem>(`/api/quality/specifications/${specId}`, 'GET', { token })
+}
+
+export function resolveLotSpecification(token: string, lotId: string): Promise<MaterialSpecificationItem | null> {
+  return request<MaterialSpecificationItem | null>(`/api/quality/lots/${lotId}/specification`, 'GET', { token })
+}
+
+export function createSpecification(token: string, payload: MaterialSpecificationInput): Promise<MaterialSpecificationItem> {
+  return request<MaterialSpecificationItem>('/api/quality/specifications', 'POST', { token, body: payload })
+}
+
+export function updateSpecification(token: string, specId: string, payload: MaterialSpecificationInput): Promise<MaterialSpecificationItem> {
+  return request<MaterialSpecificationItem>(`/api/quality/specifications/${specId}`, 'PUT', { token, body: payload })
+}
+
+export async function deleteSpecification(token: string, specId: string): Promise<void> {
+  const response = await fetch(`/api/quality/specifications/${specId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok && response.status !== 204) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
 }
 
 // ─── Production Requisitions ─────────────────────────────────────────────────

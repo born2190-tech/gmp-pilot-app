@@ -243,6 +243,56 @@ export interface QCReportCreate {
   parameters: QCReportParameterCreate[]
 }
 
+export interface SpecificationParameterInput {
+  category: QCParamCategory
+  parameter_name: string
+  specification: string
+  method_reference: string | null
+  unit: string | null
+}
+
+export interface SpecificationParameterItem extends SpecificationParameterInput {
+  id: string
+  ordinal: number
+}
+
+export interface MaterialSpecificationInput {
+  nd_code: string
+  revision: string | null
+  material_name: string
+  material_id: string | null
+  match_keywords: string | null
+  sop_form: string
+  micro_required: boolean
+  micro_method_ref: string | null
+  is_active: boolean
+  effective_date: string | null
+  notes: string | null
+  parameters: SpecificationParameterInput[]
+}
+
+export interface MaterialSpecificationItem extends MaterialSpecificationInput {
+  id: string
+  parameters: SpecificationParameterItem[]
+}
+
+export interface MaterialSpecificationListItem {
+  id: string
+  nd_code: string
+  revision: string | null
+  material_name: string
+  material_id: string | null
+  sop_form: string
+  micro_required: boolean
+  is_active: boolean
+  effective_date: string | null
+  parameters_count: number
+}
+
+export interface MaterialSpecificationsResponse {
+  specifications: MaterialSpecificationListItem[]
+}
+
 export interface QCReportItem {
   id: string
   lot_id: string

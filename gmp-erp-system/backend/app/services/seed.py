@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from app.models.identity import Department, Permission, Role, User
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
+from app.models.quality import MaterialSpecification, SpecificationParameter
 
 
 PERMISSIONS: list[tuple[str, str]] = [
@@ -13,6 +14,7 @@ PERMISSIONS: list[tuple[str, str]] = [
     ("MANAGE_MASTER_DATA", "Manage master data"),
     ("VIEW_QC", "View QC records"),
     ("ENTER_QC_RESULT", "Enter QC results"),
+    ("MANAGE_SPECIFICATIONS", "Manage material specifications (НД) registry — ДКК"),
     ("UPLOAD_QC_SCAN", "Upload scanned QC notification (Ф-14 СОП-209) — ДКК"),
     ("VIEW_QA", "View QA records"),
     ("QA_DECISION", "Make QA decisions"),
@@ -34,7 +36,7 @@ ROLE_PERMISSION_CODES: dict[str, list[str]] = {
     "QC_ANALYST": ["VIEW_MASTER_DATA", "VIEW_QC", "ENTER_QC_RESULT", "UPLOAD_QC_SCAN", "VERIFY_INVENTORY_COUNT"],
     "QA_MANAGER": ["VIEW_MASTER_DATA", "VIEW_QA", "QA_DECISION", "VERIFY_QC_SCAN", "VIEW_AUDIT", "VERIFY_INVENTORY_COUNT", "POST_INVENTORY_COUNT"],
     "HEAD_QA": ["VIEW_MASTER_DATA", "VIEW_QA", "QA_DECISION", "VERIFY_QC_SCAN", "VIEW_AUDIT", "VERIFY_INVENTORY_COUNT", "POST_INVENTORY_COUNT"],
-    "HEAD_QC": ["VIEW_MASTER_DATA", "VIEW_QC", "ENTER_QC_RESULT", "UPLOAD_QC_SCAN", "VERIFY_INVENTORY_COUNT"],
+    "HEAD_QC": ["VIEW_MASTER_DATA", "VIEW_QC", "ENTER_QC_RESULT", "UPLOAD_QC_SCAN", "MANAGE_SPECIFICATIONS", "VERIFY_INVENTORY_COUNT"],
     "PRODUCTION_OPERATOR": ["VIEW_MASTER_DATA", "VIEW_PRODUCTION", "EXECUTE_BMR"],
     "SHIFT_MASTER": ["VIEW_MASTER_DATA", "VIEW_PRODUCTION", "MANAGE_PRODUCTION", "EXECUTE_BMR"],
     "HEAD_PRODUCTION": ["VIEW_MASTER_DATA", "VIEW_PRODUCTION", "MANAGE_PRODUCTION", "VIEW_AUDIT"],
@@ -237,4 +239,162 @@ def seed_foundation_data(db: Session) -> None:
         departments["ADMIN"],
     )
 
+    db.flush()
+    seed_specifications(db)
+
     db.commit()
+
+
+# Микробиологический метод-референс (общий для субстанций).
+_MICRO_REF = "ГФ РУз, ЕР-11 2.6.12, 2.6.13, 5.1.4"
+_MICRO_AEROBES = ("microbiological", "Общее число аэробных бактерий", "Не более 10³ КОЕ/г", "", "")
+_MICRO_FUNGI = ("microbiological", "Общее число дрожжевых и плесневых грибов", "Не более 10² КОЕ/г", "", "")
+_MICRO_ECOLI = ("microbiological", "Escherichia coli (в 1 г)", "Отсутствие", "", "")
+_MICRO_SALMONELLA = ("microbiological", "Salmonella spp.", "Отсутствие", "", "")
+_MICRO_SAUREUS = ("microbiological", "Staphylococcus aureus", "Отсутствие", "", "")
+_MICRO_PSEUDOMONAS = ("microbiological", "Pseudomonas aeruginosa", "Отсутствие", "", "")
+
+# (category, parameter_name, specification, method_reference, unit)
+SPEC_SEED: list[dict] = [
+    {
+        "nd_code": "НД-SPC/СУБ/023/23", "material_name": "Гликлазид",
+        "match_keywords": "гликлазид gliclazid",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Белый или почти белый порошок", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Практически нерастворим в воде; легко растворим в метиленхлориде; умеренно растворим в ацетоне; мало растворим в этаноле (96%)", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "ВЭЖХ: время удерживания совпадает с РСО; ИК-спектр совпадает с РСО", "ГФ РУз, ЕР-11 2.2.29, 2.2.24", "—"),
+            ("physicochemical", "Родственные примеси (∑)", "Не более 0,5 %", "ГФ РУз, ЕР-11 2.2.29", "%"),
+            ("physicochemical", "Потеря в массе при высушивании", "Не более 0,25 %", "ГФ РУз, ЕР-11 2.2.32", "%"),
+            ("physicochemical", "Сульфатная зола", "Не более 0,1 %", "ГФ РУз, ЕР-11 2.4.14", "%"),
+            ("physicochemical", "Количественное содержание", "99,0 — 101,0 % (на высушенное вещество)", "ГФ РУз, ЕР-11 2.2.29", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI,
+        ],
+    },
+    {
+        "nd_code": "НД-SPC/СУБ/009/23", "material_name": "Микрокристаллическая целлюлоза",
+        "match_keywords": "микрокристалл целлюлоз mcc рн-102",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Белый или почти белый мелкий, слегка гигроскопичный порошок", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Практически не растворим в воде, ацетоне, безводном этаноле, толуоле, разбавленных кислотах и в 50 г/л растворе NaOH", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "ИК-спектр соответствует спектру РСО; с раствором йода — фиолетовое окрашивание", "ГФ РУз, ЕР-11", "—"),
+            ("physicochemical", "pH", "От 5,0 до 7,0", "ГФ РУз, ЕР-11 2.2.3", "—"),
+            ("physicochemical", "Удельная электропроводность", "Не более 75 мкСм·см⁻¹", "ГФ РУз, ЕР-11 2.2.38", "мкСм·см⁻¹"),
+            ("physicochemical", "Растворимые в воде вещества", "Разница не должна превышать 12,5 мг", "ГФ РУз, ЕР-11", "мг"),
+            ("physicochemical", "Потеря в массе при высушивании", "Не более 7,0 %", "ГФ РУз, ЕР-11 2.2.32", "%"),
+            ("physicochemical", "Сульфатная зола", "Не более 0,1 %", "ГФ РУз, ЕР-11 2.4.14", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI, _MICRO_ECOLI, _MICRO_SALMONELLA, _MICRO_SAUREUS, _MICRO_PSEUDOMONAS,
+        ],
+    },
+    {
+        "nd_code": "НД-SPC/СУБ/017/23", "material_name": "Клопидогрел",
+        "match_keywords": "клопидогрел clopidogrel",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Белый или почти белый порошок", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Легко растворим в воде; легко растворим в метаноле; практически не растворим в дихлорметане", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "ВЭЖХ: время удерживания совпадает с РСО; сульфаты — белый осадок; ИК-спектр совпадает с РСО", "ГФ РУз, ЕР-11 2.2.29", "—"),
+            ("physicochemical", "Родственные примеси (∑)", "Не более 0,5 % (примесь A ≤ 0,2 %; примесь B ≤ 0,5 %)", "ГФ РУз, ЕР-11 2.2.29", "%"),
+            ("physicochemical", "Вода", "Не более 0,5 %", "ГФ РУз, ЕР-11 2.5.12", "%"),
+            ("physicochemical", "Сульфатная зола", "Не более 0,1 %", "ГФ РУз, ЕР-11 2.4.14", "%"),
+            ("physicochemical", "Количественное содержание", "99,0 — 101,0 % (на безводное вещество)", "ГФ РУз, ЕР-11", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI,
+        ],
+    },
+    {
+        "nd_code": "НД-SPC/СУБ/055/24", "material_name": "Эторикоксиб",
+        "match_keywords": "эторикоксиб etoricoxib",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Порошок от белого до кремового цвета", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Растворим в метаноле; свободно растворим в хлороформе; мало растворим в этаноле", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "ВЭЖХ: время удерживания совпадает с РСО; ИК-спектр соответствует спектру РСО", "ГФ РУз, ЕР-11", "—"),
+            ("physicochemical", "Потеря в массе при высушивании", "Не более 0,5 %", "ГФ РУз, ЕР-11 2.2.32", "%"),
+            ("physicochemical", "Абсорбция", "Не более 0,1 (при 430 нм)", "ГФ РУз, ЕР-11", "ЕА"),
+            ("physicochemical", "Сульфатная зола", "Не более 0,2 %", "ГФ РУз, ЕР-11 2.4.14", "%"),
+            ("physicochemical", "Тяжёлые металлы", "Не более 20 ppm", "ГФ РУз, ЕР-11 2.4.8", "ppm"),
+            ("physicochemical", "Родственные примеси (∑)", "Не более 0,5 %", "ГФ РУз, ЕР-11 2.2.29", "%"),
+            ("physicochemical", "Количественное содержание", "98,0 — 102,0 % (на безводное вещество)", "ГФ РУз, ЕР-11 2.2.29", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI, _MICRO_ECOLI, _MICRO_SALMONELLA, _MICRO_SAUREUS, _MICRO_PSEUDOMONAS,
+        ],
+    },
+    {
+        "nd_code": "НД-SPC/СУБ/040/23", "material_name": "Эзомепразол магния тригидрат",
+        "match_keywords": "эзомепразол эзомепрозол esomeprazol",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Белые или почти белые гранулы сферической формы", "Визуально", "—"),
+            ("physicochemical", "Подлинность", "ВЭЖХ: время удерживания совпадает с РСО; ИК-спектр совпадает с РСО", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Родственные примеси (∑)", "Не более 2,0 %", "ГФ РУз, ЕР-11 2.2.29", "%"),
+            ("physicochemical", "Потеря в массе при высушивании", "Не более 1,5 %", "ГФ РУз, ЕР-11 2.2.32", "%"),
+            ("physicochemical", "Растворение (кислая среда)", "Не более 10 %", "ГФ РУз, ЕР-11", "%"),
+            ("physicochemical", "Растворение (буферный раствор)", "Не менее 80 %", "ГФ РУз, ЕР-11", "%"),
+            ("physicochemical", "Количественное содержание", "95,0 — 110,0 %", "ГФ РУз, ЕР-11 2.2.25", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI, _MICRO_ECOLI,
+        ],
+    },
+    {
+        "nd_code": "НД-ДПСК/S.024", "material_name": "Тикагрелор",
+        "match_keywords": "тикагрелор ticagrelor",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Порошок от белого или почти белого до бледно-розового цвета", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Практически не растворим в воде; легко растворим в безводном этаноле; растворим в метаноле; практически нерастворим в гептане", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "ВЭЖХ: время удерживания совпадает с РСО; ИК-спектр совпадает с РСО", "ГФ РУз, ЕР-11 2.2.29, 2.2.24", "—"),
+            ("physicochemical", "Вода", "Не более 0,5 %", "ГФ РУз, ЕР-11 2.5.12", "%"),
+            ("physicochemical", "Сульфатная зола", "Не более 0,6 %", "ГФ РУз, ЕР-11 2.4.14", "%"),
+            ("physicochemical", "Родственные примеси (∑)", "Не более 1,0 %", "ГФ РУз, ЕР-11 2.2.29", "%"),
+            ("physicochemical", "Количественное содержание", "98,0 — 102,0 % (на безводное вещество)", "ГФ РУз, ЕР-11", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI,
+        ],
+    },
+]
+
+
+def seed_specifications(db: Session) -> None:
+    """Идемпотентно сидирует справочник спецификаций (НД).
+
+    Если спецификация с таким nd_code уже есть — пропускаем (чтобы не
+    затирать правки, сделанные через админ-экран).
+    """
+    for entry in SPEC_SEED:
+        exists = db.query(MaterialSpecification).filter(MaterialSpecification.nd_code == entry["nd_code"]).first()
+        if exists:
+            continue
+        material = (
+            db.query(Material)
+            .filter(Material.name.ilike(f"%{entry['material_name']}%"))
+            .first()
+        )
+        if material is None:
+            for kw in entry["match_keywords"].split():
+                material = db.query(Material).filter(Material.name.ilike(f"%{kw}%")).first()
+                if material:
+                    break
+        spec = MaterialSpecification(
+            nd_code=entry["nd_code"],
+            material_name=entry["material_name"],
+            material_id=material.id if material else None,
+            match_keywords=entry["match_keywords"],
+            sop_form="533",
+            micro_required=True,
+            micro_method_ref=entry["micro_method_ref"],
+            is_active=True,
+        )
+        db.add(spec)
+        db.flush()
+        ordinal = 0
+        for category, name, spec_text, method, unit in entry["params"]:
+            ordinal += 1
+            db.add(
+                SpecificationParameter(
+                    specification_id=spec.id,
+                    category=category,
+                    ordinal=ordinal,
+                    parameter_name=name,
+                    specification=spec_text,
+                    method_reference=method or None,
+                    unit=unit or None,
+                )
+            )

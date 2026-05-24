@@ -25,6 +25,7 @@ import {
   createQcReport,
   downloadQcReportPdf,
   downloadQcReportScan,
+  resolveLotSpecification,
   submitQcReport,
   uploadQcReportScan,
 } from '../../lib/api'
@@ -264,7 +265,9 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
   const tpl = useMemo(() => resolveSpecTemplate(lot.material_name, lot.material_code), [lot.material_name, lot.material_code])
 
   // «Загрузить шаблон»: подставляет полный перечень показателей с нормами.
-  function loadTemplate() {
+  // Источник истины — справочник НД в БД (по материалу партии); при отсутствии
+  // спецификации используется встроенный реестр, затем базовый шаблон 533/548.
+  function applyHardcoded() {
     if (tpl) {
       setPcParams(tpl.pc.map((s) => ({
         key: newKey(), category: 'physicochemical', parameter_name: s.name, specification: s.spec,
@@ -280,6 +283,33 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
     } else {
       setPcParams(fromTemplate(isFg ? PC_TEMPLATE_548 : PC_TEMPLATE_533, 'physicochemical'))
     }
+  }
+
+  async function loadTemplate() {
+    setError(null)
+    try {
+      const spec = await resolveLotSpecification(token, lot.id)
+      if (spec && spec.parameters.length > 0) {
+        const pc = spec.parameters.filter((p) => p.category !== 'microbiological')
+        const micro = spec.parameters.filter((p) => p.category === 'microbiological')
+        setPcParams(pc.map((p) => ({
+          key: newKey(), category: 'physicochemical', parameter_name: p.parameter_name, specification: p.specification,
+          result_value: '', unit: p.unit || '—', method_reference: p.method_reference || '', complies: null,
+        })))
+        setMicroParams(micro.map((p) => ({
+          key: newKey(), category: 'microbiological', parameter_name: p.parameter_name, specification: p.specification,
+          result_value: '', unit: p.unit || '—', method_reference: p.method_reference || '', complies: null,
+        })))
+        setMicroRequired(spec.micro_required)
+        if (spec.micro_method_ref) setMicroMethodRef(spec.micro_method_ref)
+        setMethodReference((prev) => prev || `${spec.nd_code}${spec.revision ? ` ред.${spec.revision}` : ''}`)
+        setSuccess(`${t('qcws.templateLoaded')}: ${spec.material_name} · ${spec.nd_code}`)
+        return
+      }
+    } catch {
+      /* падать не будем — используем встроенный реестр */
+    }
+    applyHardcoded()
   }
 
   function toIso(local: string): string | null {
@@ -509,7 +539,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                   <LockedChip t={t} />
                 ) : (
                   <>
-                    <PillButton tone="quiet" icon={Layers} onClick={loadTemplate}>
+                    <PillButton tone="quiet" icon={Layers} onClick={() => void loadTemplate()}>
                       {tpl ? `${t('qcws.loadTemplateFor')}: ${tpl.label}` : t('qcws.loadTemplate')}
                     </PillButton>
                     <PillButton tone="neutral" icon={Plus} onClick={() => setPcParams((p) => [...p, blankPc()])}>

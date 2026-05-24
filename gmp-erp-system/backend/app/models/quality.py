@@ -214,6 +214,55 @@ class SamplingLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     sampling_act: Mapped[SamplingAct] = relationship(back_populates="lines")
 
 
+class MaterialSpecification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Спецификация (НД) на материал — справочник норм входного контроля.
+
+    Содержит шапку НД и перечень показателей качества (SpecificationParameter).
+    Используется аналитическим листом ОКК: «Загрузить шаблон» подставляет
+    параметры и нормы именно этой спецификации. Привязка к материалу — по
+    `material_id` (если задан) либо по ключевым словам `match_keywords`.
+    """
+
+    __tablename__ = "material_specifications"
+
+    nd_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    revision: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    material_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    material_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("materials.id"), nullable=True)
+    # Ключевые слова для сопоставления с партией (нижний регистр, через пробел/запятую).
+    match_keywords: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    sop_form: Mapped[str] = mapped_column(String(8), nullable=False, default="533")
+    micro_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    micro_method_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    parameters: Mapped[list["SpecificationParameter"]] = relationship(
+        back_populates="specification_row", cascade="all, delete-orphan"
+    )
+
+
+class SpecificationParameter(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Строка показателя качества спецификации (норма + метод)."""
+
+    __tablename__ = "specification_parameters"
+
+    specification_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("material_specifications.id"), nullable=False
+    )
+    # 'physicochemical' (ФХ) | 'microbiological' (микро)
+    category: Mapped[str] = mapped_column(String(20), nullable=False, default="physicochemical")
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    parameter_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    specification: Mapped[str] = mapped_column(Text, nullable=False)
+    method_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    specification_row: Mapped[MaterialSpecification] = relationship(back_populates="parameters")
+
+
 class SamplingScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Скан подписанного бумажного акта Ф-10. Хранится на диске, в БД —
     путь + sha256 (как QCNotificationScan)."""
