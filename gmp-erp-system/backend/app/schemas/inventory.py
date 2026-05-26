@@ -172,6 +172,29 @@ class AccountLedgerResponse(BaseModel):
     accounts: list[AccountLedgerItem]
 
 
+class InventoryAccountInput(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=255)
+    account_group: str | None = Field(default=None, max_length=32)
+    zone: str | None = Field(default=None, max_length=16)
+    is_active: bool = True
+
+
+class InventoryAccountItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    code: str
+    name: str
+    account_group: str | None
+    zone: str | None
+    is_active: bool
+
+
+class InventoryAccountsResponse(BaseModel):
+    accounts: list[InventoryAccountItem]
+
+
 class LotOperationResponse(LotItem):
     pass
 

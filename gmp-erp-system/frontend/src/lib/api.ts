@@ -3,6 +3,9 @@ import type {
   LocationsResponse,
   LotsResponse,
   AccountLedgerResponse,
+  InventoryAccountInput,
+  InventoryAccountItem,
+  InventoryAccountsResponse,
   AdjustLotRequest,
   FGShipmentCreate,
   FGShipmentItem,
@@ -181,6 +184,26 @@ export function listLots(token: string, query?: LotsQuery): Promise<LotsResponse
 
 export function getAccountLedger(token: string, query?: { date_from?: string; date_to?: string }): Promise<AccountLedgerResponse> {
   return request<AccountLedgerResponse>('/api/inventory/accounts/ledger', 'GET', { token, query })
+}
+
+export function listInventoryAccounts(token: string): Promise<InventoryAccountsResponse> {
+  return request<InventoryAccountsResponse>('/api/inventory/accounts', 'GET', { token })
+}
+
+export function createInventoryAccount(token: string, payload: InventoryAccountInput): Promise<InventoryAccountItem> {
+  return request<InventoryAccountItem>('/api/inventory/accounts', 'POST', { token, body: payload })
+}
+
+export function updateInventoryAccount(token: string, id: string, payload: InventoryAccountInput): Promise<InventoryAccountItem> {
+  return request<InventoryAccountItem>(`/api/inventory/accounts/${id}`, 'PUT', { token, body: payload })
+}
+
+export async function deleteInventoryAccount(token: string, id: string): Promise<void> {
+  const response = await fetch(`/api/inventory/accounts/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+  if (!response.ok && response.status !== 204) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
 }
 
 export function listMovements(token: string, query?: MovementsQuery): Promise<MovementsResponse> {

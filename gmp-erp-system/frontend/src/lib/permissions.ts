@@ -69,6 +69,7 @@ const NAV_ITEMS: NavItem[] = [
   // ─── Администрирование ────────────────────────────────────────────────
   { labelKey: 'nav.warehouseCenter',      section: 'admin',      permission: 'MANAGE_USERS',          route: 'warehouse-center', icon: Warehouse },
   { labelKey: 'nav.masterData',           section: 'admin',      permission: 'MANAGE_MASTER_DATA',    route: 'master-data',      icon: Database },
+  { labelKey: 'nav.inventoryAccounts',    section: 'admin',      permission: 'MANAGE_MASTER_DATA',    route: 'inventory-accounts', icon: Coins },
   { labelKey: 'nav.admin',                section: 'admin',      permission: 'MANAGE_USERS',          route: 'admin',            icon: Settings2 },
 ]
 

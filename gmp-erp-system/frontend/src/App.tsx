@@ -5,6 +5,7 @@ import { WarehouseDashboard } from './features/dashboard/WarehouseDashboard'
 import { WarehouseCenterPage } from './features/inventory/WarehouseCenterPage'
 import { WarehouseRegistryPage } from './features/inventory/WarehouseRegistryPage'
 import { WarehouseAccountsPage } from './features/inventory/WarehouseAccountsPage'
+import { InventoryAccountsAdminPage } from './features/inventory/InventoryAccountsAdminPage'
 import { FGShipmentsPage } from './features/inventory/FGShipmentsPage'
 import { InventoryCountPage } from './features/inventory/InventoryCountPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
@@ -111,6 +112,8 @@ export function App() {
       <ReceiptDocumentPage token={token} user={user} username={user.username} />
     ) : route === 'master-data' ? (
       <MasterDataPage token={token} user={user} />
+    ) : route === 'inventory-accounts' ? (
+      <InventoryAccountsAdminPage token={token} user={user} />
     ) : route === 'qc-tasks' ? (
       <QualityBoardPage mode="qc" token={token} user={user} />
     ) : route === 'qc-specifications' ? (

@@ -30,6 +30,9 @@ from app.models.quality import QCNotification, QCNotificationLine, QCNotificatio
 from app.schemas.inventory import (
     AccountLedgerResponse,
     AdjustLotRequest,
+    InventoryAccountInput,
+    InventoryAccountItem,
+    InventoryAccountsResponse,
     FGShipmentCreate,
     FGShipmentItem,
     FGShipmentLineItem,
@@ -548,6 +551,58 @@ def account_ledger_route(
     from app.services.valuation import account_ledger
 
     return AccountLedgerResponse.model_validate(account_ledger(db, date_from, date_to))
+
+
+# ─── Справочник счетов учёта (CRUD) ─────────────────────────────────────────
+
+
+@router.get("/accounts", response_model=InventoryAccountsResponse)
+def list_accounts_route(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryAccountsResponse:
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.services import accounts as accounts_service
+
+    rows = accounts_service.list_accounts(db)
+    return InventoryAccountsResponse(accounts=[InventoryAccountItem.model_validate(r) for r in rows])
+
+
+@router.post("/accounts", response_model=InventoryAccountItem, status_code=201)
+def create_account_route(
+    payload: InventoryAccountInput,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryAccountItem:
+    from app.services import accounts as accounts_service
+
+    acc = accounts_service.create_account(db, current_user, payload)
+    return InventoryAccountItem.model_validate(acc)
+
+
+@router.put("/accounts/{account_id}", response_model=InventoryAccountItem)
+def update_account_route(
+    account_id: UUID,
+    payload: InventoryAccountInput,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> InventoryAccountItem:
+    from app.services import accounts as accounts_service
+
+    acc = accounts_service.update_account(db, current_user, account_id, payload)
+    return InventoryAccountItem.model_validate(acc)
+
+
+@router.delete("/accounts/{account_id}", status_code=204)
+def delete_account_route(
+    account_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    from app.services import accounts as accounts_service
+
+    accounts_service.delete_account(db, current_user, account_id)
+    return Response(status_code=204)
 
 
 @router.get("/movements", response_model=MovementsResponse)

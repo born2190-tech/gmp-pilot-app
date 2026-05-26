@@ -597,6 +597,22 @@ export interface ReceiptDefectStatusUpdate {
   comment?: string | null
 }
 
+export interface InventoryAccountInput {
+  code: string
+  name: string
+  account_group: string | null
+  zone: string | null
+  is_active: boolean
+}
+
+export interface InventoryAccountItem extends InventoryAccountInput {
+  id: string
+}
+
+export interface InventoryAccountsResponse {
+  accounts: InventoryAccountItem[]
+}
+
 export interface AccountWarehouseValue {
   warehouse_type: string
   value: number

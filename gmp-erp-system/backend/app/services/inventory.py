@@ -467,6 +467,10 @@ def issue_to_production(db: Session, user: CurrentUser, lot_id: UUID, payload: I
     validate_signature(db, user, payload, "ISSUE_TO_PRODUCTION", "lot", str(lot.id))
     old_quantity = lot.quantity
     lot.quantity = lot.quantity - payload.quantity
+    # Перенос выданной стоимости со счёта партии на счёт НЗП (цех, WIP).
+    from app.services.accounts import resolve_account
+
+    wip_account = resolve_account(db, "WIP", "WIP")
     db.add(
         InventoryMovement(
             movement_type="ISSUE_PRODUCTION",
@@ -477,6 +481,8 @@ def issue_to_production(db: Session, user: CurrentUser, lot_id: UUID, payload: I
             from_location_id=lot.location_id,
             to_warehouse_id=None,
             to_location_id=None,
+            from_account_id=lot.account_id,
+            to_account_id=wip_account.id if wip_account else None,
             quantity_delta=-payload.quantity,
             quantity_after=lot.quantity,
             unit=lot.unit,
