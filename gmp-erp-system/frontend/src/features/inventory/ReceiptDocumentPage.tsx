@@ -49,7 +49,48 @@ interface ReceiptForm {
   received_date: string
   signature_password: string
   reason: string
+  // Реквизиты счёта-фактуры (ЭСФ) / договора / валюты.
+  invoice_no: string
+  invoice_date: string
+  contract_no: string
+  contract_date: string
+  currency: string
+  einvoice_external_id: string
 }
+
+interface GtdForm {
+  is_import: boolean
+  gtd_number: string
+  gtd_date: string
+  procedure: string
+  country_origin: string
+  foreign_manufacturer: string
+  broker: string
+  incoterms: string
+  contract_currency: string
+  invoice_value: string
+  customs_value: string
+  exchange_rate: string
+  gross_weight: string
+  net_weight: string
+}
+
+const emptyGtd = (): GtdForm => ({
+  is_import: false,
+  gtd_number: '',
+  gtd_date: '',
+  procedure: 'ИМ 40',
+  country_origin: '',
+  foreign_manufacturer: '',
+  broker: '',
+  incoterms: '',
+  contract_currency: '',
+  invoice_value: '',
+  customs_value: '',
+  exchange_rate: '',
+  gross_weight: '',
+  net_weight: '',
+})
 
 interface ReceiptLineForm {
   id: string
@@ -72,6 +113,11 @@ interface ReceiptLineForm {
   quantity: string
   unit: string
   location_id: string
+  // Цена/НДС из строки счёта-фактуры + ИКПУ + ТН ВЭД (для ГТД).
+  ikpu_code: string
+  unit_price: string
+  vat_rate: string
+  hs_code: string
 }
 
 interface PostedSummary {
@@ -118,6 +164,10 @@ const newLine = (locationId = ''): ReceiptLineForm => ({
   quantity: '',
   unit: 'kg',
   location_id: locationId,
+  ikpu_code: '',
+  unit_price: '',
+  vat_rate: '',
+  hs_code: '',
 })
 
 export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPageProps) {
@@ -139,12 +189,19 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   const [referenceDraft, setReferenceDraft] = useState({ code: '', name: '', item_type: 'raw_material' })
   const [notificationDialogOpen, setNotificationDialogOpen] = useState(false)
   const [notificationDraftNo, setNotificationDraftNo] = useState('')
+  const [gtd, setGtd] = useState<GtdForm>(emptyGtd())
 
   const form = useForm<ReceiptForm>({
     defaultValues: {
       document_no: `REC-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-001`,
       received_date: new Date().toISOString().slice(0, 10),
       reason: t('receipt.defaultReason'),
+      currency: 'UZS',
+      invoice_no: '',
+      invoice_date: '',
+      contract_no: '',
+      contract_date: '',
+      einvoice_external_id: '',
     },
   })
 
@@ -300,7 +357,14 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
       warehouse_id: selectedWarehouseId,
       reason: t('receipt.defaultReason'),
       signature_password: '',
+      currency: 'UZS',
+      invoice_no: '',
+      invoice_date: '',
+      contract_no: '',
+      contract_date: '',
+      einvoice_external_id: '',
     })
+    setGtd(emptyGtd())
     setLines([newLine(defaultLocationId)])
     setSelectedLineId(null)
     setExpandedLineIds(new Set())
@@ -363,6 +427,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
     }
     setIsLoading(true)
     try {
+      const num = (v: string) => (v.trim() === '' ? null : Number(v))
       const payload: ReceiptCreate = {
         document_no: values.document_no,
         supplier_id: null,
@@ -371,6 +436,29 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         manufacturer: null,
         warehouse_id: values.warehouse_id,
         received_date: values.received_date,
+        invoice_no: values.invoice_no?.trim() || null,
+        invoice_date: values.invoice_date || null,
+        contract_no: values.contract_no?.trim() || null,
+        contract_date: values.contract_date || null,
+        currency: values.currency?.trim() || 'UZS',
+        einvoice_external_id: values.einvoice_external_id?.trim() || null,
+        import_declaration: gtd.is_import && gtd.gtd_number.trim()
+          ? {
+              gtd_number: gtd.gtd_number.trim(),
+              gtd_date: gtd.gtd_date || null,
+              procedure: gtd.procedure.trim() || null,
+              country_origin: gtd.country_origin.trim() || null,
+              foreign_manufacturer: gtd.foreign_manufacturer.trim() || null,
+              broker: gtd.broker.trim() || null,
+              incoterms: gtd.incoterms.trim() || null,
+              contract_currency: gtd.contract_currency.trim() || null,
+              invoice_value: num(gtd.invoice_value),
+              customs_value: num(gtd.customs_value),
+              exchange_rate: num(gtd.exchange_rate),
+              gross_weight: num(gtd.gross_weight),
+              net_weight: num(gtd.net_weight),
+            }
+          : null,
         lines: lines.map((line) => ({
           material_id: line.material_mode === 'existing' ? optionalId(line.material_id) : null,
           material: line.material_mode === 'new'
@@ -387,6 +475,10 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
           quantity: Number(line.quantity),
           unit: line.unit.trim() || 'kg',
           location_id: line.location_id,
+          ikpu_code: line.ikpu_code.trim() || null,
+          unit_price: num(line.unit_price),
+          vat_rate: num(line.vat_rate),
+          hs_code: line.hs_code.trim() || null,
         })),
       }
       const receipt = await createReceipt(token, payload)
@@ -536,7 +628,26 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
             )}
             <Field label={t('common.reason')}><input {...form.register('reason', { required: true })} className="input" /></Field>
           </div>
+          {/* Счёт-фактура (ЭСФ) / договор / валюта */}
+          <div className="mt-4 grid gap-4 lg:grid-cols-[repeat(5,minmax(140px,1fr))]">
+            <Field label={t('receipt.invoiceNo')}><input {...form.register('invoice_no')} className="input" placeholder="357" /></Field>
+            <Field label={t('receipt.invoiceDate')}><input type="date" {...form.register('invoice_date')} className="input" /></Field>
+            <Field label={t('receipt.contractNo')}><input {...form.register('contract_no')} className="input" placeholder="224" /></Field>
+            <Field label={t('receipt.contractDate')}><input type="date" {...form.register('contract_date')} className="input" /></Field>
+            <Field label={t('receipt.currency')}>
+              <select {...form.register('currency')} className="input">
+                <option value="UZS">UZS (сум)</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="RUB">RUB</option>
+              </select>
+            </Field>
+          </div>
+          <p className="mt-2 text-[11.5px] text-slate-400">{t('receipt.invoiceHint')}</p>
         </SectionBlock>
+
+        {/* ГТД — таможенная декларация (импорт) */}
+        <GtdSection gtd={gtd} setGtd={setGtd} t={t} />
 
         <SectionBlock
           action={<Button type="button" variant="secondary" onClick={addLine}>+ {t('receipt.addLine')}</Button>}
@@ -655,6 +766,39 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         loading={isLoading}
         t={t}
       />
+    </section>
+  )
+}
+
+function GtdSection({ gtd, setGtd, t }: { gtd: GtdForm; setGtd: (g: GtdForm) => void; t: ReturnType<typeof useI18n>['t'] }) {
+  const upd = (patch: Partial<GtdForm>) => setGtd({ ...gtd, ...patch })
+  return (
+    <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+      <label className="flex cursor-pointer items-center gap-2.5">
+        <input type="checkbox" checked={gtd.is_import} onChange={(e) => upd({ is_import: e.target.checked })} className="h-4 w-4 accent-slate-900" />
+        <span className="text-base font-semibold text-slate-800">{t('receipt.gtd.title')}</span>
+        <span className="text-[12px] text-slate-400">— {t('receipt.gtd.toggleHint')}</span>
+      </label>
+      {gtd.is_import && (
+        <>
+          <div className="mt-4 grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+            <Field label={t('receipt.gtd.number')}><input className="input font-mono" value={gtd.gtd_number} onChange={(e) => upd({ gtd_number: e.target.value })} placeholder="26002/12.05.2026/0041937" /></Field>
+            <Field label={t('receipt.gtd.date')}><input type="date" className="input" value={gtd.gtd_date} onChange={(e) => upd({ gtd_date: e.target.value })} /></Field>
+            <Field label={t('receipt.gtd.procedure')}><input className="input" value={gtd.procedure} onChange={(e) => upd({ procedure: e.target.value })} placeholder="ИМ 40" /></Field>
+            <Field label={t('receipt.gtd.incoterms')}><input className="input" value={gtd.incoterms} onChange={(e) => upd({ incoterms: e.target.value })} placeholder="CIP" /></Field>
+            <Field label={t('receipt.gtd.countryOrigin')}><input className="input" value={gtd.country_origin} onChange={(e) => upd({ country_origin: e.target.value })} placeholder="Китай" /></Field>
+            <Field label={t('receipt.gtd.foreignManufacturer')}><input className="input" value={gtd.foreign_manufacturer} onChange={(e) => upd({ foreign_manufacturer: e.target.value })} /></Field>
+            <Field label={t('receipt.gtd.broker')}><input className="input" value={gtd.broker} onChange={(e) => upd({ broker: e.target.value })} /></Field>
+            <Field label={t('receipt.gtd.contractCurrency')}><input className="input" value={gtd.contract_currency} onChange={(e) => upd({ contract_currency: e.target.value })} placeholder="USD" /></Field>
+            <Field label={t('receipt.gtd.invoiceValue')}><input type="number" step="0.01" className="input" value={gtd.invoice_value} onChange={(e) => upd({ invoice_value: e.target.value })} /></Field>
+            <Field label={t('receipt.gtd.customsValue')}><input type="number" step="0.01" className="input" value={gtd.customs_value} onChange={(e) => upd({ customs_value: e.target.value })} /></Field>
+            <Field label={t('receipt.gtd.exchangeRate')}><input type="number" step="0.0001" className="input" value={gtd.exchange_rate} onChange={(e) => upd({ exchange_rate: e.target.value })} /></Field>
+            <Field label={t('receipt.gtd.grossWeight')}><input type="number" step="0.001" className="input" value={gtd.gross_weight} onChange={(e) => upd({ gross_weight: e.target.value })} /></Field>
+            <Field label={t('receipt.gtd.netWeight')}><input type="number" step="0.001" className="input" value={gtd.net_weight} onChange={(e) => upd({ net_weight: e.target.value })} /></Field>
+          </div>
+          <p className="mt-2 text-[11.5px] text-slate-400">{t('receipt.gtd.hint')}</p>
+        </>
+      )}
     </section>
   )
 }
@@ -944,6 +1088,21 @@ function MaterialDetailPanel({
           <Field label={t('receipt.quantity')}><input className="input bg-white" min="0" step="0.001" type="number" value={line.quantity} onChange={(event) => onUpdate(line.id, { quantity: event.target.value })} /></Field>
           <Field label={t('common.unit')}><input className="input bg-white" value={line.unit} onChange={(event) => onUpdate(line.id, { unit: event.target.value })} /></Field>
         </div>
+
+        <Separator />
+
+        {/* Цена/НДС из счёта-фактуры + ИКПУ + ТН ВЭД */}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t('receipt.unitPrice')}><input className="input bg-white" min="0" step="0.01" type="number" value={line.unit_price} onChange={(event) => onUpdate(line.id, { unit_price: event.target.value })} placeholder="0.00" /></Field>
+          <Field label={t('receipt.vatRate')}><input className="input bg-white" min="0" step="0.1" type="number" value={line.vat_rate} onChange={(event) => onUpdate(line.id, { vat_rate: event.target.value })} placeholder="12" /></Field>
+          <Field label={t('receipt.ikpuCode')}><input className="input bg-white font-mono" value={line.ikpu_code} onChange={(event) => onUpdate(line.id, { ikpu_code: event.target.value })} placeholder="04819001001000000" /></Field>
+          <Field label={t('receipt.hsCode')}><input className="input bg-white font-mono" value={line.hs_code} onChange={(event) => onUpdate(line.id, { hs_code: event.target.value })} placeholder="7607209000" /></Field>
+        </div>
+        {Number(line.unit_price) > 0 && Number(line.quantity) > 0 && (
+          <p className="text-[11.5px] text-slate-500">
+            {t('receipt.lineSum')}: <span className="font-medium text-slate-800">{(Number(line.unit_price) * Number(line.quantity)).toLocaleString('ru-RU')}</span>
+          </p>
+        )}
 
         <Separator />
 

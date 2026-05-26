@@ -591,6 +591,25 @@ export interface ReceiptDefectStatusUpdate {
   comment?: string | null
 }
 
+export interface ImportDeclarationInput {
+  gtd_number: string
+  gtd_date?: string | null
+  procedure?: string | null
+  country_origin?: string | null
+  country_dispatch?: string | null
+  foreign_manufacturer?: string | null
+  broker?: string | null
+  incoterms?: string | null
+  contract_currency?: string | null
+  invoice_value?: number | null
+  customs_value?: number | null
+  exchange_rate?: number | null
+  gross_weight?: number | null
+  net_weight?: number | null
+  edeclaration_external_id?: string | null
+  notes?: string | null
+}
+
 export interface ReceiptCreate {
   document_no: string
   supplier_id?: string | null
@@ -599,6 +618,13 @@ export interface ReceiptCreate {
   manufacturer?: ManufacturerCreate | null
   warehouse_id: string
   received_date: string
+  invoice_no?: string | null
+  invoice_date?: string | null
+  contract_no?: string | null
+  contract_date?: string | null
+  currency?: string
+  einvoice_external_id?: string | null
+  import_declaration?: ImportDeclarationInput | null
     lines: Array<{
       material_id?: string | null
       material?: MaterialCreate | null
@@ -613,6 +639,10 @@ export interface ReceiptCreate {
     quantity: number
     unit: string
     location_id: string
+    ikpu_code?: string | null
+    unit_price?: number | null
+    vat_rate?: number | null
+    hs_code?: string | null
   }>
 }
 
