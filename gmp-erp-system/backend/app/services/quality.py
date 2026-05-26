@@ -235,6 +235,20 @@ def qa_decision(db: Session, user: CurrentUser, lot_id: UUID, payload: QADecisio
     old_status = lot.quality_status
     lot.quality_status = payload.decision
     lot.qa_decision_at = now_utc()
+    # Перенос стоимости между счетами по зоне: допуск → счёт допущенных,
+    # отклонение → счёт брака (карантин → допущено/брак).
+    from app.services.accounts import move_lot_account, zone_for_status
+
+    move_lot_account(
+        db,
+        lot,
+        zone_for_status(lot.quality_status),
+        user_id=user.id,
+        workstation_id=user.workstation_id,
+        document_type="lot",
+        document_id=lot.id,
+        reason=payload.reason,
+    )
     write_audit(
         db,
         user,

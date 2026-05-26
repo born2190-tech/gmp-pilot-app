@@ -233,11 +233,16 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
     receipt.posted_by = user.id
     receipt.posted_at = now_utc()
 
+    from app.services.accounts import resolve_account
+
     lots_created = 0
     quarantine_time = now_utc()
     lines = db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt.id).order_by(ReceiptLine.created_at).all()
     for line in lines:
         material = get_required(db, Material, line.material_id, "Material")
+        # Счёт учёта при приёмке — карантинный счёт вида материала.
+        quarantine_account = resolve_account(db, material.account_group, "QUARANTINE")
+        account_id = quarantine_account.id if quarantine_account else None
         series = generate_internal_lot(line)
         if db.query(Lot.id).filter(Lot.internal_lot == series).first():
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Material series already exists: {series}")
@@ -253,8 +258,8 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             expiry_date=line.expiry_date,
             warehouse_id=receipt.warehouse_id,
             location_id=line.location_id,
-            # Счёт учёта наследуется от материала; себестоимость/валюта/ТН ВЭД — из строки/прихода.
-            account_id=material.account_id,
+            # Счёт учёта — карантинный счёт вида; себестоимость/валюта/ТН ВЭД — из строки/прихода.
+            account_id=account_id,
             quantity=line.quantity,
             initial_quantity=line.quantity,
             unit=line.unit,
@@ -276,7 +281,7 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
                 from_location_id=None,
                 to_warehouse_id=receipt.warehouse_id,
                 to_location_id=line.location_id,
-                to_account_id=material.account_id,
+                to_account_id=account_id,
                 quantity_delta=line.quantity,
                 quantity_after=line.quantity,
                 unit=line.unit,

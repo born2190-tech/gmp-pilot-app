@@ -246,45 +246,54 @@ def seed_foundation_data(db: Session) -> None:
     db.commit()
 
 
-# Счета учёта запасов: код, наименование, группа.
-INVENTORY_ACCOUNTS: list[tuple[str, str, str]] = [
-    ("001-20", "Активные фармацевтические субстанции (АФИ)", "SUBSTANCE_API"),
-    ("001-21", "Вспомогательные материалы", "EXCIPIENT"),
-    ("002-30", "Упаковочные материалы", "PACKAGING"),
-    ("002-40", "Незавершённое производство (цех)", "WIP"),
+# Счета учёта запасов: (код, наименование, группа, зона).
+# КОДЫ — ВРЕМЕННЫЕ ЗАГЛУШКИ. Замените на реальные коды плана счетов.
+# Счёт определяется парой (группа × зона): карантин / допущено / брак / цех.
+INVENTORY_ACCOUNTS: list[tuple[str, str, str, str]] = [
+    ("001-20", "АФИ — карантин", "SUBSTANCE_API", "QUARANTINE"),
+    ("001-21", "АФИ — допущенные", "SUBSTANCE_API", "RELEASED"),
+    ("001-29", "АФИ — брак", "SUBSTANCE_API", "REJECTED"),
+    ("001-30", "Вспомогательные — карантин", "EXCIPIENT", "QUARANTINE"),
+    ("001-31", "Вспомогательные — допущенные", "EXCIPIENT", "RELEASED"),
+    ("001-39", "Вспомогательные — брак", "EXCIPIENT", "REJECTED"),
+    ("002-20", "Упаковочные — карантин", "PACKAGING", "QUARANTINE"),
+    ("002-21", "Упаковочные — допущенные", "PACKAGING", "RELEASED"),
+    ("002-29", "Упаковочные — брак", "PACKAGING", "REJECTED"),
+    ("002-40", "Незавершённое производство (цех)", "WIP", "WIP"),
 ]
 
 
-def seed_inventory_accounts(db: Session) -> None:
-    """Идемпотентно создаёт счета учёта и проставляет материалам счёт по виду.
+def group_for_code(code: str) -> str | None:
+    code = (code or "").upper()
+    if code.startswith(("API", "TIG", "GLZ", "CLP", "ETR", "ESO", "TCG")):
+        return "SUBSTANCE_API"
+    if code.startswith(("EXC", "AUX")):
+        return "EXCIPIENT"
+    if code.startswith(("PACK", "PKG", "IM-", "ИМ")):
+        return "PACKAGING"
+    return None
 
-    Привязка материала — эвристика по коду (API*/TIG* → АФИ, EXC* →
-    вспомогательные, PACK* → упаковочные). Далее счёт правится в карточке
-    материала. Не перетираем уже заданный material.account_id.
-    """
-    accounts: dict[str, InventoryAccount] = {}
-    for code, name, group in INVENTORY_ACCOUNTS:
+
+def seed_inventory_accounts(db: Session) -> None:
+    """Идемпотентно создаёт зонозависимые счета учёта (вид × зона) и проставляет
+    материалам группу (вид). Коды — заглушки, правятся в справочнике счетов.
+    Существующие счета обновляются по коду (имя/группа/зона)."""
+    for code, name, group, zone in INVENTORY_ACCOUNTS:
         row = db.query(InventoryAccount).filter(InventoryAccount.code == code).first()
-        if not row:
-            row = InventoryAccount(code=code, name=name, account_group=group, is_active=True)
-            db.add(row)
-        accounts[group] = row
+        if row:
+            row.name = name
+            row.account_group = group
+            row.zone = zone
+            row.is_active = True
+        else:
+            db.add(InventoryAccount(code=code, name=name, account_group=group, zone=zone, is_active=True))
     db.flush()
 
-    def account_for(material: Material) -> InventoryAccount | None:
-        code = (material.code or "").upper()
-        if code.startswith(("API", "TIG", "GLZ", "CLP", "ETR", "ESO", "TCG")):
-            return accounts.get("SUBSTANCE_API")
-        if code.startswith(("EXC", "AUX")):
-            return accounts.get("EXCIPIENT")
-        if code.startswith(("PACK", "PKG", "IM-", "ИМ")):
-            return accounts.get("PACKAGING")
-        return None
-
-    for material in db.query(Material).filter(Material.account_id.is_(None)).all():
-        acc = account_for(material)
-        if acc is not None:
-            material.account_id = acc.id
+    # Проставляем материалам группу (вид) по коду, если ещё не задана.
+    for material in db.query(Material).filter(Material.account_group.is_(None)).all():
+        grp = group_for_code(material.code)
+        if grp:
+            material.account_group = grp
 
 
 # Микробиологический метод-референс (общий для субстанций).

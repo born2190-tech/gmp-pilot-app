@@ -52,8 +52,12 @@ class InventoryAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    # Необязательная группа: SUBSTANCE_API | EXCIPIENT | PACKAGING | WIP | OTHER
+    # Группа (вид): SUBSTANCE_API | EXCIPIENT | PACKAGING | WIP | OTHER
     account_group: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Зона качества: QUARANTINE | RELEASED | REJECTED | WIP | None.
+    # Счёт определяется парой (account_group, zone); при смене зоны партии
+    # (приём → допуск → брак / цех) стоимость переносится с счёта на счёт.
+    zone: Mapped[str | None] = mapped_column(String(16), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
 
@@ -67,6 +71,8 @@ class Material(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Счёт учёта по виду материала (АФИ/вспомогательные/упаковочные). Партия
     # при приёмке наследует этот счёт; далее счёт может меняться перемещением.
     account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("inventory_accounts.id"), nullable=True)
+    # Вид материала для подбора счёта по зоне: SUBSTANCE_API | EXCIPIENT | PACKAGING.
+    account_group: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Нормы отбора средней пробы (оцифровка Ф-1 к СОП-533/548). Заполняются
     # ОКК при первом отборе материала и переиспользуются дальше. Не зависят
     # от объёма партии — определяются методиками анализа.
