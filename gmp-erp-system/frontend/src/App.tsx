@@ -4,6 +4,7 @@ import { LoginPage } from './features/auth/LoginPage'
 import { WarehouseDashboard } from './features/dashboard/WarehouseDashboard'
 import { WarehouseCenterPage } from './features/inventory/WarehouseCenterPage'
 import { WarehouseRegistryPage } from './features/inventory/WarehouseRegistryPage'
+import { WarehouseAccountsPage } from './features/inventory/WarehouseAccountsPage'
 import { FGShipmentsPage } from './features/inventory/FGShipmentsPage'
 import { InventoryCountPage } from './features/inventory/InventoryCountPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
@@ -92,6 +93,8 @@ export function App() {
       <WarehouseCenterPage token={token} />
     ) : route === 'lots' ? (
       <WarehouseRegistryPage token={token} />
+    ) : route === 'warehouse-accounts' ? (
+      <WarehouseAccountsPage token={token} />
     ) : route === 'movements' ? (
       <MovementsPage token={token} />
     ) : route === 'warehouse-operations' ? (

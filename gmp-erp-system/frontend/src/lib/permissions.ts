@@ -4,6 +4,7 @@ import {
   BookMarked,
   ClipboardList,
   ClipboardSignature,
+  Coins,
   Database,
   Factory,
   History,
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   // ─── Склад ────────────────────────────────────────────────────────────
   { labelKey: 'nav.receiptDocuments',     section: 'warehouse', permission: 'CREATE_RECEIPT',  route: 'receipt-documents',    icon: PackagePlus },
   { labelKey: 'nav.lots',                 section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'lots',                 icon: BookMarked },
+  { labelKey: 'nav.warehouseAccounts',    section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'warehouse-accounts',   icon: Coins },
   { labelKey: 'nav.warehouseOperations',  section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'warehouse-operations', icon: ArrowLeftRight },
   { labelKey: 'nav.requisitionsIncoming', section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'requisitions',         icon: ClipboardList, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.inventoryCounts',      section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'inventory-counts',     icon: ListChecks },

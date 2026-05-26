@@ -2,6 +2,7 @@ import type { CurrentUser, LoginRequest, LoginResponse } from '../types/auth'
 import type {
   LocationsResponse,
   LotsResponse,
+  AccountLedgerResponse,
   AdjustLotRequest,
   FGShipmentCreate,
   FGShipmentItem,
@@ -176,6 +177,10 @@ export function createMaterial(token: string, payload: MaterialCreate): Promise<
 
 export function listLots(token: string, query?: LotsQuery): Promise<LotsResponse> {
   return request<LotsResponse>('/api/inventory/lots', 'GET', { token, query })
+}
+
+export function getAccountLedger(token: string, query?: { date_from?: string; date_to?: string }): Promise<AccountLedgerResponse> {
+  return request<AccountLedgerResponse>('/api/inventory/accounts/ledger', 'GET', { token, query })
 }
 
 export function listMovements(token: string, query?: MovementsQuery): Promise<MovementsResponse> {

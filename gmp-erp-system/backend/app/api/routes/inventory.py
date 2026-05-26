@@ -28,6 +28,7 @@ from app.models.master_data import InventoryAccount, Location, Manufacturer, Mat
 from app.models.identity import User
 from app.models.quality import QCNotification, QCNotificationLine, QCNotificationScan, QCReport
 from app.schemas.inventory import (
+    AccountLedgerResponse,
     AdjustLotRequest,
     FGShipmentCreate,
     FGShipmentItem,
@@ -532,6 +533,21 @@ def list_lots(
         )
 
     return LotsResponse(lots=query.all())
+
+
+@router.get("/accounts/ledger", response_model=AccountLedgerResponse)
+def account_ledger_route(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> AccountLedgerResponse:
+    """Оборотная ведомость по счетам учёта: баланс (Σ стоимость партий) и
+    обороты со стоимостью за период."""
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.services.valuation import account_ledger
+
+    return AccountLedgerResponse.model_validate(account_ledger(db, date_from, date_to))
 
 
 @router.get("/movements", response_model=MovementsResponse)

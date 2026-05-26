@@ -597,6 +597,29 @@ export interface ReceiptDefectStatusUpdate {
   comment?: string | null
 }
 
+export interface AccountWarehouseValue {
+  warehouse_type: string
+  value: number
+}
+
+export interface AccountLedgerItem {
+  account_id: string | null
+  account_code: string
+  account_name: string
+  account_group: string | null
+  lots_count: number
+  balance_value: number
+  in_value: number
+  out_value: number
+  by_warehouse: AccountWarehouseValue[]
+}
+
+export interface AccountLedgerResponse {
+  currency: string
+  total_balance: number
+  accounts: AccountLedgerItem[]
+}
+
 export interface ImportDeclarationInput {
   gtd_number: string
   gtd_date?: string | null

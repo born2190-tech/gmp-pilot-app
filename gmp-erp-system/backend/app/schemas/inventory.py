@@ -149,6 +149,29 @@ class LotsResponse(BaseModel):
     lots: list[LotItem]
 
 
+class AccountWarehouseValue(BaseModel):
+    warehouse_type: str
+    value: float
+
+
+class AccountLedgerItem(BaseModel):
+    account_id: UUID | None = None
+    account_code: str
+    account_name: str
+    account_group: str | None = None
+    lots_count: int
+    balance_value: float
+    in_value: float
+    out_value: float
+    by_warehouse: list[AccountWarehouseValue] = []
+
+
+class AccountLedgerResponse(BaseModel):
+    currency: str
+    total_balance: float
+    accounts: list[AccountLedgerItem]
+
+
 class LotOperationResponse(LotItem):
     pass
 
