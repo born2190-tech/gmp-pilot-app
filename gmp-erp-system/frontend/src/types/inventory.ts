@@ -106,6 +106,12 @@ export interface LotItem {
   qc_report_no: string | null
   qa_decision_at: string | null
   has_certificate?: boolean
+  // Стоимость / счёт учёта / счёт-фактура / ГТД (Этап финучёта).
+  unit_cost?: number | null
+  currency?: string | null
+  account_code?: string | null
+  invoice_no?: string | null
+  gtd_number?: string | null
 }
 
 export interface LotsResponse {

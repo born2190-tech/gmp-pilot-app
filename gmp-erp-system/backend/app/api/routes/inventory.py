@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.models.inventory import (
     FGShipmentDocument,
     FGShipmentLine,
+    ImportDeclaration,
     InventoryCountDocument,
     InventoryCountLine,
     InventoryCountWave,
@@ -23,7 +24,7 @@ from app.models.inventory import (
     ReceiptDocument,
     ReceiptLine,
 )
-from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
+from app.models.master_data import InventoryAccount, Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.identity import User
 from app.models.quality import QCNotification, QCNotificationLine, QCNotificationScan, QCReport
 from app.schemas.inventory import (
@@ -434,6 +435,23 @@ def list_lots(
         .correlate(Lot)
         .exists()
     )
+    # № счёта-фактуры и № ГТД: партия → RECEIPT-движение → приход/декларация.
+    invoice_no_sq = (
+        db.query(ReceiptDocument.invoice_no)
+        .join(InventoryMovement, InventoryMovement.document_id == ReceiptDocument.id)
+        .filter(InventoryMovement.lot_id == Lot.id, InventoryMovement.movement_type == "RECEIPT")
+        .correlate(Lot)
+        .limit(1)
+        .scalar_subquery()
+    )
+    gtd_number_sq = (
+        db.query(ImportDeclaration.gtd_number)
+        .join(InventoryMovement, InventoryMovement.document_id == ImportDeclaration.receipt_id)
+        .filter(InventoryMovement.lot_id == Lot.id, InventoryMovement.movement_type == "RECEIPT")
+        .correlate(Lot)
+        .limit(1)
+        .scalar_subquery()
+    )
     query = (
         db.query(
             Lot.id,
@@ -464,12 +482,18 @@ def list_lots(
             latest_qc_report_no.label("qc_report_no"),
             Lot.qa_decision_at,
             has_certificate.label("has_certificate"),
+            Lot.unit_cost,
+            Lot.currency,
+            InventoryAccount.code.label("account_code"),
+            invoice_no_sq.label("invoice_no"),
+            gtd_number_sq.label("gtd_number"),
         )
         .join(Material, Material.id == Lot.material_id)
         .outerjoin(Supplier, Supplier.id == Lot.supplier_id)
         .join(Manufacturer, Manufacturer.id == Lot.manufacturer_id)
         .join(Warehouse, Warehouse.id == Lot.warehouse_id)
         .join(Location, Location.id == Lot.location_id)
+        .outerjoin(InventoryAccount, InventoryAccount.id == Lot.account_id)
         .order_by(Lot.created_at.desc())
     )
     if current_user.warehouse_scope:

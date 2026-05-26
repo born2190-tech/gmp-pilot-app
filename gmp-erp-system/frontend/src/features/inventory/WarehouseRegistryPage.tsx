@@ -818,6 +818,9 @@ function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t, onDo
             <Th align="right"><SortHeader label={t('registry.qty')} sortKey="quantity" sort={sort} onSort={onSort} align="right" /></Th>
             <Th>{t('registry.qualityStatus')}</Th>
             <Th><SortHeader label={t('registry.expiryDate')} sortKey="expiry_date" sort={sort} onSort={onSort} /></Th>
+            <Th align="right">{t('registry.value')}</Th>
+            <Th>{t('registry.invoiceNo')}</Th>
+            <Th>{t('registry.gtdNo')}</Th>
             <Th>{t('registry.qcReportNo')}</Th>
             <Th>{t('registry.certificate')}</Th>
           </tr>
@@ -890,6 +893,25 @@ function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t, onDo
                     </div>
                   )}
                 </Td>
+                <Td align="right">
+                  {lot.unit_cost != null ? (
+                    <>
+                      <span className="font-mono tabular-nums font-semibold text-slate-900">
+                        {(lot.quantity * lot.unit_cost).toLocaleString(locale)} <span className="text-[11px] font-normal text-slate-500">{lot.currency || ''}</span>
+                      </span>
+                      <div className="font-mono text-[10.5px] text-slate-400">
+                        {lot.unit_cost.toLocaleString(locale)} / {lot.unit}
+                      </div>
+                      {lot.account_code && (
+                        <div className="font-mono text-[10.5px] text-slate-400">{t('registry.account')}: {lot.account_code}</div>
+                      )}
+                    </>
+                  ) : (
+                    <span className="font-mono text-[11.5px] text-slate-400">—</span>
+                  )}
+                </Td>
+                <Td><span className="font-mono text-[11.5px] text-slate-700">{lot.invoice_no || '—'}</span></Td>
+                <Td><span className="font-mono text-[11.5px] text-slate-700">{lot.gtd_number || '—'}</span></Td>
                 <Td>
                   {lot.qc_report_no ? (
                     <div className="flex items-center gap-1.5">

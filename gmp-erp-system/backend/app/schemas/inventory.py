@@ -137,6 +137,12 @@ class LotItem(BaseModel):
     qc_report_no: str | None = None
     qa_decision_at: datetime | None
     has_certificate: bool = False
+    # Стоимость / счёт учёта / счёт-фактура / ГТД (для реестра).
+    unit_cost: float | None = None
+    currency: str | None = None
+    account_code: str | None = None
+    invoice_no: str | None = None
+    gtd_number: str | None = None
 
 
 class LotsResponse(BaseModel):
