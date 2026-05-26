@@ -18,6 +18,15 @@ class ReceiptDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     manufacturer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("manufacturers.id"), nullable=False)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=False)
     received_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Счёт-фактура (ЭСФ Didox/Rouming) и договор — вносятся при приёмке.
+    invoice_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    invoice_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    contract_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    contract_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="UZS")
+    # Идентификатор документа в системе ЭСФ (Didox/Rouming/Soliq) — для сверки
+    # и будущего автозаполнения по API.
+    einvoice_external_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     posted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -88,6 +97,51 @@ class ReceiptCertificate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class ImportDeclaration(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Грузовая таможенная декларация (ГТД, ИМ-40) — одна на приход (импорт).
+
+    Заполняется при приёмке импортных материалов. Скан/электронная выгрузка
+    хранятся отдельно (ImportDeclarationScan). Код ТН ВЭД — по строке прихода
+    (ReceiptLine.hs_code), т.к. одна ГТД может покрывать несколько материалов.
+    """
+
+    __tablename__ = "import_declarations"
+
+    receipt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_documents.id"), nullable=False)
+    # Регистрационный номер ГТД (таможня/дата/№) и дата оформления.
+    gtd_number: Mapped[str] = mapped_column(String(128), nullable=False)
+    gtd_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    procedure: Mapped[str | None] = mapped_column(String(16), nullable=True)  # напр. «ИМ 40»
+    country_origin: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    country_dispatch: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    foreign_manufacturer: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    broker: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    incoterms: Mapped[str | None] = mapped_column(String(16), nullable=True)  # CIP, FOB…
+    contract_currency: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 840=USD…
+    invoice_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # фактурная стоимость
+    customs_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # таможенная стоимость
+    exchange_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gross_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    net_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Идентификатор в системе электронного декларирования (для сверки).
+    edeclaration_external_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ImportDeclarationScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Скан/электронная выгрузка ГТД. Хранится на диске, в БД — путь + sha256."""
+
+    __tablename__ = "import_declaration_scans"
+
+    declaration_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("import_declarations.id"), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_size: Mapped[int] = mapped_column(nullable=False)
+    sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ReceiptLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "receipt_lines"
 
@@ -102,6 +156,11 @@ class ReceiptLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
     location_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=False)
+    # Цена/НДС из строки счёта-фактуры + код ИКПУ; код ТН ВЭД (для импорта).
+    ikpu_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    unit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vat_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hs_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     receipt: Mapped[ReceiptDocument] = relationship()
     material: Mapped[Material] = relationship()
@@ -124,11 +183,19 @@ class Lot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
     warehouse_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=False)
     location_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=False)
+    # Счёт учёта (текущий): при приёмке наследуется от материала, может
+    # меняться перемещением (АФИ → цех) — перенос стоимости со счёта на счёт.
+    account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("inventory_accounts.id"), nullable=True)
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     # Initial quantity captured at receipt; never decreases. Used as the
     # denominator for the «мало остатков» KPI (current/initial < 10%).
     initial_quantity: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Себестоимость единицы из счёта-фактуры (валюта прихода). Стоимость
+    # партии = quantity × unit_cost — основа стоимостной оборотной ведомости.
+    unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="UZS")
+    hs_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     quality_status: Mapped[str] = mapped_column(String(32), nullable=False)
     # Physical address inside the warehouse (form Ф-3 СОП-415: учётная карточка
     # сырья). All optional — operator fills what's relevant for the warehouse
@@ -161,6 +228,9 @@ class InventoryMovement(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     from_location_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=True)
     to_warehouse_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=True)
     to_location_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("locations.id"), nullable=True)
+    # Счета учёта источника/получателя — для переноса стоимости (АФИ → цех).
+    from_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("inventory_accounts.id"), nullable=True)
+    to_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("inventory_accounts.id"), nullable=True)
     quantity_delta: Mapped[float] = mapped_column(Float, nullable=False)
     quantity_after: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str] = mapped_column(String(32), nullable=False)

@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
-from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
+from app.models.inventory import FGShipmentDocument, FGShipmentLine, ImportDeclaration, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
 from app.schemas.inventory import AdjustLotRequest, FGShipmentCreate, InventoryCountCreate, IssueProductionRequest, MaterialCreateInline, ReceiptCreate, ReferenceCreateInline, SignatureRequest, TransferLotRequest
 from app.services.audit import write_audit
@@ -111,6 +111,12 @@ def create_receipt_draft(db: Session, user: CurrentUser, payload: ReceiptCreate)
         manufacturer=document_manufacturer,
         warehouse=warehouse,
         received_date=payload.received_date,
+        invoice_no=payload.invoice_no or None,
+        invoice_date=payload.invoice_date,
+        contract_no=payload.contract_no or None,
+        contract_date=payload.contract_date,
+        currency=(payload.currency or "UZS"),
+        einvoice_external_id=payload.einvoice_external_id or None,
     )
     db.add(receipt)
     db.flush()
@@ -129,6 +135,35 @@ def create_receipt_draft(db: Session, user: CurrentUser, payload: ReceiptCreate)
                 quantity=line.quantity,
                 unit=line.unit,
                 location=location,
+                ikpu_code=line.ikpu_code or None,
+                unit_price=line.unit_price,
+                vat_rate=line.vat_rate,
+                hs_code=line.hs_code or None,
+            )
+        )
+
+    # ГТД (если импорт) — одна на приход.
+    if payload.import_declaration is not None:
+        gtd = payload.import_declaration
+        db.add(
+            ImportDeclaration(
+                receipt_id=receipt.id,
+                gtd_number=gtd.gtd_number,
+                gtd_date=gtd.gtd_date,
+                procedure=gtd.procedure,
+                country_origin=gtd.country_origin,
+                country_dispatch=gtd.country_dispatch,
+                foreign_manufacturer=gtd.foreign_manufacturer,
+                broker=gtd.broker,
+                incoterms=gtd.incoterms,
+                contract_currency=gtd.contract_currency,
+                invoice_value=gtd.invoice_value,
+                customs_value=gtd.customs_value,
+                exchange_rate=gtd.exchange_rate,
+                gross_weight=gtd.gross_weight,
+                net_weight=gtd.net_weight,
+                edeclaration_external_id=gtd.edeclaration_external_id,
+                notes=gtd.notes,
             )
         )
 
@@ -218,9 +253,14 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             expiry_date=line.expiry_date,
             warehouse_id=receipt.warehouse_id,
             location_id=line.location_id,
+            # Счёт учёта наследуется от материала; себестоимость/валюта/ТН ВЭД — из строки/прихода.
+            account_id=material.account_id,
             quantity=line.quantity,
             initial_quantity=line.quantity,
             unit=line.unit,
+            unit_cost=line.unit_price,
+            currency=(receipt.currency or "UZS"),
+            hs_code=line.hs_code or None,
             quality_status="quarantine",
             incoming_control_notified_at=quarantine_time,
         )
@@ -236,6 +276,7 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
                 from_location_id=None,
                 to_warehouse_id=receipt.warehouse_id,
                 to_location_id=line.location_id,
+                to_account_id=material.account_id,
                 quantity_delta=line.quantity,
                 quantity_after=line.quantity,
                 unit=line.unit,

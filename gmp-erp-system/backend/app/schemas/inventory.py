@@ -28,11 +28,37 @@ class ReceiptLineCreate(BaseModel):
     quantity: float = Field(gt=0)
     unit: str = Field(min_length=1)
     location_id: UUID
+    # Цена/НДС из строки счёта-фактуры + ИКПУ; код ТН ВЭД (импорт).
+    ikpu_code: str | None = None
+    unit_price: float | None = Field(default=None, ge=0)
+    vat_rate: float | None = Field(default=None, ge=0)
+    hs_code: str | None = None
 
     @field_validator("material_id", "supplier_id", "manufacturer_id", mode="before")
     @classmethod
     def blank_id_to_none(cls, value):
         return None if value == "" else value
+
+
+class ImportDeclarationInput(BaseModel):
+    """ГТД (ИМ-40) — одна на приход (импорт)."""
+
+    gtd_number: str = Field(min_length=1, max_length=128)
+    gtd_date: date | None = None
+    procedure: str | None = Field(default=None, max_length=16)
+    country_origin: str | None = Field(default=None, max_length=128)
+    country_dispatch: str | None = Field(default=None, max_length=128)
+    foreign_manufacturer: str | None = Field(default=None, max_length=255)
+    broker: str | None = Field(default=None, max_length=255)
+    incoterms: str | None = Field(default=None, max_length=16)
+    contract_currency: str | None = Field(default=None, max_length=8)
+    invoice_value: float | None = Field(default=None, ge=0)
+    customs_value: float | None = Field(default=None, ge=0)
+    exchange_rate: float | None = Field(default=None, ge=0)
+    gross_weight: float | None = Field(default=None, ge=0)
+    net_weight: float | None = Field(default=None, ge=0)
+    edeclaration_external_id: str | None = Field(default=None, max_length=128)
+    notes: str | None = None
 
 
 class ReceiptCreate(BaseModel):
@@ -43,6 +69,15 @@ class ReceiptCreate(BaseModel):
     manufacturer: ReferenceCreateInline | None = None
     warehouse_id: UUID
     received_date: date
+    # Реквизиты счёта-фактуры (ЭСФ) / договора / валюты.
+    invoice_no: str | None = None
+    invoice_date: date | None = None
+    contract_no: str | None = None
+    contract_date: date | None = None
+    currency: str = "UZS"
+    einvoice_external_id: str | None = None
+    # ГТД (если импорт).
+    import_declaration: ImportDeclarationInput | None = None
     lines: list[ReceiptLineCreate] = Field(min_length=1)
 
     @field_validator("supplier_id", "manufacturer_id", mode="before")

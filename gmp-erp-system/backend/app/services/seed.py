@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.models.identity import Department, Permission, Role, User
-from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
+from app.models.master_data import InventoryAccount, Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import MaterialSpecification, SpecificationParameter
 
 
@@ -241,8 +241,50 @@ def seed_foundation_data(db: Session) -> None:
 
     db.flush()
     seed_specifications(db)
+    seed_inventory_accounts(db)
 
     db.commit()
+
+
+# Счета учёта запасов: код, наименование, группа.
+INVENTORY_ACCOUNTS: list[tuple[str, str, str]] = [
+    ("001-20", "Активные фармацевтические субстанции (АФИ)", "SUBSTANCE_API"),
+    ("001-21", "Вспомогательные материалы", "EXCIPIENT"),
+    ("002-30", "Упаковочные материалы", "PACKAGING"),
+    ("002-40", "Незавершённое производство (цех)", "WIP"),
+]
+
+
+def seed_inventory_accounts(db: Session) -> None:
+    """Идемпотентно создаёт счета учёта и проставляет материалам счёт по виду.
+
+    Привязка материала — эвристика по коду (API*/TIG* → АФИ, EXC* →
+    вспомогательные, PACK* → упаковочные). Далее счёт правится в карточке
+    материала. Не перетираем уже заданный material.account_id.
+    """
+    accounts: dict[str, InventoryAccount] = {}
+    for code, name, group in INVENTORY_ACCOUNTS:
+        row = db.query(InventoryAccount).filter(InventoryAccount.code == code).first()
+        if not row:
+            row = InventoryAccount(code=code, name=name, account_group=group, is_active=True)
+            db.add(row)
+        accounts[group] = row
+    db.flush()
+
+    def account_for(material: Material) -> InventoryAccount | None:
+        code = (material.code or "").upper()
+        if code.startswith(("API", "TIG", "GLZ", "CLP", "ETR", "ESO", "TCG")):
+            return accounts.get("SUBSTANCE_API")
+        if code.startswith(("EXC", "AUX")):
+            return accounts.get("EXCIPIENT")
+        if code.startswith(("PACK", "PKG", "IM-", "ИМ")):
+            return accounts.get("PACKAGING")
+        return None
+
+    for material in db.query(Material).filter(Material.account_id.is_(None)).all():
+        acc = account_for(material)
+        if acc is not None:
+            material.account_id = acc.id
 
 
 # Микробиологический метод-референс (общий для субстанций).

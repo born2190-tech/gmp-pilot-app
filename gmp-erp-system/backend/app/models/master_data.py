@@ -40,6 +40,23 @@ class Manufacturer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
+class InventoryAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Бухгалтерский счёт учёта запасов (напр. «001-20»).
+
+    Классифицирует запасы по виду материала/стадии (АФИ, вспомогательные,
+    упаковочные и т.д.), не равен физическому складу: в одном складе могут
+    лежать материалы на разных счетах. Используется для стоимостной
+    оборотной ведомости и переноса стоимости при перемещении (АФИ → цех)."""
+
+    __tablename__ = "inventory_accounts"
+
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Необязательная группа: SUBSTANCE_API | EXCIPIENT | PACKAGING | WIP | OTHER
+    account_group: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+
 class Material(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "materials"
 
@@ -47,6 +64,9 @@ class Material(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     item_type: Mapped[str] = mapped_column(String(64), nullable=False)
     default_unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Счёт учёта по виду материала (АФИ/вспомогательные/упаковочные). Партия
+    # при приёмке наследует этот счёт; далее счёт может меняться перемещением.
+    account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("inventory_accounts.id"), nullable=True)
     # Нормы отбора средней пробы (оцифровка Ф-1 к СОП-533/548). Заполняются
     # ОКК при первом отборе материала и переиспользуются дальше. Не зависят
     # от объёма партии — определяются методиками анализа.

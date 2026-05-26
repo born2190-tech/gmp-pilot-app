@@ -1,8 +1,19 @@
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.base import Base
 from app.models.identity import AuthSession, Department, Permission, Role, User, role_permissions
-from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
-from app.models.master_data import Employee, Location, Manufacturer, Material, Supplier, Warehouse
+from app.models.inventory import (
+    FGShipmentDocument,
+    FGShipmentLine,
+    ImportDeclaration,
+    ImportDeclarationScan,
+    InventoryCountDocument,
+    InventoryCountLine,
+    InventoryMovement,
+    Lot,
+    ReceiptDocument,
+    ReceiptLine,
+)
+from app.models.master_data import Employee, InventoryAccount, Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import (
     MaterialSpecification,
     QCNotification,
@@ -20,6 +31,9 @@ __all__ = [
     "Employee",
     "FGShipmentDocument",
     "FGShipmentLine",
+    "ImportDeclaration",
+    "ImportDeclarationScan",
+    "InventoryAccount",
     "InventoryCountDocument",
     "InventoryCountLine",
     "InventoryMovement",
