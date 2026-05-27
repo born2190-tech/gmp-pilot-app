@@ -66,6 +66,34 @@ class QCReportScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class OOSInvestigation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Расследование несоответствия результата (OOS / РНС, СОП-549).
+
+    Создаётся автоматически при подписании протокола ОКК с вердиктом
+    «НЕ соответствует». Пока расследование открыто — допуск серии (ОКА)
+    заблокирован. Заключение определяет диспозицию: подтверждённый брак,
+    лабораторная ошибка (ретест) или использование с обоснованием.
+    """
+
+    __tablename__ = "oos_investigations"
+
+    number: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    report_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("qc_reports.id"), nullable=False)
+    lot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lots.id"), nullable=False)
+    # open | investigating | closed
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    # Сводка проваленных показателей (текст).
+    failed_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conclusion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # confirmed_reject | lab_error_retest | use_as_is
+    disposition: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    opened_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    closed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class QCNotification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "qc_notifications"
 

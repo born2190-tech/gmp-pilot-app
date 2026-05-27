@@ -17,6 +17,10 @@ from app.schemas.quality import (
     MaterialSpecificationItem,
     MaterialSpecificationListItem,
     MaterialSpecificationsResponse,
+    OOSCloseRequest,
+    OOSItem,
+    OOSListResponse,
+    OOSUpdateRequest,
     QADecisionRequest,
     QCNotificationItem,
     QCNotificationLineItem,
@@ -691,3 +695,60 @@ def resolve_lot_specification_route(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lot not found")
     spec = spec_service.resolve_for_lot(db, lot)
     return MaterialSpecificationItem.model_validate(spec) if spec else None
+
+
+# ---------------------------------------------------------------------------
+# OOS / РНС — расследование несоответствия (СОП-549)
+# ---------------------------------------------------------------------------
+
+
+def _oos_item(db: Session, row) -> OOSItem:
+    from app.models.quality import QCReport
+
+    lot = db.get(Lot, row.lot_id)
+    material = db.get(Material, lot.material_id) if lot else None
+    report = db.get(QCReport, row.report_id)
+    item = OOSItem.model_validate(row)
+    item.internal_lot = (lot.supplier_lot or lot.internal_lot) if lot else None
+    item.material_name = material.name if material else None
+    item.report_no = report.report_no if report else None
+    return item
+
+
+@router.get("/oos", response_model=OOSListResponse)
+def list_oos_route(
+    status_filter: str | None = Query(default=None, alias="status"),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> OOSListResponse:
+    require_permission(current_user, "VIEW_QC")
+    from app.services import oos as oos_service
+
+    rows = oos_service.list_oos(db, status_filter)
+    return OOSListResponse(investigations=[_oos_item(db, r) for r in rows])
+
+
+@router.put("/oos/{oos_id}", response_model=OOSItem)
+def update_oos_route(
+    oos_id: UUID,
+    payload: OOSUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> OOSItem:
+    from app.services import oos as oos_service
+
+    row = oos_service.update_oos(db, current_user, oos_id, payload)
+    return _oos_item(db, row)
+
+
+@router.post("/oos/{oos_id}/close", response_model=OOSItem)
+def close_oos_route(
+    oos_id: UUID,
+    payload: OOSCloseRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> OOSItem:
+    from app.services import oos as oos_service
+
+    row = oos_service.close_oos(db, current_user, oos_id, payload)
+    return _oos_item(db, row)

@@ -6,6 +6,8 @@ import type {
   InventoryAccountInput,
   InventoryAccountItem,
   InventoryAccountsResponse,
+  OOSItem,
+  OOSListResponse,
   AdjustLotRequest,
   FGShipmentCreate,
   FGShipmentItem,
@@ -731,6 +733,18 @@ export function createQcReport(token: string, payload: QCReportCreate): Promise<
 
 export function submitQcReport(token: string, reportId: string, payload: SignatureRequest): Promise<QCReportItem> {
   return request<QCReportItem>(`/api/quality/qc-reports/${reportId}/submit`, 'POST', { token, body: payload })
+}
+
+export function listOos(token: string, status?: string): Promise<OOSListResponse> {
+  return request<OOSListResponse>('/api/quality/oos', 'GET', { token, query: { status } })
+}
+
+export function updateOos(token: string, oosId: string, payload: { root_cause?: string | null; conclusion?: string | null; disposition?: string | null }): Promise<OOSItem> {
+  return request<OOSItem>(`/api/quality/oos/${oosId}`, 'PUT', { token, body: payload })
+}
+
+export function closeOos(token: string, oosId: string, payload: SignatureRequest & { conclusion: string; disposition: string; root_cause?: string | null }): Promise<OOSItem> {
+  return request<OOSItem>(`/api/quality/oos/${oosId}/close`, 'POST', { token, body: payload })
 }
 
 export function submitQaDecision(token: string, lotId: string, payload: QADecisionRequest): Promise<QualityLotsResponse['lots'][number]> {

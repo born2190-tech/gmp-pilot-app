@@ -299,6 +299,29 @@ export interface MaterialSpecificationsResponse {
   specifications: MaterialSpecificationListItem[]
 }
 
+export type OOSDisposition = 'confirmed_reject' | 'lab_error_retest' | 'use_as_is'
+
+export interface OOSItem {
+  id: string
+  number: string
+  report_id: string
+  lot_id: string
+  status: string
+  failed_summary: string | null
+  root_cause: string | null
+  conclusion: string | null
+  disposition: OOSDisposition | null
+  opened_at: string
+  closed_at: string | null
+  internal_lot: string | null
+  material_name: string | null
+  report_no: string | null
+}
+
+export interface OOSListResponse {
+  investigations: OOSItem[]
+}
+
 export interface QCReportItem {
   id: string
   lot_id: string

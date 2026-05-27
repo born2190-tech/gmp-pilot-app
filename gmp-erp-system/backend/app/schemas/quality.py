@@ -306,6 +306,46 @@ class MaterialSpecificationsResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# OOS / РНС — out-of-specification investigations
+# ---------------------------------------------------------------------------
+
+
+class OOSItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    number: str
+    report_id: UUID
+    lot_id: UUID
+    status: str
+    failed_summary: str | None
+    root_cause: str | None
+    conclusion: str | None
+    disposition: str | None
+    opened_at: datetime
+    closed_at: datetime | None
+    internal_lot: str | None = None
+    material_name: str | None = None
+    report_no: str | None = None
+
+
+class OOSListResponse(BaseModel):
+    investigations: list[OOSItem]
+
+
+class OOSUpdateRequest(BaseModel):
+    root_cause: str | None = None
+    conclusion: str | None = None
+    disposition: str | None = None
+
+
+class OOSCloseRequest(SignatureRequest):
+    conclusion: str = Field(min_length=1)
+    disposition: str = Field(pattern="^(confirmed_reject|lab_error_retest|use_as_is)$")
+    root_cause: str | None = None
+
+
+# ---------------------------------------------------------------------------
 # Sampling acts — СОП-533 / СОП-548 Ф-10
 # ---------------------------------------------------------------------------
 

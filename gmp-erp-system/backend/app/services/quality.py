@@ -210,6 +210,36 @@ def submit_qc_report(db: Session, user: CurrentUser, report_id: UUID, signature:
     old_status = lot.quality_status
     lot.quality_status = "under_test"
     lot.qc_result_received_at = report.submitted_at
+
+    # OOS / РНС (СОП-549): при вердикте «НЕ соответствует» автоматически
+    # открываем расследование несоответствия (если ещё не открыто по протоколу).
+    if overall_result == "does_not_comply":
+        from app.models.quality import OOSInvestigation
+
+        exists = db.query(OOSInvestigation).filter(OOSInvestigation.report_id == report.id).first()
+        if not exists:
+            failed = [p for p in parameters if not p.complies]
+            summary = "; ".join(
+                f"{p.parameter_name}: {p.result_value}{(' ' + p.unit) if p.unit else ''} (норма: {p.specification})"
+                for p in failed
+            )
+            seq = db.query(OOSInvestigation).count() + 1
+            number = f"РНС-{report.submitted_at.strftime('%Y%m%d')}-{seq:03d}"
+            db.add(
+                OOSInvestigation(
+                    number=number,
+                    report_id=report.id,
+                    lot_id=lot.id,
+                    status="open",
+                    failed_summary=summary[:4000],
+                    opened_by=user.id,
+                    opened_at=report.submitted_at,
+                )
+            )
+            write_audit(
+                db, user, object_type="oos_investigation", object_id=str(report.id),
+                action_type="OPEN_OOS", new_value={"number": number, "lot_id": str(lot.id)},
+            )
     write_audit(
         db,
         user,
@@ -230,6 +260,17 @@ def qa_decision(db: Session, user: CurrentUser, lot_id: UUID, payload: QADecisio
     lot = get_lot(db, lot_id)
     if lot.quality_status != "under_test" or not lot.qc_result_received_at:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="QA decision requires received QC result")
+
+    # OOS / РНС: пока есть открытое расследование несоответствия — допуск
+    # серии запрещён (СОП-549). Расследование должно быть закрыто.
+    if payload.decision == "released":
+        from app.services.oos import has_open_oos
+
+        if has_open_oos(db, lot.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Допуск невозможен: по серии открыто расследование OOS/РНС (СОП-549). Закройте расследование.",
+            )
 
     validate_signature(db, user, payload, "QA_DECISION", "lot", str(lot.id))
     old_status = lot.quality_status

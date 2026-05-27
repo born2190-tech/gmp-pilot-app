@@ -16,6 +16,7 @@ from app.models.inventory import (
 from app.models.master_data import Employee, InventoryAccount, Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import (
     MaterialSpecification,
+    OOSInvestigation,
     QCNotification,
     QCNotificationLine,
     QCReport,
@@ -42,6 +43,7 @@ __all__ = [
     "Manufacturer",
     "Material",
     "MaterialSpecification",
+    "OOSInvestigation",
     "Permission",
     "QCNotification",
     "QCNotificationLine",

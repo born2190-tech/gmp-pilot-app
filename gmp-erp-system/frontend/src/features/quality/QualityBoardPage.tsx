@@ -14,12 +14,15 @@ import {
   X,
 } from 'lucide-react'
 import {
+  closeOos,
   downloadQcReportScan,
+  listOos,
   listQaLots,
   listQcLots,
   listQcReports,
   listSamplingActs,
   submitQaDecision,
+  updateOos,
   uploadQcReportScan,
 } from '../../lib/api'
 import { DataTable } from '../../components/table/DataTable'
@@ -28,7 +31,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
-import type { LotItem, QcReportListItem, SamplingActItem } from '../../types/inventory'
+import type { LotItem, OOSItem, QcReportListItem, SamplingActItem } from '../../types/inventory'
 import { SamplingActPanel } from './SamplingActPanel'
 import { QcAnalysisWorkspace } from './QcAnalysisWorkspace'
 
@@ -67,6 +70,8 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
   const [acts, setActs] = useState<SamplingActItem[]>([])
   const [reports, setReports] = useState<QcReportListItem[]>([])
   const [reportsModalOpen, setReportsModalOpen] = useState(false)
+  const [oosList, setOosList] = useState<OOSItem[]>([])
+  const [oosModalOpen, setOosModalOpen] = useState(false)
   const [phaseFilter, setPhaseFilter] = useState<Phase | null>(null)
   const [collapsedPhases, setCollapsedPhases] = useState<Set<Phase>>(new Set())
   const [selectedLotId, setSelectedLotId] = useState('')
@@ -85,9 +90,10 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
       setLots(response.lots)
       setSelectedLotId((current) => current || response.lots[0]?.id || '')
       if (mode === 'qc') {
-        const [actsResp, reportsResp] = await Promise.all([listSamplingActs(token), listQcReports(token)])
+        const [actsResp, reportsResp, oosResp] = await Promise.all([listSamplingActs(token), listQcReports(token), listOos(token)])
         setActs(actsResp.sampling_acts)
         setReports(reportsResp.reports)
+        setOosList(oosResp.investigations)
       }
       setError(null)
     } catch (err) {
@@ -224,13 +230,14 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
         {success && <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p>}
 
         {/* KPI tiles */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
           <KpiTile icon={Inbox} accent="bg-slate-100 text-slate-700" label={t('qc.kpi.newNotifications')} sub={t('qc.kpi.newNotificationsSub')} value={kpi.AWAITING_SAMPLING} active={phaseFilter === 'AWAITING_SAMPLING'} onClick={() => setPhaseFilter((p) => (p === 'AWAITING_SAMPLING' ? null : 'AWAITING_SAMPLING'))} />
           <KpiTile icon={ClipboardSignature} accent="bg-amber-50 text-amber-700" label={t('qc.kpi.awaitingSampling')} sub={t('qc.kpi.awaitingSamplingSub')} value={kpi.DRAFT} active={phaseFilter === 'DRAFT'} onClick={() => setPhaseFilter((p) => (p === 'DRAFT' ? null : 'DRAFT'))} />
           <KpiTile icon={FileScan} accent="bg-sky-50 text-sky-700" label={t('qc.kpi.scanUploaded')} sub={t('qc.kpi.scanUploadedSub')} value={kpi.SCAN_UPLOADED} active={phaseFilter === 'SCAN_UPLOADED'} onClick={() => setPhaseFilter((p) => (p === 'SCAN_UPLOADED' ? null : 'SCAN_UPLOADED'))} />
           <KpiTile icon={FlaskConical} accent="bg-violet-50 text-violet-700" label={t('qc.kpi.inAnalysis')} sub={t('qc.kpi.inAnalysisSub')} value={kpi.SAMPLING_VERIFIED} active={phaseFilter === 'SAMPLING_VERIFIED'} onClick={() => setPhaseFilter((p) => (p === 'SAMPLING_VERIFIED' ? null : 'SAMPLING_VERIFIED'))} />
           <KpiTile icon={CheckCircle2} accent="bg-emerald-50 text-emerald-700" label={t('qc.kpi.resultReady')} sub={t('qc.kpi.resultReadySub')} value={kpi.RESULT_READY} active={phaseFilter === 'RESULT_READY'} onClick={() => setPhaseFilter((p) => (p === 'RESULT_READY' ? null : 'RESULT_READY'))} />
           <KpiTile icon={FileText} accent="bg-blue-50 text-blue-700" label={t('qc.kpi.analyticalSheets')} sub={t('qc.kpi.analyticalSheetsSub')} value={reports.length} onClick={() => setReportsModalOpen(true)} />
+          <KpiTile icon={AlertTriangle} accent="bg-rose-50 text-rose-700" label={t('qc.kpi.oos')} sub={t('qc.kpi.oosSub')} value={oosList.filter((o) => o.status !== 'closed').length} onClick={() => setOosModalOpen(true)} />
         </div>
 
         {/* Search */}
@@ -314,6 +321,10 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
 
         {reportsModalOpen && (
           <QcReportsModal token={token} reports={reports} locale={locale} t={t} onReload={loadLots} onClose={() => setReportsModalOpen(false)} />
+        )}
+
+        {oosModalOpen && (
+          <OosModal token={token} user={user} investigations={oosList} locale={locale} t={t} onReload={loadLots} onClose={() => setOosModalOpen(false)} />
         )}
       </section>
     )
@@ -646,6 +657,150 @@ function QcReportsModal({
                         onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(r, f); e.target.value = '' }}
                       />
                     </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Модалка расследований OOS / РНС (СОП-549) ──────────────────────────────
+
+function OosModal({
+  token,
+  user,
+  investigations,
+  locale,
+  t,
+  onReload,
+  onClose,
+}: {
+  token: string
+  user: CurrentUser
+  investigations: OOSItem[]
+  locale: string
+  t: Translate
+  onReload: () => void
+  onClose: () => void
+}) {
+  const [drafts, setDrafts] = useState<Record<string, { root_cause: string; conclusion: string; disposition: string; password: string }>>({})
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  function draftOf(o: OOSItem) {
+    return drafts[o.id] ?? { root_cause: o.root_cause || '', conclusion: o.conclusion || '', disposition: o.disposition || '', password: '' }
+  }
+  function patch(id: string, p: Partial<{ root_cause: string; conclusion: string; disposition: string; password: string }>) {
+    setDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { root_cause: '', conclusion: '', disposition: '', password: '' }), ...p } }))
+  }
+
+  async function save(o: OOSItem) {
+    const d = draftOf(o)
+    setBusyId(o.id); setError(null)
+    try {
+      await updateOos(token, o.id, { root_cause: d.root_cause || null, conclusion: d.conclusion || null, disposition: d.disposition || null })
+      onReload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('qc.oos.actionFailed'))
+    } finally { setBusyId(null) }
+  }
+
+  async function close(o: OOSItem) {
+    const d = draftOf(o)
+    if (!d.conclusion.trim() || !d.disposition) { setError(t('qc.oos.errClose')); return }
+    setBusyId(o.id); setError(null)
+    try {
+      await closeOos(token, o.id, {
+        username: user.username,
+        password: d.password,
+        meaning: t('qc.oos.meaning'),
+        reason: t('qc.oos.reason'),
+        conclusion: d.conclusion,
+        disposition: d.disposition,
+        root_cause: d.root_cause || null,
+      })
+      onReload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('qc.oos.actionFailed'))
+    } finally { setBusyId(null) }
+  }
+
+  const DISPO: Record<string, string> = {
+    confirmed_reject: t('qc.oos.dispo.confirmed_reject'),
+    lab_error_retest: t('qc.oos.dispo.lab_error_retest'),
+    use_as_is: t('qc.oos.dispo.use_as_is'),
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={18} className="text-rose-700" />
+            <h2 className="text-base font-semibold text-slate-950">{t('qc.oos.title')}</h2>
+            <span className="text-[12px] font-medium text-slate-400">· {investigations.length}</span>
+          </div>
+          <button type="button" onClick={onClose} aria-label="close" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={16} /></button>
+        </div>
+        <div className="overflow-y-auto px-5 py-4">
+          {error && <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-700">{error}</div>}
+          <p className="mb-3 text-[12px] text-slate-500">{t('qc.oos.hint')}</p>
+          {investigations.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-500">{t('qc.oos.empty')}</p>
+          ) : (
+            <div className="space-y-3">
+              {investigations.map((o) => {
+                const closed = o.status === 'closed'
+                const d = draftOf(o)
+                return (
+                  <div key={o.id} className={`rounded-lg border px-3 py-3 ${closed ? 'border-slate-200 bg-slate-50/40' : 'border-rose-200 bg-rose-50/30'}`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-[13px] font-semibold text-slate-900">{o.number}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-medium ${closed ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                        {closed ? t('qc.oos.closed') : t('qc.oos.open')}
+                      </span>
+                      <span className="font-mono text-[11px] text-slate-500">{o.material_name || '—'} · {o.internal_lot || '—'} · {o.report_no || ''}</span>
+                      <span className="ml-auto text-[11px] text-slate-400">{new Intl.DateTimeFormat(locale, { dateStyle: 'short' }).format(new Date(o.opened_at))}</span>
+                    </div>
+                    {o.failed_summary && <p className="mt-1.5 text-[12px] text-rose-800">{o.failed_summary}</p>}
+
+                    {closed ? (
+                      <div className="mt-2 space-y-1 text-[12.5px] text-slate-700">
+                        <p><span className="text-slate-500">{t('qc.oos.rootCause')}:</span> {o.root_cause || '—'}</p>
+                        <p><span className="text-slate-500">{t('qc.oos.conclusion')}:</span> {o.conclusion || '—'}</p>
+                        <p><span className="text-slate-500">{t('qc.oos.disposition')}:</span> <span className="font-medium">{o.disposition ? DISPO[o.disposition] : '—'}</span></p>
+                      </div>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        <textarea value={d.root_cause} onChange={(e) => patch(o.id, { root_cause: e.target.value })} placeholder={t('qc.oos.rootCause')} rows={2}
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[12.5px] outline-none focus:border-slate-400" />
+                        <textarea value={d.conclusion} onChange={(e) => patch(o.id, { conclusion: e.target.value })} placeholder={t('qc.oos.conclusion')} rows={2}
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[12.5px] outline-none focus:border-slate-400" />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select value={d.disposition} onChange={(e) => patch(o.id, { disposition: e.target.value })}
+                            className="h-9 rounded-md border border-slate-200 bg-white px-2 text-[12.5px] outline-none focus:border-slate-400">
+                            <option value="">{t('qc.oos.dispoPlaceholder')}</option>
+                            <option value="confirmed_reject">{DISPO.confirmed_reject}</option>
+                            <option value="lab_error_retest">{DISPO.lab_error_retest}</option>
+                            <option value="use_as_is">{DISPO.use_as_is}</option>
+                          </select>
+                          <input type="password" value={d.password} onChange={(e) => patch(o.id, { password: e.target.value })} placeholder={t('quality.signaturePassword')}
+                            className="h-9 w-40 rounded-md border border-slate-200 bg-white px-2 font-mono text-[12.5px] outline-none focus:border-slate-400" />
+                          <button type="button" disabled={busyId === o.id} onClick={() => void save(o)}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[12.5px] font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
+                            {t('common.save')}
+                          </button>
+                          <button type="button" disabled={busyId === o.id || !d.password} onClick={() => void close(o)}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-emerald-700 px-3 text-[12.5px] font-semibold text-white hover:bg-emerald-600 disabled:opacity-50">
+                            <CheckCircle2 size={14} /> {t('qc.oos.close')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
