@@ -338,6 +338,10 @@ export interface MovementItem {
   reason: string | null
   workstation_id: string
   created_at: string
+  value?: number | null
+  currency?: string | null
+  from_account_code?: string | null
+  to_account_code?: string | null
 }
 
 export interface MovementsResponse {

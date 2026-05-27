@@ -105,3 +105,58 @@ def account_ledger(db: Session, date_from: date | None = None, date_to: date | N
         total_balance += float(unassigned.balance_value)
 
     return {"currency": "UZS", "total_balance": round(total_balance, 2), "accounts": items}
+
+
+def export_account_ledger_xlsx(db: Session, date_from: date | None = None, date_to: date | None = None) -> bytes:
+    """Оборотная ведомость по счетам → XLSX."""
+    import io
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    data = account_ledger(db, date_from, date_to)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Оборотная ведомость"
+
+    period = ""
+    if date_from or date_to:
+        period = f" за период {date_from or '…'} — {date_to or '…'}"
+    ws["A1"] = f"Оборотная ведомость по счетам учёта{period}"
+    ws["A1"].font = Font(bold=True, size=13)
+    ws.merge_cells("A1:F1")
+
+    headers = ["Счёт", "Наименование", "Партий", "Приход (∑)", "Расход (∑)", "Баланс"]
+    header_row = 3
+    for col, title in enumerate(headers, start=1):
+        c = ws.cell(row=header_row, column=col, value=title)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="334155")
+        c.alignment = Alignment(horizontal="center")
+
+    r = header_row + 1
+    for a in data["accounts"]:
+        ws.cell(row=r, column=1, value=a["account_code"])
+        ws.cell(row=r, column=2, value=a["account_name"])
+        ws.cell(row=r, column=3, value=a["lots_count"])
+        ws.cell(row=r, column=4, value=a["in_value"])
+        ws.cell(row=r, column=5, value=a["out_value"])
+        ws.cell(row=r, column=6, value=a["balance_value"])
+        r += 1
+
+    total_cell = ws.cell(row=r, column=2, value="ИТОГО")
+    total_cell.font = Font(bold=True)
+    bal = ws.cell(row=r, column=6, value=round(data["total_balance"], 2))
+    bal.font = Font(bold=True)
+
+    widths = [14, 40, 10, 16, 16, 18]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    for row in ws.iter_rows(min_row=header_row + 1, max_row=r, min_col=4, max_col=6):
+        for cell in row:
+            cell.number_format = "#,##0.00"
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()

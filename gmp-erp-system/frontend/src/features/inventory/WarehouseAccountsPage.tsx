@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Coins, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react'
-import { getAccountLedger } from '../../lib/api'
+import { Coins, FileDown, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react'
+import { downloadAccountLedgerXlsx, getAccountLedger } from '../../lib/api'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { AccountLedgerItem } from '../../types/inventory'
 
@@ -47,6 +47,22 @@ export function WarehouseAccountsPage({ token }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
+  async function exportXlsx() {
+    try {
+      const blob = await downloadAccountLedgerXlsx(token, { date_from: dateFrom || undefined, date_to: dateTo || undefined })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'оборотная-ведомость.xlsx'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'export failed')
+    }
+  }
+
   const fmt = (v: number) => v.toLocaleString(locale, { maximumFractionDigits: 2 })
   const periodActive = Boolean(dateFrom || dateTo)
   const totalsByGroup = useMemo(() => {
@@ -75,6 +91,10 @@ export function WarehouseAccountsPage({ token }: Props) {
           <button type="button" onClick={() => void load()} disabled={loading}
             className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[13px] font-medium text-white hover:bg-slate-800 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {t('accounts.refresh')}
+          </button>
+          <button type="button" onClick={() => void exportXlsx()} disabled={loading}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
+            <FileDown size={14} /> {t('accounts.export')}
           </button>
         </div>
       </div>

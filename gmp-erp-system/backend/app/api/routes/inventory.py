@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from sqlalchemy import String, cast, func, literal, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
@@ -553,6 +553,25 @@ def account_ledger_route(
     return AccountLedgerResponse.model_validate(account_ledger(db, date_from, date_to))
 
 
+@router.get("/accounts/ledger.xlsx")
+def account_ledger_xlsx_route(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.services.valuation import export_account_ledger_xlsx
+
+    content = export_account_ledger_xlsx(db, date_from, date_to)
+    filename = "account-ledger.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ─── Справочник счетов учёта (CRUD) ─────────────────────────────────────────
 
 
@@ -619,6 +638,8 @@ def list_movements(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> MovementsResponse:
     require_permission(current_user, "VIEW_WAREHOUSE")
+    from_acc = aliased(InventoryAccount)
+    to_acc = aliased(InventoryAccount)
     query = (
         db.query(
             InventoryMovement.id,
@@ -635,10 +656,16 @@ def list_movements(
             InventoryMovement.reason,
             InventoryMovement.workstation_id,
             InventoryMovement.created_at,
+            (func.abs(InventoryMovement.quantity_delta) * func.coalesce(Lot.unit_cost, 0.0)).label("value"),
+            Lot.currency.label("currency"),
+            from_acc.code.label("from_account_code"),
+            to_acc.code.label("to_account_code"),
         )
         .join(Lot, Lot.id == InventoryMovement.lot_id)
         .join(Material, Material.id == Lot.material_id)
         .join(Warehouse, Warehouse.id == Lot.warehouse_id)
+        .outerjoin(from_acc, from_acc.id == InventoryMovement.from_account_id)
+        .outerjoin(to_acc, to_acc.id == InventoryMovement.to_account_id)
         .order_by(InventoryMovement.created_at.desc())
     )
     if current_user.warehouse_scope:

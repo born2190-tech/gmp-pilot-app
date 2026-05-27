@@ -995,6 +995,8 @@ function MovementsTable({ rows, sort, onSort, locale, t }: MovementsTableProps) 
             <Th>{t('registry.materialSeries')}</Th>
             <Th align="right"><SortHeader label={t('registry.delta')} sortKey="delta" sort={sort} onSort={onSort} align="right" /></Th>
             <Th align="right">{t('registry.qtyAfter')}</Th>
+            <Th align="right">{t('registry.mvValue')}</Th>
+            <Th>{t('registry.mvAccount')}</Th>
             <Th>{t('registry.reason')}</Th>
           </tr>
         </thead>
@@ -1038,6 +1040,22 @@ function MovementsTable({ rows, sort, onSort, locale, t }: MovementsTableProps) 
                   <span className="font-mono tabular-nums text-slate-800">
                     {m.quantity_after} <span className="text-slate-500">{m.unit}</span>
                   </span>
+                </Td>
+                <Td align="right">
+                  {m.value ? (
+                    <span className="font-mono tabular-nums text-slate-900">{m.value.toLocaleString(locale)} <span className="text-[11px] text-slate-400">{m.currency || ''}</span></span>
+                  ) : (
+                    <span className="font-mono text-slate-300">—</span>
+                  )}
+                </Td>
+                <Td>
+                  {m.from_account_code || m.to_account_code ? (
+                    <span className="font-mono text-[11.5px] text-slate-700">
+                      {m.from_account_code || '—'} <span className="text-slate-400">→</span> {m.to_account_code || '—'}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-slate-300">—</span>
+                  )}
                 </Td>
                 <Td>
                   <div className="truncate text-slate-600" style={{ maxWidth: 320 }} title={m.reason || ''}>

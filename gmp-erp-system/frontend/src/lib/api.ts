@@ -186,6 +186,19 @@ export function getAccountLedger(token: string, query?: { date_from?: string; da
   return request<AccountLedgerResponse>('/api/inventory/accounts/ledger', 'GET', { token, query })
 }
 
+export async function downloadAccountLedgerXlsx(token: string, query?: { date_from?: string; date_to?: string }): Promise<Blob> {
+  const params = new URLSearchParams()
+  if (query?.date_from) params.set('date_from', query.date_from)
+  if (query?.date_to) params.set('date_to', query.date_to)
+  const qs = params.toString()
+  const response = await fetch(`/api/inventory/accounts/ledger.xlsx${qs ? `?${qs}` : ''}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
 export function listInventoryAccounts(token: string): Promise<InventoryAccountsResponse> {
   return request<InventoryAccountsResponse>('/api/inventory/accounts', 'GET', { token })
 }

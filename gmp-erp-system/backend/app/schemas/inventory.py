@@ -495,6 +495,10 @@ class MovementItem(BaseModel):
     reason: str | None
     workstation_id: str
     created_at: datetime
+    value: float | None = None
+    currency: str | None = None
+    from_account_code: str | None = None
+    to_account_code: str | None = None
 
 
 class MovementsResponse(BaseModel):
