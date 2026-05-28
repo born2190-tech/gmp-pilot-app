@@ -265,19 +265,27 @@ def render_qc_report_pdf(data: dict) -> bytes:
     elements.append(table)
     elements.append(Spacer(1, 2 * mm))
 
-    # ── Дополнительная информация + примечание ───────────────────────────
+    # ── Дополнительная информация + примечание (в одной рамке) ───────────
     add_info = data.get("additional_info") or "Отсутствует"
-    elements.append(Paragraph(f"<b>Дополнительная информация:</b> {add_info}", value))
-    elements.append(Spacer(1, 1.5 * mm))
     note_verdict = "СООТВЕТСТВУЕТ СПЕЦИФИКАЦИИ" if complies_all else "НЕ СООТВЕТСТВУЕТ СПЕЦИФИКАЦИИ"
     subject = "Готовая продукция" if is_fg else "Сырьё"
-    elements.append(Paragraph(
-        f"<b>ПРИМЕЧАНИЕ:</b> {subject} {note_verdict}",
-        ParagraphStyle("note", fontName=bold_font, fontSize=9, leading=12),
-    ))
-    elements.append(Spacer(1, 6 * mm))
+    note_style = ParagraphStyle("note", fontName=bold_font, fontSize=8.5, leading=11)
+    info_box = Table(
+        [
+            [Paragraph(f"<b>Дополнительная информация:</b> {add_info}", value)],
+            [Paragraph(f"<b>ПРИМЕЧАНИЕ:</b> {subject} {note_verdict}", note_style)],
+        ],
+        colWidths=[186 * mm],
+    )
+    info_box.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, _DARK),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.4, _GRID),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(info_box)
 
-    # ── Блок подписей (3 колонки) ────────────────────────────────────────
+    # ── Блок подписей (3 колонки в рамке) ────────────────────────────────
     sig_label = ParagraphStyle("sig_l", fontName=bold_font, fontSize=8, leading=10)
     sig_line = ParagraphStyle("sig_line", fontName=body_font, fontSize=8, leading=14)
     sign = Table(
@@ -296,11 +304,14 @@ def render_qc_report_pdf(data: dict) -> bytes:
         colWidths=[62 * mm, 62 * mm, 62 * mm],
     )
     sign.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, _DARK),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, _GRID),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
     elements.append(sign)
-    elements.append(Spacer(1, 6 * mm))
+    elements.append(Spacer(1, 5 * mm))
 
     # ── Предупредительная сноска ─────────────────────────────────────────
     warn = ParagraphStyle(
