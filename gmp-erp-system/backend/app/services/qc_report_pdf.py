@@ -4,9 +4,10 @@
 вспомогательного материала») для субстанций/упаковки и СОП-548
 («Аналитический паспорт на ГП») для готовой продукции.
 
-Структура повторяет печатную форму: шапка ДКК novugen, реквизиты серии,
-таблица результатов (Тест / Спецификация / Результат / Соответствие НД),
-заключение и подписи.
+Структура строго повторяет утверждённую печатную форму ДКК «NOVUGEN PHARMA»:
+шапка с логотипом и кодом СОП, адресный блок, реквизиты серии/анализа,
+таблица результатов (№ / ТЕСТ / РЕЗУЛЬТАТ / СПЕЦИФИКАЦИЯ / СООТ-Е НД),
+заключение, блок подписей и предупредительная сноска.
 """
 from __future__ import annotations
 
@@ -41,9 +42,13 @@ _FONT_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
 _FONTS_REGISTERED = False
 
 ORG_ADDRESS = (
-    "Республика Узбекистан, Сырдарьинская область, Сырдарьинский район, "
-    "АПВ С. Рахимова, ул. М. Захидова, д-39 · Тел: 95 475-20-30 · novugen_uz@mail.ru"
+    "Адрес принимаемой претензии: Республика Узбекистан, Сырдарьинская область, "
+    "Сырдарьинский район, АПВ С. Рахимова, ул. М. Захидова, д-39 · "
+    "Тел: 97 475-20-30, 95 476-20-30 · novugen_uz@mail.ru"
 )
+
+_GRID = colors.HexColor("#94a3b8")
+_DARK = colors.black
 
 
 def _register_fonts() -> tuple[str, str]:
@@ -73,195 +78,245 @@ def render_qc_report_pdf(data: dict) -> bytes:
     """`data` — dict с полями протокола, партии и параметров (см. эндпоинт)."""
     body_font, bold_font = _register_fonts()
     is_fg = data.get("sop_form") == "548"
+    sop_form = data.get("sop_form") or "533"
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
-        leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=14 * mm,
+        leftMargin=12 * mm, rightMargin=12 * mm, topMargin=10 * mm, bottomMargin=12 * mm,
         title=f"Аналитический лист {data.get('report_no', '')}",
     )
 
-    body = ParagraphStyle("body", fontName=body_font, fontSize=9, leading=11)
-    small = ParagraphStyle("small", fontName=body_font, fontSize=7.5, leading=9)
-    cell = ParagraphStyle("cell", fontName=body_font, fontSize=8, leading=10)
-    cell_b = ParagraphStyle("cell_b", fontName=bold_font, fontSize=8, leading=10, alignment=1)
-    title_style = ParagraphStyle("title", fontName=bold_font, fontSize=13, leading=16, alignment=1)
-    org_name = ParagraphStyle("org", fontName=bold_font, fontSize=10, leading=12, alignment=1)
-    meta_center = ParagraphStyle("meta_c", fontName=body_font, fontSize=7.5, leading=9, alignment=1)
+    # ── Стили ────────────────────────────────────────────────────────────
+    label = ParagraphStyle("label", fontName=bold_font, fontSize=8, leading=10)
+    value = ParagraphStyle("value", fontName=body_font, fontSize=8, leading=10)
+    small = ParagraphStyle("small", fontName=body_font, fontSize=6.8, leading=8.2)
+    cell = ParagraphStyle("cell", fontName=body_font, fontSize=8, leading=9.5)
+    cell_head = ParagraphStyle("cell_head", fontName=bold_font, fontSize=8.5, leading=10, alignment=1)
+    test_name = ParagraphStyle("test_name", fontName=bold_font, fontSize=8.2, leading=9.8)
+    test_ref = ParagraphStyle("test_ref", fontName=body_font, fontSize=7, leading=8.4,
+                              textColor=colors.HexColor("#334155"))
+    cmpl = ParagraphStyle("cmpl", fontName=body_font, fontSize=8, leading=10, alignment=1)
+    org_name = ParagraphStyle("org", fontName=bold_font, fontSize=11, leading=13, alignment=1)
+    org_sub = ParagraphStyle("org_sub", fontName=body_font, fontSize=8, leading=10, alignment=1)
+    title_style = ParagraphStyle("title", fontName=bold_font, fontSize=11, leading=13.5, alignment=1)
+    code_style = ParagraphStyle("code", fontName=body_font, fontSize=7.5, leading=9, alignment=2)
 
     elements: list = []
 
-    # Шапка
+    # ── Шапка: лого | департамент + название формы | код СОП ─────────────
     if _LOGO_PATH.is_file():
-        logo_cell: object = Image(str(_LOGO_PATH), width=30 * mm, height=11 * mm, kind="proportional")
+        logo_cell: object = Image(str(_LOGO_PATH), width=28 * mm, height=12 * mm, kind="proportional")
     else:
-        logo_cell = Paragraph("<b>novugen</b>", ParagraphStyle("logo", fontName=bold_font, fontSize=16, alignment=1))
+        logo_cell = Paragraph("<b>novugen</b>",
+                              ParagraphStyle("logo", fontName=bold_font, fontSize=15, alignment=1))
 
+    subtitle = (
+        "Аналитический паспорт<br/>на готовую продукцию"
+        if is_fg else
+        "Аналитический лист<br/>Входного контроля сырья и вспомогательного материала"
+    )
+    center_block = [
+        Paragraph("ИПООО «NOVUGEN PHARMA» (Узбекистан)", org_sub),
+        Paragraph("ДЕПАРТАМЕНТ КОНТРОЛЯ КАЧЕСТВА", org_name),
+        Spacer(1, 1.5 * mm),
+        Paragraph(subtitle, title_style),
+    ]
     header = Table(
-        [[
-            logo_cell,
-            Paragraph("ИП ООО «NOVUGEN PHARMA» (Узбекистан)<br/>ДЕПАРТАМЕНТ КОНТРОЛЯ КАЧЕСТВА (ДКК)", org_name),
-            Paragraph(f"СОП-{data.get('sop_form')} Ф-11", meta_center),
-        ]],
-        colWidths=[34 * mm, 110 * mm, 38 * mm], rowHeights=[14 * mm],
+        [[logo_cell, center_block, Paragraph(f"СОП-{sop_form}, Ф-11", code_style)]],
+        colWidths=[32 * mm, 116 * mm, 38 * mm],
     )
     header.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.black),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("BOX", (0, 0), (-1, -1), 0.8, _DARK),
+        ("LINEAFTER", (0, 0), (0, 0), 0.6, _DARK),
+        ("VALIGN", (0, 0), (0, 0), "MIDDLE"),
+        ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
+        ("VALIGN", (2, 0), (2, 0), "TOP"),
+        ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (2, 0), (2, 0), 3),
     ]))
     elements.append(header)
-    elements.append(Paragraph(ORG_ADDRESS, small))
-    elements.append(Spacer(1, 3 * mm))
 
-    elements.append(Paragraph(
-        "АНАЛИТИЧЕСКИЙ ПАСПОРТ НА ГП" if is_fg else "АНАЛИТИЧЕСКИЙ ЛИСТ ВХОДНОГО КОНТРОЛЯ",
-        title_style,
-    ))
-    elements.append(Spacer(1, 3 * mm))
-
-    # Мета-блок
-    pairs = [
-        ("Отчёт №", data.get("report_no") or "—"),
-        ("Наименование", data.get("material_name") or "—"),
-        ("Серия", data.get("internal_lot") or "—"),
-        ("Производитель", data.get("manufacturer_name") or "—"),
-        ("Дата производства", _fmt_dt(data.get("production_date"))),
-        ("Срок годности", _fmt_dt(data.get("expiry_date"))),
-        ("Дата отбора", _fmt_dt(data.get("sampling_date"))),
-        ("Метод-ссылка", data.get("method_reference") or "—"),
-        ("Начало анализа", _fmt_dt(data.get("analysis_started_at"))),
-        ("Окончание анализа", _fmt_dt(data.get("analysis_finished_at"))),
-    ]
-    meta = Table([[Paragraph(k, cell), Paragraph(str(v), cell)] for k, v in pairs],
-                 colWidths=[45 * mm, 137 * mm])
-    meta.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.4, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    # ── Адресная строка ──────────────────────────────────────────────────
+    addr = Table([[Paragraph(ORG_ADDRESS, small)]], colWidths=[186 * mm])
+    addr.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, _DARK),
+        ("LINEABOVE", (0, 0), (-1, 0), 0, colors.white),
         ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f8fafc")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
     ]))
-    elements.append(meta)
-    elements.append(Spacer(1, 3 * mm))
+    elements.append(addr)
+    elements.append(Spacer(1, 2 * mm))
 
-    # Условия проведения анализа / оборудование.
-    cond_pairs = []
+    # ── Реквизиты серии и анализа (4 колонки, часть строк во всю ширину) ──
+    def L(text: str):
+        return Paragraph(text, label)
+
+    def V(text) -> Paragraph:
+        return Paragraph("—" if text in (None, "") else str(text), value)
+
+    spec_ref = data.get("method_reference") or ""
+    material_name = data.get("material_name") or "—"
+    spec_line = (
+        f"{spec_ref} Спецификация на «{material_name}»".strip()
+        if spec_ref else f"Спецификация на «{material_name}»"
+    )
+    conditions = []
     if data.get("room_temp"):
-        cond_pairs.append(("Температура в помещении", str(data.get("room_temp"))))
+        conditions.append(f"Температура помещения: {data.get('room_temp')}")
     if data.get("humidity"):
-        cond_pairs.append(("Относительная влажность", str(data.get("humidity"))))
-    if data.get("equipment"):
-        cond_pairs.append(("Оборудование (КИП)", str(data.get("equipment"))))
-    if cond_pairs:
-        cond = Table([[Paragraph(k, cell), Paragraph(v, cell)] for k, v in cond_pairs],
-                     colWidths=[45 * mm, 137 * mm])
-        cond.setStyle(TableStyle([
-            ("BOX", (0, 0), (-1, -1), 0.4, colors.black),
-            ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f8fafc")),
-        ]))
-        elements.append(cond)
-        elements.append(Spacer(1, 3 * mm))
+        conditions.append(f"Влажность: {data.get('humidity')}")
+    conditions_text = "; ".join(conditions) if conditions else "—"
 
-    section_style = ParagraphStyle("section", fontName=bold_font, fontSize=10, leading=13)
-
-    def _results_table(params: list) -> Table:
-        rows = [[
-            Paragraph("№", cell_b), Paragraph("Тест", cell_b),
-            Paragraph("Спецификация", cell_b), Paragraph("Результат", cell_b),
-            Paragraph("Соотв. НД", cell_b),
-        ]]
-        for idx, p in enumerate(params, start=1):
-            unit = f" {p['unit']}" if p.get("unit") else ""
-            rows.append([
-                Paragraph(str(idx), cell),
-                Paragraph(p.get("parameter_name", ""), cell),
-                Paragraph(p.get("specification", ""), cell),
-                Paragraph(f"{p.get('result_value', '')}{unit}", cell),
-                Paragraph("Да" if p.get("complies") else "НЕТ", cell_b),
-            ])
-        table = Table(rows, colWidths=[10 * mm, 52 * mm, 50 * mm, 45 * mm, 25 * mm], repeatRows=1)
-        table.setStyle(TableStyle([
-            ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
-            ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.black),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (4, 1), (4, -1), "CENTER"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 3), ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ]))
-        return table
-
-    # Раздельные списки ФХ / микро; при их отсутствии — общий список.
+    overall = (data.get("overall_result") or "").lower()
     pc_params = data.get("pc_parameters")
     micro_params = data.get("micro_parameters")
     if pc_params is None and micro_params is None:
         pc_params = data.get("parameters", [])
         micro_params = []
-    pc_params = pc_params or []
-    micro_params = micro_params or []
+    pc_params = list(pc_params or [])
+    micro_params = list(micro_params or [])
+    all_params = pc_params + micro_params
 
-    all_params = list(pc_params) + list(micro_params)
-
-    # Физико-химические показатели.
-    elements.append(Paragraph("1. Физико-химические показатели", section_style))
-    elements.append(Spacer(1, 2 * mm))
-    elements.append(_results_table(pc_params))
-    elements.append(Spacer(1, 4 * mm))
-
-    # Микробиологическая чистота (СОП-514).
-    if data.get("micro_required", True):
-        title_micro = "2. Микробиологическая чистота (СОП-514)"
-        micro_ref = data.get("micro_method_reference")
-        if micro_ref:
-            title_micro += f" — {micro_ref}"
-        elements.append(Paragraph(title_micro, section_style))
-        micro_window = []
-        if data.get("micro_started_at"):
-            micro_window.append(f"начало {_fmt_dt(data.get('micro_started_at'))}")
-        if data.get("micro_finished_at"):
-            micro_window.append(f"окончание {_fmt_dt(data.get('micro_finished_at'))}")
-        if micro_window:
-            elements.append(Paragraph(" · ".join(micro_window), small))
-        elements.append(Spacer(1, 2 * mm))
-        if micro_params:
-            elements.append(_results_table(micro_params))
-        else:
-            elements.append(Paragraph("Результаты микробиологического анализа вносятся отдельно.", body))
-        elements.append(Spacer(1, 4 * mm))
-    else:
-        elements.append(Paragraph(
-            "2. Микробиологическая чистота — не требуется согласно НД.", body))
-        elements.append(Spacer(1, 4 * mm))
-
-    # Заключение
-    overall = (data.get("overall_result") or "").lower()
     if overall in ("pass", "passed", "complies", "соответствует"):
-        verdict = "Соответствует требованиям НД"
+        complies_all = True
     elif overall in ("fail", "failed", "не соответствует"):
-        verdict = "НЕ соответствует требованиям НД"
+        complies_all = False
     else:
-        all_ok = all(p.get("complies") for p in all_params) if all_params else False
-        verdict = "Соответствует требованиям НД" if all_ok else "НЕ соответствует требованиям НД"
-    elements.append(Paragraph(f"<b>Заключение:</b> {verdict}", body))
-    elements.append(Spacer(1, 8 * mm))
+        complies_all = all(p.get("complies") for p in all_params) if all_params else False
+    sample_condition = "Соответствует требованиям НД" if complies_all else "Не соответствует требованиям НД"
 
-    # Подписи
-    for line in (
-        "Химик-аналитик: _______________________ (ФИО) ____________",
-        "Начальник ДКК: _______________________ (ФИО) ____________",
-    ):
-        elements.append(Paragraph(line, body))
-        elements.append(Spacer(1, 5 * mm))
+    EMPTY = Paragraph("", value)
+    # (row_cells, spans) — span=True означает значение во всю ширину (col1..3).
+    meta_rows: list[tuple[list, bool]] = [
+        ([L("Наименование сырья:"), V(data.get("material_name")), EMPTY, EMPTY], True),
+        ([L("Место проведения испытания:"), V("Лаборатория ДКК"), EMPTY, EMPTY], True),
+        ([L("Производитель/Поставщик:"), V(data.get("manufacturer_name")), EMPTY, EMPTY], True),
+        ([L("Серия:"), V(data.get("internal_lot")), L("Размер серии:"), V(data.get("lot_size"))], False),
+        ([L("Дата производства:"), V(_fmt_dt(data.get("production_date"))),
+          L("Место отбора:"), V(data.get("sampling_location"))], False),
+        ([L("Годен до:"), V(_fmt_dt(data.get("expiry_date"))),
+          L("Дата отбора и начала анализа:"), V(_fmt_dt(data.get("sampling_date")))], False),
+        ([L("Отчёт №:"), V(data.get("report_no")),
+          L("Дата окончания анализа:"), V(_fmt_dt(data.get("analysis_finished_at")))], False),
+        ([L("Место отбора (процедура):"),
+          V("СОП-533 Процедура отбора средней пробы исходного сырья"), EMPTY, EMPTY], True),
+        ([L("НД:"), V(spec_line), EMPTY, EMPTY], True),
+        ([L("Дата анализа:"), V(_fmt_dt(data.get("analysis_started_at"))), EMPTY, EMPTY], True),
+        ([L("Состояние образца:"), V(sample_condition), EMPTY, EMPTY], True),
+        ([L("Условия проведения испытания:"), V(conditions_text), EMPTY, EMPTY], True),
+    ]
+    meta_data = [r[0] for r in meta_rows]
+    meta = Table(meta_data, colWidths=[44 * mm, 56 * mm, 44 * mm, 42 * mm])
+    meta_style = [
+        ("BOX", (0, 0), (-1, -1), 0.8, _DARK),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, _GRID),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+    ]
+    for r, (_, is_span) in enumerate(meta_rows):
+        if is_span:
+            meta_style.append(("SPAN", (1, r), (3, r)))
+    meta.setStyle(TableStyle(meta_style))
+    elements.append(meta)
+    elements.append(Spacer(1, 2.5 * mm))
+
+    # ── Подпись над таблицей ─────────────────────────────────────────────
+    elements.append(Paragraph(
+        "Результаты анализа в таблице",
+        ParagraphStyle("cap", fontName=bold_font, fontSize=8.5, leading=11),
+    ))
+    elements.append(Spacer(1, 1 * mm))
+
+    # ── Таблица результатов ──────────────────────────────────────────────
+    rows = [[
+        Paragraph("№", cell_head), Paragraph("ТЕСТ", cell_head),
+        Paragraph("РЕЗУЛЬТАТ", cell_head), Paragraph("СПЕЦИФИКАЦИЯ", cell_head),
+        Paragraph("СООТ-Е НД", cell_head),
+    ]]
+    for idx, p in enumerate(all_params, start=1):
+        unit = f" {p['unit']}" if p.get("unit") else ""
+        test_cell = [Paragraph((p.get("parameter_name") or "").upper(), test_name)]
+        if p.get("method_reference"):
+            test_cell.append(Paragraph(f"({p['method_reference']})", test_ref))
+        verdict = "Соответствует" if p.get("complies") else "Не соответствует"
+        rows.append([
+            Paragraph(str(idx), cmpl),
+            test_cell,
+            Paragraph(f"{p.get('result_value', '') or ''}{unit}".strip() or "—", cell),
+            Paragraph(p.get("specification") or "—", cell),
+            Paragraph(verdict, cmpl),
+        ])
+    table = Table(rows, colWidths=[9 * mm, 50 * mm, 45 * mm, 57 * mm, 25 * mm], repeatRows=1)
+    table_style = [
+        ("BOX", (0, 0), (-1, -1), 0.8, _DARK),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, _DARK),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e2e8f0")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]
+    for r in range(1, len(rows)):
+        if not all_params[r - 1].get("complies"):
+            table_style.append(("TEXTCOLOR", (4, r), (4, r), colors.HexColor("#b91c1c")))
+    table.setStyle(TableStyle(table_style))
+    elements.append(table)
+    elements.append(Spacer(1, 2 * mm))
+
+    # ── Дополнительная информация + примечание ───────────────────────────
+    add_info = data.get("additional_info") or "Отсутствует"
+    elements.append(Paragraph(f"<b>Дополнительная информация:</b> {add_info}", value))
+    elements.append(Spacer(1, 1.5 * mm))
+    note_verdict = "СООТВЕТСТВУЕТ СПЕЦИФИКАЦИИ" if complies_all else "НЕ СООТВЕТСТВУЕТ СПЕЦИФИКАЦИИ"
+    subject = "Готовая продукция" if is_fg else "Сырьё"
+    elements.append(Paragraph(
+        f"<b>ПРИМЕЧАНИЕ:</b> {subject} {note_verdict}",
+        ParagraphStyle("note", fontName=bold_font, fontSize=9, leading=12),
+    ))
+    elements.append(Spacer(1, 6 * mm))
+
+    # ── Блок подписей (3 колонки) ────────────────────────────────────────
+    sig_label = ParagraphStyle("sig_l", fontName=bold_font, fontSize=8, leading=10)
+    sig_line = ParagraphStyle("sig_line", fontName=body_font, fontSize=8, leading=14)
+    sign = Table(
+        [[
+            [Paragraph("Ответственный исполнитель:", sig_label), Spacer(1, 9 * mm),
+             Paragraph("___________________ / ____________", sig_line),
+             Paragraph("(подпись / ФИО)", small)],
+            [Paragraph("Проверил:", sig_label), Spacer(1, 9 * mm),
+             Paragraph("___________________ / ____________", sig_line),
+             Paragraph("(подпись / ФИО)", small)],
+            [Paragraph("Утвердил:", sig_label),
+             Paragraph("Начальник ДКК", value), Spacer(1, 5 * mm),
+             Paragraph("___________________ / ____________", sig_line),
+             Paragraph("(подпись / ФИО)", small)],
+        ]],
+        colWidths=[62 * mm, 62 * mm, 62 * mm],
+    )
+    sign.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(sign)
+    elements.append(Spacer(1, 6 * mm))
+
+    # ── Предупредительная сноска ─────────────────────────────────────────
+    warn = ParagraphStyle(
+        "warn", fontName=bold_font, fontSize=8, leading=10, alignment=1,
+        textColor=colors.HexColor("#b91c1c"),
+    )
+    elements.append(Paragraph(
+        "Полученные результаты относятся только к образцу, подвергнутому испытанию!", warn))
+    elements.append(Paragraph(
+        "Запрещается вносить в «Аналитический лист» какие-либо исправления!", warn))
 
     today = datetime.utcnow().strftime("%d.%m.%Y %H:%M")
     elements.append(Spacer(1, 2 * mm))
     elements.append(Paragraph(
-        f"<i>Сформировано: {today} UTC · СОП-{data.get('sop_form')} Ф-11</i>",
-        ParagraphStyle("footer", fontName=body_font, fontSize=8, leading=10, textColor=colors.grey),
+        f"<i>Сформировано: {today} UTC · СОП-{sop_form}, Ф-11</i>",
+        ParagraphStyle("footer", fontName=body_font, fontSize=7, leading=9, textColor=colors.grey),
     ))
 
     doc.build(elements)

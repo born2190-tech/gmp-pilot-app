@@ -328,6 +328,14 @@ def _build_qc_report_data(db: Session, report) -> dict:
     equipment_text = report.equipment or None
     if registry_text:
         equipment_text = registry_text if not equipment_text else f"{equipment_text}; {registry_text}"
+
+    # Размер серии и место отбора для шапки аналитического листа (Ф-11).
+    lot_size = None
+    if lot and lot.initial_quantity is not None:
+        qty = lot.initial_quantity
+        qty_text = f"{qty:g}" if isinstance(qty, (int, float)) else str(qty)
+        lot_size = f"{qty_text} {lot.unit}".strip() if lot.unit else qty_text
+    sampling_location = warehouse.name if warehouse else None
     return {
         "report_no": report.report_no,
         "sop_form": sop_form,
@@ -348,6 +356,8 @@ def _build_qc_report_data(db: Session, report) -> dict:
         "production_date": lot.production_date if lot else None,
         "expiry_date": lot.expiry_date if lot else None,
         "sampling_date": lot.sampling_date if lot else None,
+        "lot_size": lot_size,
+        "sampling_location": sampling_location,
         # Обратная совместимость: общий список + раздельные ФХ/микро.
         "parameters": pc_params + micro_params,
         "pc_parameters": pc_params,
