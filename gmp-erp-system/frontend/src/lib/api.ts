@@ -73,6 +73,11 @@ import type {
   MaterialSpecificationInput,
   MaterialSpecificationItem,
   MaterialSpecificationsResponse,
+  EquipmentCalibrationCreate,
+  EquipmentCreate,
+  EquipmentDetail,
+  EquipmentListResponse,
+  EquipmentUpdate,
 } from '../types/inventory'
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT'
@@ -782,6 +787,45 @@ export async function deleteSpecification(token: string, specId: string): Promis
     const detail = await response.json().catch(() => null)
     throw new Error(detail?.detail || `HTTP ${response.status}`)
   }
+}
+
+// ─── Equipment registry (КИП) ────────────────────────────────────────────────
+
+export function listEquipment(
+  token: string,
+  query?: { active?: boolean; category?: string },
+): Promise<EquipmentListResponse> {
+  const q: Record<string, string | number | undefined> = {}
+  if (query?.active !== undefined) q.active = query.active ? 'true' : 'false'
+  if (query?.category) q.category = query.category
+  return request<EquipmentListResponse>('/api/equipment', 'GET', { token, query: q })
+}
+
+export function getEquipment(token: string, equipmentId: string): Promise<EquipmentDetail> {
+  return request<EquipmentDetail>(`/api/equipment/${equipmentId}`, 'GET', { token })
+}
+
+export function createEquipment(token: string, payload: EquipmentCreate): Promise<EquipmentDetail> {
+  return request<EquipmentDetail>('/api/equipment', 'POST', { token, body: payload })
+}
+
+export function updateEquipment(
+  token: string,
+  equipmentId: string,
+  payload: EquipmentUpdate,
+): Promise<EquipmentDetail> {
+  return request<EquipmentDetail>(`/api/equipment/${equipmentId}`, 'PATCH', { token, body: payload })
+}
+
+export function addEquipmentCalibration(
+  token: string,
+  equipmentId: string,
+  payload: EquipmentCalibrationCreate,
+): Promise<EquipmentDetail> {
+  return request<EquipmentDetail>(`/api/equipment/${equipmentId}/calibrations`, 'POST', {
+    token,
+    body: payload,
+  })
 }
 
 // ─── Production Requisitions ─────────────────────────────────────────────────

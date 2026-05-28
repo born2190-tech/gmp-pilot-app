@@ -15,6 +15,7 @@ import {
   Send,
   Settings2,
   ShieldCheck,
+  Wrench,
   Truck,
   Warehouse,
   type LucideIcon,
@@ -53,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.qcTasks',              section: 'qc',         permission: 'VIEW_QC',         route: 'qc-tasks',             icon: Microscope },
   { labelKey: 'nav.qcNotifications',      section: 'qc',         permission: 'VIEW_QC',         route: 'qc-notifications',     icon: BellRing },
   { labelKey: 'nav.qcSpecifications',     section: 'qc',         permission: 'VIEW_QC',         route: 'qc-specifications',    icon: BookMarked },
+  { labelKey: 'nav.qcEquipment',          section: 'qc',         permission: 'VIEW_QC',         route: 'qc-equipment',         icon: Wrench },
 
   // ─── ОКА ──────────────────────────────────────────────────────────────
   { labelKey: 'nav.qaDecisions',          section: 'qa',         permission: 'VIEW_QA',         route: 'qa-decisions',         icon: ShieldCheck },

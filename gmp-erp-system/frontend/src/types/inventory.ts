@@ -231,6 +231,7 @@ export interface QCReportParameterCreate {
   unit: string | null
   method_reference: string | null
   complies: boolean
+  equipment_id?: string | null
 }
 
 export interface QCReportCreate {
@@ -240,6 +241,7 @@ export interface QCReportCreate {
   analysis_finished_at: string | null
   method_reference: string | null
   equipment?: string | null
+  equipment_ids?: string[]
   room_temp?: string | null
   humidity?: string | null
   micro_required?: boolean
@@ -247,6 +249,87 @@ export interface QCReportCreate {
   micro_started_at?: string | null
   micro_finished_at?: string | null
   parameters: QCReportParameterCreate[]
+}
+
+// ---------------------------------------------------------------------------
+// КИП — реестр приборов и калибровок
+// ---------------------------------------------------------------------------
+
+export type CalibrationStatus = 'ok' | 'expiring' | 'expired' | 'missing'
+
+export interface EquipmentCalibrationCreate {
+  certificate_no: string | null
+  performed_by: string | null
+  valid_from: string
+  valid_until: string
+  notes: string | null
+}
+
+export interface EquipmentCalibrationItem {
+  id: string
+  equipment_id: string
+  certificate_no: string | null
+  performed_by: string | null
+  valid_from: string
+  valid_until: string
+  notes: string | null
+  recorded_by: string | null
+  recorded_at: string
+}
+
+export interface EquipmentCreate {
+  code: string
+  name: string
+  category: string | null
+  manufacturer: string | null
+  model: string | null
+  serial_no: string | null
+  location: string | null
+  notes: string | null
+}
+
+export interface EquipmentUpdate {
+  name?: string | null
+  category?: string | null
+  manufacturer?: string | null
+  model?: string | null
+  serial_no?: string | null
+  location?: string | null
+  is_active?: boolean | null
+  notes?: string | null
+}
+
+export interface EquipmentItem {
+  id: string
+  code: string
+  name: string
+  category: string | null
+  manufacturer: string | null
+  model: string | null
+  serial_no: string | null
+  location: string | null
+  is_active: boolean
+  notes: string | null
+  calibration_status: CalibrationStatus
+  calibration_valid_until: string | null
+  calibration_certificate_no: string | null
+}
+
+export interface EquipmentDetail extends EquipmentItem {
+  calibrations: EquipmentCalibrationItem[]
+}
+
+export interface EquipmentListResponse {
+  equipment: EquipmentItem[]
+}
+
+export interface QCReportEquipmentItem {
+  id: string
+  code: string
+  name: string
+  category: string | null
+  calibration_status: CalibrationStatus
+  calibration_valid_until: string | null
 }
 
 export interface SpecificationParameterInput {
@@ -339,7 +422,8 @@ export interface QCReportItem {
   micro_method_reference?: string | null
   micro_started_at?: string | null
   micro_finished_at?: string | null
-  parameters: Array<QCReportParameterCreate & { id: string }>
+  parameters: Array<QCReportParameterCreate & { id: string; equipment_code?: string | null; equipment_name?: string | null }>
+  equipments?: QCReportEquipmentItem[]
 }
 
 export interface QADecisionRequest extends SignatureRequest {

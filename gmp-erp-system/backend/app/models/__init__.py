@@ -1,5 +1,6 @@
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.base import Base
+from app.models.equipment import Equipment, EquipmentCalibration, qc_report_equipment
 from app.models.identity import AuthSession, Department, Permission, Role, User, role_permissions
 from app.models.inventory import (
     FGShipmentDocument,
@@ -30,6 +31,8 @@ __all__ = [
     "Base",
     "Department",
     "Employee",
+    "Equipment",
+    "EquipmentCalibration",
     "FGShipmentDocument",
     "FGShipmentLine",
     "ImportDeclaration",
@@ -56,5 +59,6 @@ __all__ = [
     "Supplier",
     "User",
     "Warehouse",
+    "qc_report_equipment",
     "role_permissions",
 ]

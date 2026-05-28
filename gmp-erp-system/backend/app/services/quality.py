@@ -11,6 +11,7 @@ from app.models.quality import QCNotification, QCNotificationLine, QCReport, QCR
 from app.schemas.inventory import SignatureRequest
 from app.schemas.quality import QADecisionRequest, QCNotificationCreate, QCReportCreate, QCResultRequest, SampleLotRequest
 from app.services.audit import write_audit
+from app.services.equipment import resolve_equipment_for_report
 from app.services.permissions import require_permission, require_warehouse_type_scope
 from app.services.signature import validate_signature
 
@@ -143,6 +144,12 @@ def create_qc_report(db: Session, user: CurrentUser, payload: QCReportCreate) ->
     if db.query(QCReport).filter(QCReport.report_no == payload.report_no).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="QC report number already exists")
 
+    # Реестр КИП: валидируем выбранные приборы (шапка отчёта + per-row).
+    # Просроченная/отсутствующая калибровка блокирует сохранение (GMP Annex 15).
+    header_equipments = resolve_equipment_for_report(db, payload.equipment_ids)
+    per_row_ids = [p.equipment_id for p in payload.parameters if p.equipment_id is not None]
+    resolve_equipment_for_report(db, per_row_ids)
+
     report = QCReport(
         lot_id=lot.id,
         report_no=payload.report_no,
@@ -158,6 +165,8 @@ def create_qc_report(db: Session, user: CurrentUser, payload: QCReportCreate) ->
         micro_started_at=payload.micro_started_at,
         micro_finished_at=payload.micro_finished_at,
     )
+    if header_equipments:
+        report.equipments = header_equipments
     db.add(report)
     db.flush()
     for parameter in payload.parameters:
@@ -171,6 +180,7 @@ def create_qc_report(db: Session, user: CurrentUser, payload: QCReportCreate) ->
                 unit=parameter.unit,
                 method_reference=parameter.method_reference,
                 complies=parameter.complies,
+                equipment_id=parameter.equipment_id,
             )
         )
     write_audit(

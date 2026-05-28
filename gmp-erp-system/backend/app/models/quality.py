@@ -31,6 +31,14 @@ class QCReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     micro_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     micro_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Many-to-many с реестром КИП (общие приборы анализа). Per-параметр
+    # уточнение хранится в QCReportParameter.equipment_id.
+    equipments: Mapped[list["Equipment"]] = relationship(
+        "Equipment",
+        secondary="qc_report_equipment",
+        lazy="selectin",
+    )
+
 
 class QCReportParameter(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "qc_report_parameters"
@@ -44,8 +52,13 @@ class QCReportParameter(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
     method_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     complies: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # Прибор, использованный именно для этого показателя (optional).
+    equipment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("equipment.id"), nullable=True
+    )
 
     report: Mapped[QCReport] = relationship()
+    equipment: Mapped["Equipment | None"] = relationship("Equipment", lazy="selectin")
 
 
 class QCReportScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):

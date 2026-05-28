@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Beaker,
@@ -25,16 +25,18 @@ import {
   createQcReport,
   downloadQcReportPdf,
   downloadQcReportScan,
+  listEquipment,
   resolveLotSpecification,
   submitQcReport,
   uploadQcReportScan,
 } from '../../lib/api'
+import { CalibrationBadge } from './EquipmentAdminPage'
 import { printBlob } from '../../lib/print'
 import { ScanButton } from '../../components/ui/ScanButton'
 import { resolveSpecTemplate } from './qcSpecTemplates'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
-import type { LotItem, QCParamCategory, QCReportItem } from '../../types/inventory'
+import type { EquipmentItem, LotItem, QCParamCategory, QCReportItem } from '../../types/inventory'
 
 type Translate = ReturnType<typeof useI18n>['t']
 
@@ -50,6 +52,8 @@ interface ParamRow {
   complies: boolean | null
   // true — соответствие определено системой автоматически (по норме + результату).
   auto?: boolean
+  // Прибор, использованный для именно этого показателя (optional).
+  equipment_id?: string | null
 }
 
 // ── Авто-оценка соответствия по норме (НД) и введённому результату ──────────────
@@ -210,6 +214,19 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
   const [microMethodRef, setMicroMethodRef] = useState('ОФС.1.2.4.0002, СОП-514')
   const [microRequired, setMicroRequired] = useState(!isFg)
 
+  // Реестр КИП (загружается единожды при монтировании).
+  const [availableEquipment, setAvailableEquipment] = useState<EquipmentItem[]>([])
+  const [equipmentIds, setEquipmentIds] = useState<string[]>([])
+  useEffect(() => {
+    void listEquipment(token, { active: true })
+      .then((resp) => setAvailableEquipment(resp.equipment))
+      .catch(() => setAvailableEquipment([]))
+  }, [token])
+  const equipmentById = useMemo(
+    () => Object.fromEntries(availableEquipment.map((e) => [e.id, e])),
+    [availableEquipment],
+  )
+
   const [pcParams, setPcParams] = useState<ParamRow[]>([blankPc()])
   const [microParams, setMicroParams] = useState<ParamRow[]>(MICRO_TEMPLATE.map((r) => ({
     key: newKey(), category: 'microbiological', parameter_name: r.parameter_name ?? '', specification: r.specification ?? '', result_value: '', unit: '—', method_reference: '', complies: null,
@@ -340,6 +357,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
         analysis_finished_at: toIso(analysisFinished),
         method_reference: methodReference || null,
         equipment: equipment || null,
+        equipment_ids: equipmentIds,
         room_temp: roomTemp || null,
         humidity: humidity || null,
         micro_required: microRequired,
@@ -354,6 +372,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
           unit: p.unit || null,
           method_reference: p.method_reference || methodReference || null,
           complies: p.complies === true,
+          equipment_id: p.equipment_id || null,
         })),
       })
       setDraft(report)
@@ -559,6 +578,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                     <th className="px-3 py-2">{t('qcws.colMethod')}</th>
                     <th className="px-3 py-2">{t('qcws.colResult')}</th>
                     <th className="w-16 px-3 py-2">{t('qcws.colUnit')}</th>
+                    <th className="w-40 px-3 py-2">Прибор</th>
                     <th className="w-28 px-3 py-2">{t('qcws.colCompliance')}</th>
                     {!locked && <th className="w-8 px-2 py-2" />}
                   </tr>
@@ -589,6 +609,14 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                           : <GhostInput value={p.unit} onChange={(v) => patchPc(p.key, { unit: v })} placeholder="—" mono />}
                       </td>
                       <td className="px-3 py-2.5">
+                        <RowEquipmentSelect
+                          available={availableEquipment}
+                          value={p.equipment_id || null}
+                          onChange={(v) => patchPc(p.key, { equipment_id: v })}
+                          disabled={locked}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5">
                         <ComplianceToggle value={p.complies} auto={p.auto} onChange={locked ? null : (v) => patchPc(p.key, { complies: v, auto: false })} t={t} />
                       </td>
                       {!locked && (
@@ -605,13 +633,21 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
               </table>
             </div>
             {/* Conditions strip */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-slate-200 bg-slate-50/40 p-5 lg:grid-cols-4">
-              <CondField label={t('qcws.equipment')} value={equipment} onChange={setEquipment} disabled={locked} />
-              <CondField label={t('qcws.roomTemp')} value={roomTemp} onChange={setRoomTemp} disabled={locked} mono />
-              <CondField label={t('qcws.humidity')} value={humidity} onChange={setHumidity} disabled={locked} mono />
-              <div className="grid grid-cols-2 gap-2">
-                <CondDate label={t('quality.analysisStarted')} value={analysisStarted} onChange={setAnalysisStarted} disabled={locked} />
-                <CondDate label={t('quality.analysisFinished')} value={analysisFinished} onChange={setAnalysisFinished} disabled={locked} />
+            <div className="space-y-3 border-t border-slate-200 bg-slate-50/40 p-5">
+              <EquipmentPicker
+                available={availableEquipment}
+                selectedIds={equipmentIds}
+                onChange={setEquipmentIds}
+                disabled={locked}
+              />
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-4">
+                <CondField label={t('qcws.equipment')} value={equipment} onChange={setEquipment} disabled={locked} />
+                <CondField label={t('qcws.roomTemp')} value={roomTemp} onChange={setRoomTemp} disabled={locked} mono />
+                <CondField label={t('qcws.humidity')} value={humidity} onChange={setHumidity} disabled={locked} mono />
+                <div className="grid grid-cols-2 gap-2">
+                  <CondDate label={t('quality.analysisStarted')} value={analysisStarted} onChange={setAnalysisStarted} disabled={locked} />
+                  <CondDate label={t('quality.analysisFinished')} value={analysisFinished} onChange={setAnalysisFinished} disabled={locked} />
+                </div>
               </div>
             </div>
           </Card>
@@ -1033,5 +1069,99 @@ function VerdictBanner({ verdict, t }: { verdict: Verdict; t: Translate }) {
         <p className="mt-1 text-[12.5px] text-slate-500">{t('qcws.verdictPartialHint')}</p>
       </div>
     </div>
+  )
+}
+
+function EquipmentPicker({
+  available, selectedIds, onChange, disabled,
+}: {
+  available: EquipmentItem[]
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
+  disabled: boolean
+}) {
+  const selected = available.filter((e) => selectedIds.includes(e.id))
+  const expired = selected.filter((e) => e.calibration_status === 'expired' || e.calibration_status === 'missing')
+  const expiring = selected.filter((e) => e.calibration_status === 'expiring')
+
+  function toggle(id: string) {
+    onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id])
+  }
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        Приборы анализа (реестр КИП)
+      </p>
+      <p className="mt-0.5 text-[11px] text-slate-400">
+        Выберите все приборы, использованные при анализе. Просроченная или отсутствующая
+        калибровка блокирует сохранение протокола (GMP Annex 15).
+      </p>
+      {available.length === 0 ? (
+        <p className="mt-2 text-[11.5px] text-slate-400">Справочник КИП пуст — добавьте приборы в разделе «Реестр КИП».</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {available.map((eq) => {
+            const isOn = selectedIds.includes(eq.id)
+            return (
+              <button
+                key={eq.id}
+                type="button"
+                disabled={disabled}
+                onClick={() => toggle(eq.id)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] transition ${
+                  isOn
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                } disabled:opacity-50`}
+                title={`${eq.code} — ${eq.name}`}
+              >
+                <span className="font-mono text-[10.5px]">{eq.code}</span>
+                <span>{eq.name}</span>
+                <CalibrationBadge status={eq.calibration_status} validUntil={eq.calibration_valid_until} />
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {expired.length > 0 && (
+        <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700">
+          <strong>Просроченная калибровка:</strong> {expired.map((e) => e.code).join(', ')}. Сохранение протокола заблокировано.
+        </p>
+      )}
+      {expiring.length > 0 && (
+        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+          <strong>Скоро истекает:</strong> {expiring.map((e) => `${e.code} (до ${e.calibration_valid_until})`).join(', ')}.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function RowEquipmentSelect({
+  available, value, onChange, disabled,
+}: {
+  available: EquipmentItem[]
+  value: string | null
+  onChange: (v: string | null) => void
+  disabled: boolean
+}) {
+  if (disabled) {
+    const eq = available.find((e) => e.id === value)
+    return <span className="text-[11.5px] text-slate-500">{eq ? eq.code : '—'}</span>
+  }
+  return (
+    <select
+      value={value || ''}
+      onChange={(e) => onChange(e.target.value || null)}
+      className="w-full rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11.5px] outline-none focus:border-slate-400"
+    >
+      <option value="">—</option>
+      {available.map((eq) => (
+        <option key={eq.id} value={eq.id}>
+          {eq.code} · {eq.name}
+        </option>
+      ))}
+    </select>
   )
 }

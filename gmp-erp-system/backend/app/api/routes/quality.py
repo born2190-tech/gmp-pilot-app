@@ -41,9 +41,11 @@ from app.schemas.quality import (
 )
 from app.services.permissions import require_permission
 from app.services.quality import create_qc_report, qa_decision, sample_lot, submit_qc_report, submit_qc_result
+from app.services import equipment as equipment_service
 from app.services import sampling_acts as sampling_service
 from app.services import specifications as spec_service
 from app.services.sampling_act_pdf import render_sampling_act_pdf
+from app.schemas.quality import QCReportEquipmentItem
 
 router = APIRouter(prefix="/api/quality", tags=["quality"])
 
@@ -92,12 +94,39 @@ def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
 
 
 def qc_report_item(db: Session, report_id: UUID) -> QCReportItem:
+    from app.models.equipment import Equipment
     from app.models.quality import QCReport
 
     report = db.get(QCReport, report_id)
     parameters = db.query(QCReportParameter).filter(QCReportParameter.report_id == report_id).order_by(QCReportParameter.created_at).all()
     item = QCReportItem.model_validate(report)
-    item.parameters = [QCReportParameterItem.model_validate(parameter) for parameter in parameters]
+
+    param_items: list[QCReportParameterItem] = []
+    for parameter in parameters:
+        row = QCReportParameterItem.model_validate(parameter)
+        if parameter.equipment_id and parameter.equipment is not None:
+            row.equipment_code = parameter.equipment.code
+            row.equipment_name = parameter.equipment.name
+        param_items.append(row)
+    item.parameters = param_items
+
+    equipments: list[QCReportEquipmentItem] = []
+    for eq in report.equipments:
+        equipments.append(
+            QCReportEquipmentItem(
+                id=eq.id,
+                code=eq.code,
+                name=eq.name,
+                category=eq.category,
+                calibration_status=equipment_service.calibration_status_for(db, eq.id),
+                calibration_valid_until=(
+                    equipment_service._latest_calibration(db, eq.id).valid_until
+                    if equipment_service._latest_calibration(db, eq.id)
+                    else None
+                ),
+            )
+        )
+    item.equipments = equipments
     return item
 
 
@@ -293,6 +322,12 @@ def _build_qc_report_data(db: Session, report) -> dict:
 
     pc_params = [_serialize(p) for p in params if (getattr(p, "category", None) or "physicochemical") != "microbiological"]
     micro_params = [_serialize(p) for p in params if getattr(p, "category", None) == "microbiological"]
+    # Если в шапке выбраны приборы из реестра — печатаем «КОД — Наименование»,
+    # объединяя со свободным текстом report.equipment (если он задан).
+    registry_text = ", ".join(f"{e.code} — {e.name}" for e in report.equipments)
+    equipment_text = report.equipment or None
+    if registry_text:
+        equipment_text = registry_text if not equipment_text else f"{equipment_text}; {registry_text}"
     return {
         "report_no": report.report_no,
         "sop_form": sop_form,
@@ -300,7 +335,7 @@ def _build_qc_report_data(db: Session, report) -> dict:
         "analysis_started_at": report.analysis_started_at,
         "analysis_finished_at": report.analysis_finished_at,
         "overall_result": report.overall_result,
-        "equipment": report.equipment,
+        "equipment": equipment_text,
         "room_temp": report.room_temp,
         "humidity": report.humidity,
         "micro_required": report.micro_required,

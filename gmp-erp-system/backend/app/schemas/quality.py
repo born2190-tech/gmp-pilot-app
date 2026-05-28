@@ -158,6 +158,8 @@ class QCReportParameterCreate(BaseModel):
     unit: str | None = Field(default=None, max_length=32)
     method_reference: str | None = Field(default=None, max_length=255)
     complies: bool
+    # Прибор, использованный для этого показателя (optional).
+    equipment_id: UUID | None = None
 
 
 class QCReportCreate(BaseModel):
@@ -167,6 +169,8 @@ class QCReportCreate(BaseModel):
     analysis_finished_at: datetime | None = None
     method_reference: str | None = Field(default=None, max_length=255)
     equipment: str | None = None
+    # Multi-select приборов на весь аналитический лист (шапка Ф-11).
+    equipment_ids: list[UUID] = Field(default_factory=list)
     room_temp: str | None = Field(default=None, max_length=32)
     humidity: str | None = Field(default=None, max_length=32)
     micro_required: bool = True
@@ -174,6 +178,18 @@ class QCReportCreate(BaseModel):
     micro_started_at: datetime | None = None
     micro_finished_at: datetime | None = None
     parameters: list[QCReportParameterCreate] = Field(min_length=1)
+
+
+class QCReportEquipmentItem(BaseModel):
+    """Прибор, привязанный к аналитическому листу — со статусом калибровки."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    code: str
+    name: str
+    category: str | None
+    calibration_status: str = "missing"
+    calibration_valid_until: date | None = None
 
 
 class QCReportParameterItem(BaseModel):
@@ -187,6 +203,9 @@ class QCReportParameterItem(BaseModel):
     unit: str | None
     method_reference: str | None
     complies: bool
+    equipment_id: UUID | None = None
+    equipment_code: str | None = None
+    equipment_name: str | None = None
 
 
 class QCReportItem(BaseModel):
@@ -209,6 +228,7 @@ class QCReportItem(BaseModel):
     micro_started_at: datetime | None = None
     micro_finished_at: datetime | None = None
     parameters: list[QCReportParameterItem] = Field(default_factory=list)
+    equipments: list[QCReportEquipmentItem] = Field(default_factory=list)
 
 
 class QCReportListItem(BaseModel):
