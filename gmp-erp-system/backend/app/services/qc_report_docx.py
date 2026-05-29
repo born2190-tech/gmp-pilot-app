@@ -28,7 +28,7 @@ _HEAD_FILL = "E2E8F0"
 
 
 # ── низкоуровневые помощники форматирования ──────────────────────────────────
-def _set_run_font(run, *, size: float = 12, bold: bool = False, italic: bool = False,
+def _set_run_font(run, *, size: float = 9, bold: bool = False, italic: bool = False,
                   color: RGBColor | None = None) -> None:
     run.font.name = _FONT
     run.font.size = Pt(size)
@@ -45,7 +45,7 @@ def _set_run_font(run, *, size: float = 12, bold: bool = False, italic: bool = F
         rfonts.set(qn(attr), _FONT)
 
 
-def _para(cell_or_doc, text: str = "", *, size: float = 12, bold: bool = False,
+def _para(cell_or_doc, text: str = "", *, size: float = 9, bold: bool = False,
           italic: bool = False, align=None, color: RGBColor | None = None,
           space_after: float = 0):
     """Добавляет абзац (в ячейку или документ) с заданным форматированием."""
@@ -60,7 +60,7 @@ def _para(cell_or_doc, text: str = "", *, size: float = 12, bold: bool = False,
     return p
 
 
-def _cell_text(cell, text: str = "", *, size: float = 12, bold: bool = False,
+def _cell_text(cell, text: str = "", *, size: float = 9, bold: bool = False,
                align=None, color: RGBColor | None = None) -> None:
     """Записывает одну строку текста в ячейку (очищая дефолтный абзац)."""
     cell.paragraphs[0].text = ""
@@ -128,7 +128,7 @@ def render_qc_report_docx(data: dict) -> bytes:
     # дефолтный стиль — Times New Roman 12
     normal = doc.styles["Normal"]
     normal.font.name = _FONT
-    normal.font.size = Pt(12)
+    normal.font.size = Pt(9)
     normal.element.rPr.rFonts.set(qn("w:eastAsia"), _FONT)
 
     section = doc.sections[0]
@@ -159,20 +159,20 @@ def render_qc_report_docx(data: dict) -> bytes:
 
     mid_cell.paragraphs[0].text = ""
     _para(mid_cell, "ИПООО «NOVUGEN PHARMA» (Узбекистан)", align=WD_ALIGN_PARAGRAPH.CENTER)
-    _para(mid_cell, "ДЕПАРТАМЕНТ КОНТРОЛЯ КАЧЕСТВА", size=13, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _para(mid_cell, "ДЕПАРТАМЕНТ КОНТРОЛЯ КАЧЕСТВА", size=11, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
     subtitle = (
         "Аналитический паспорт на готовую продукцию"
         if is_fg else
         "Аналитический лист входного контроля сырья и вспомогательного материала"
     )
     _para(mid_cell, subtitle, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
-    _cell_text(code_cell, f"СОП-{sop_form}, Ф-11", size=10, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    _cell_text(code_cell, f"СОП-{sop_form}, Ф-11", size=8, align=WD_ALIGN_PARAGRAPH.RIGHT)
 
     # ── Адресная строка ──────────────────────────────────────────────────
     addr = doc.add_table(rows=1, cols=1)
     _set_borders(addr)
     _set_col_widths(addr, [usable])
-    _cell_text(addr.rows[0].cells[0], ORG_ADDRESS, size=9)
+    _cell_text(addr.rows[0].cells[0], ORG_ADDRESS, size=7)
 
     _para(doc, "", size=4)
 
@@ -271,7 +271,7 @@ def render_qc_report_docx(data: dict) -> bytes:
         rn = tp.add_run((p.get("parameter_name") or "").upper())
         _set_run_font(rn, bold=True)
         if p.get("method_reference"):
-            ref_p = _para(cells[1], f"({p['method_reference']})", size=10, color=_GREY)
+            ref_p = _para(cells[1], f"({p['method_reference']})", size=7.5, color=_GREY)
             ref_p.paragraph_format.space_after = Pt(0)
         unit = f" {p['unit']}" if p.get("unit") else ""
         result_text = f"{p.get('result_value', '') or ''}{unit}".strip() or "—"
@@ -327,7 +327,7 @@ def render_qc_report_docx(data: dict) -> bytes:
             _para(cell, extra, space_after=2)
         _para(cell, "", size=10)
         _para(cell, "___________________ / ____________", space_after=0)
-        _para(cell, "(подпись / ФИО)", size=9, color=_GREY)
+        _para(cell, "(подпись / ФИО)", size=7, color=_GREY)
 
     _para(doc, "", size=4)
 
