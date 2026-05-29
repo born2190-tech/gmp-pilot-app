@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  Beaker,
   BellRing,
   BookMarked,
   ClipboardList,
@@ -55,6 +56,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.qcNotifications',      section: 'qc',         permission: 'VIEW_QC',         route: 'qc-notifications',     icon: BellRing },
   { labelKey: 'nav.qcSpecifications',     section: 'qc',         permission: 'VIEW_QC',         route: 'qc-specifications',    icon: BookMarked },
   { labelKey: 'nav.qcEquipment',          section: 'qc',         permission: 'VIEW_QC',         route: 'qc-equipment',         icon: Wrench },
+  { labelKey: 'nav.qcReagents',           section: 'qc',         permission: 'VIEW_QC',         route: 'qc-reagents',          icon: Beaker },
 
   // ─── ОКА ──────────────────────────────────────────────────────────────
   { labelKey: 'nav.qaDecisions',          section: 'qa',         permission: 'VIEW_QA',         route: 'qa-decisions',         icon: ShieldCheck },

@@ -18,6 +18,7 @@ import { QualityBoardPage } from './features/quality/QualityBoardPage'
 import { QCScanVerificationPage } from './features/quality/QCScanVerificationPage'
 import { SpecificationsAdminPage } from './features/quality/SpecificationsAdminPage'
 import { EquipmentAdminPage } from './features/quality/EquipmentAdminPage'
+import { ReagentsRegistryPage } from './features/quality/ReagentsRegistryPage'
 import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
 import { login, logout, me } from './lib/api'
 import { getVisibleNavItems } from './lib/permissions'
@@ -121,6 +122,8 @@ export function App() {
       <SpecificationsAdminPage token={token} user={user} />
     ) : route === 'qc-equipment' ? (
       <EquipmentAdminPage token={token} user={user} />
+    ) : route === 'qc-reagents' ? (
+      <ReagentsRegistryPage token={token} user={user} />
     ) : route === 'qa-decisions' ? (
       <QualityBoardPage mode="qa" token={token} user={user} />
     ) : route === 'qa-scan-verification' ? (
