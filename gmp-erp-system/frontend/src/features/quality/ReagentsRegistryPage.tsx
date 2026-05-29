@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Beaker,
@@ -22,6 +22,24 @@ import {
   XCircle,
 } from 'lucide-react'
 import type { CurrentUser } from '../../types/auth'
+import {
+  changeReagentStatus,
+  createReagent,
+  downloadReagentCertificate,
+  getReagent,
+  getReagentAudit,
+  listReagents,
+  uploadReagentCertificate,
+  useReagent,
+} from '../../lib/api'
+import type {
+  ReagentAuditEvent,
+  ReagentCertificateItem,
+  ReagentCreate,
+  ReagentDetail,
+  ReagentItem,
+  ReagentMovementItem,
+} from '../../types/inventory'
 
 type ReagentType = 'reagent' | 'reference_standard' | 'working_standard' | 'volumetric_solution' | 'consumable'
 type ReagentStatus =
@@ -36,7 +54,7 @@ type ReagentStatus =
   | 'blocked'
   | 'disposed'
   | 'depleted'
-type OperationType = 'receipt' | 'opening' | 'consumption' | 'adjustment' | 'blocking' | 'disposal' | 'return'
+type OperationType = 'receipt' | 'opening' | 'consumption' | 'adjustment' | 'blocking' | 'disposal' | 'return' | string
 
 interface Reagent {
   id: string
@@ -317,18 +335,140 @@ function canUse(reagent: Reagent): boolean {
   return !['expired', 'blocked', 'disposed', 'depleted'].includes(reagent.status) && daysToExpiry(reagent) > 0
 }
 
-export function ReagentsRegistryPage({ user }: Props) {
-  const [reagents, setReagents] = useState(initialReagents)
-  const [movements, setMovements] = useState(initialMovements)
-  const [selectedId, setSelectedId] = useState(initialReagents[0]?.id ?? '')
+function mapReagent(row: ReagentItem): Reagent {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    type: row.type as ReagentType,
+    grade: row.grade || '—',
+    manufacturer: row.manufacturer || '—',
+    supplier: row.supplier || '—',
+    batchNumber: row.batch_number || '—',
+    internalBatchNumber: row.internal_batch_number,
+    receivedDate: row.received_date,
+    openedDate: row.opened_date,
+    expiryDateUnopened: row.expiry_date_unopened,
+    expiryDateAfterOpening: row.expiry_date_after_opening_days,
+    status: row.status as ReagentStatus,
+    quantity: row.quantity,
+    unit: row.unit,
+    storageLocation: row.storage_location || '—',
+    storageConditions: row.storage_conditions || '—',
+    responsible: row.responsible || '—',
+    coaAttached: row.has_certificate,
+    notes: row.notes || '',
+  }
+}
+
+function mapMovement(row: ReagentMovementItem): Movement {
+  return {
+    id: row.id,
+    reagentId: row.reagent_id,
+    date: new Date(row.performed_at).toLocaleString('ru-RU'),
+    type: row.operation_type,
+    quantityBefore: row.quantity_before,
+    quantityOperation: row.quantity_operation,
+    quantityAfter: row.quantity_after,
+    analyticalSheet: row.analytical_sheet || '—',
+    materialBatch: row.material_batch || '—',
+    user: row.performed_by || '—',
+    reason: row.reason || '—',
+    signature: row.signature_required,
+  }
+}
+
+function toCreatePayload(form: Partial<Reagent>, user: CurrentUser): ReagentCreate {
+  const today = new Date().toISOString().slice(0, 10)
+  const seq = String(Date.now()).slice(-6)
+  return {
+    code: form.code || `RE-2026-${seq}`,
+    name: form.name || 'Новый реактив',
+    type: form.type || 'reagent',
+    grade: form.grade || null,
+    manufacturer: form.manufacturer || null,
+    supplier: form.supplier || null,
+    batch_number: form.batchNumber || null,
+    internal_batch_number: form.internalBatchNumber || `QC-NEW-${seq}`,
+    received_date: form.receivedDate || today,
+    opened_date: form.openedDate || null,
+    expiry_date_unopened: form.expiryDateUnopened || today,
+    expiry_date_after_opening_days: Number(form.expiryDateAfterOpening || 365),
+    status: form.status || 'draft',
+    quantity: Number(form.quantity || 0),
+    unit: form.unit || 'mL',
+    storage_location: form.storageLocation || null,
+    storage_conditions: form.storageConditions || null,
+    responsible: form.responsible || user.full_name || user.username,
+    notes: form.notes || null,
+  }
+}
+
+export function ReagentsRegistryPage({ token, user }: Props) {
+  const [reagents, setReagents] = useState<Reagent[]>([])
+  const [movements, setMovements] = useState<Movement[]>([])
+  const [certificates, setCertificates] = useState<ReagentCertificateItem[]>([])
+  const [selectedId, setSelectedId] = useState('')
   const [showUsageModal, setShowUsageModal] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showStatusModal, setShowStatusModal] = useState(false)
+  const [auditEvents, setAuditEvents] = useState<ReagentAuditEvent[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<ReagentType | 'all'>('all')
   const [filterStatus, setFilterStatus] = useState<ReagentStatus | 'all'>('all')
   const [filterOpenedOnly, setFilterOpenedOnly] = useState(false)
 
   const selected = reagents.find((r) => r.id === selectedId) ?? null
+
+  const loadReagents = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await listReagents(token, {
+        search: searchQuery,
+        type: filterType === 'all' ? undefined : filterType,
+        status: filterStatus === 'all' ? undefined : filterStatus,
+        opened_only: filterOpenedOnly,
+      })
+      const mapped = response.reagents.map(mapReagent)
+      setReagents(mapped)
+      setSelectedId((current) => (current && mapped.some((item) => item.id === current) ? current : mapped[0]?.id || ''))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить журнал реактивов')
+    } finally {
+      setLoading(false)
+    }
+  }, [filterOpenedOnly, filterStatus, filterType, searchQuery, token])
+
+  const loadDetail = useCallback(async (id: string): Promise<ReagentDetail | null> => {
+    if (!id) return null
+    setDetailLoading(true)
+    setError('')
+    try {
+      const detail = await getReagent(token, id)
+      setMovements(detail.movements.map(mapMovement))
+      setCertificates(detail.certificates)
+      setReagents((current) => current.map((item) => (item.id === id ? mapReagent(detail) : item)))
+      return detail
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить карточку реактива')
+      return null
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => {
+    void loadReagents()
+  }, [loadReagents])
+
+  useEffect(() => {
+    if (selectedId) void loadDetail(selectedId)
+  }, [loadDetail, selectedId])
 
   const kpis = useMemo(() => {
     const active = reagents.filter((r) => ['approved', 'opened', 'in_use', 'expiring'].includes(r.status)).length
@@ -356,64 +496,106 @@ export function ReagentsRegistryPage({ user }: Props) {
     })
   }, [filterOpenedOnly, filterStatus, filterType, reagents, searchQuery])
 
-  function recordUsage(payload: { quantity: number; report: string; batch: string; reason: string }) {
+  async function recordUsage(payload: { quantity: number; report: string; batch: string; reason: string; password: string }) {
     if (!selected) return
-    const quantityAfter = Math.max(0, selected.quantity - payload.quantity)
-    setReagents((current) =>
-      current.map((r) =>
-        r.id === selected.id
-          ? { ...r, quantity: quantityAfter, status: quantityAfter <= 0 ? 'depleted' : 'in_use' }
-          : r,
-      ),
-    )
-    setMovements((current) => [
-      {
-        id: `M${current.length + 1}`.padStart(4, '0'),
-        reagentId: selected.id,
-        date: new Date().toLocaleString('ru-RU'),
-        type: 'consumption',
-        quantityBefore: selected.quantity,
-        quantityOperation: payload.quantity,
-        quantityAfter,
-        analyticalSheet: payload.report,
-        materialBatch: payload.batch,
-        user: user.full_name || user.username,
+    setError('')
+    setSuccess('')
+    try {
+      const detail = await useReagent(token, selected.id, {
+        username: user.username,
+        password: payload.password,
+        meaning: 'Списание реактива/стандартного образца в анализ',
         reason: payload.reason,
-        signature: true,
-      },
-      ...current,
-    ])
-    setShowUsageModal(false)
+        quantity: payload.quantity,
+        analytical_sheet: payload.report,
+        material_batch: payload.batch,
+      })
+      setReagents((current) => current.map((r) => (r.id === selected.id ? mapReagent(detail) : r)))
+      setMovements(detail.movements.map(mapMovement))
+      setCertificates(detail.certificates)
+      setShowUsageModal(false)
+      setSuccess('Списание проведено и подписано.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось провести списание')
+    }
   }
 
-  function addDraft(form: Partial<Reagent>) {
-    const id = `R${reagents.length + 1}`.padStart(4, '0')
-    const item: Reagent = {
-      id,
-      code: form.code || `RE-2026-${String(reagents.length + 1).padStart(3, '0')}`,
-      name: form.name || 'Новый реактив',
-      type: form.type || 'reagent',
-      grade: form.grade || '—',
-      manufacturer: form.manufacturer || '—',
-      supplier: form.supplier || '—',
-      batchNumber: form.batchNumber || '—',
-      internalBatchNumber: form.internalBatchNumber || `QC-NEW-${Date.now()}`,
-      receivedDate: form.receivedDate || new Date().toISOString().slice(0, 10),
-      openedDate: null,
-      expiryDateUnopened: form.expiryDateUnopened || new Date().toISOString().slice(0, 10),
-      expiryDateAfterOpening: Number(form.expiryDateAfterOpening || 365),
-      status: 'draft',
-      quantity: Number(form.quantity || 0),
-      unit: form.unit || 'mL',
-      storageLocation: form.storageLocation || 'QC-STORE',
-      storageConditions: form.storageConditions || 'RT',
-      responsible: form.responsible || user.full_name || user.username,
-      coaAttached: false,
-      notes: form.notes || '',
+  async function addDraft(form: Partial<Reagent>) {
+    setError('')
+    setSuccess('')
+    try {
+      const detail = await createReagent(token, toCreatePayload(form, user))
+      const item = mapReagent(detail)
+      setReagents((current) => [item, ...current.filter((row) => row.id !== item.id)])
+      setMovements(detail.movements.map(mapMovement))
+      setCertificates(detail.certificates)
+      setSelectedId(item.id)
+      setShowAddModal(false)
+      setSuccess('Позиция добавлена в журнал.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось добавить позицию')
     }
-    setReagents((current) => [item, ...current])
-    setSelectedId(item.id)
-    setShowAddModal(false)
+  }
+
+  async function uploadCertificate(file: File) {
+    if (!selected) return
+    setError('')
+    setSuccess('')
+    try {
+      await uploadReagentCertificate(token, selected.id, file, { note: 'CoA / сертификат качества' })
+      const detail = await loadDetail(selected.id)
+      if (detail) {
+        setReagents((current) => current.map((r) => (r.id === selected.id ? mapReagent(detail) : r)))
+      }
+      setSuccess('Сертификат загружен.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить сертификат')
+    }
+  }
+
+  async function downloadCertificate(certificateId: string) {
+    setError('')
+    try {
+      const blob = await downloadReagentCertificate(token, certificateId)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось скачать сертификат')
+    }
+  }
+
+  async function showAudit() {
+    if (!selected) return
+    setError('')
+    try {
+      const response = await getReagentAudit(token, selected.id)
+      setAuditEvents(response.events)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить audit trail')
+    }
+  }
+
+  async function changeStatus(payload: { status: ReagentStatus; reason: string; password: string }) {
+    if (!selected) return
+    setError('')
+    setSuccess('')
+    try {
+      const detail = await changeReagentStatus(token, selected.id, {
+        username: user.username,
+        password: payload.password,
+        meaning: `Изменение статуса реактива на ${statusLabel[payload.status]}`,
+        reason: payload.reason,
+        status: payload.status,
+      })
+      setReagents((current) => current.map((r) => (r.id === selected.id ? mapReagent(detail) : r)))
+      setMovements(detail.movements.map(mapMovement))
+      setCertificates(detail.certificates)
+      setShowStatusModal(false)
+      setSuccess('Статус изменён и подписан.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось изменить статус')
+    }
   }
 
   return (
@@ -437,6 +619,13 @@ export function ReagentsRegistryPage({ user }: Props) {
           Добавить позицию
         </button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
+      )}
+      {success && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <KpiCard tone="emerald" icon={CheckCircle2} value={kpis.active} label="Активные позиции" />
@@ -476,7 +665,9 @@ export function ReagentsRegistryPage({ user }: Props) {
                 <input type="checkbox" checked={filterOpenedOnly} onChange={(e) => setFilterOpenedOnly(e.target.checked)} className="h-4 w-4 accent-slate-900" />
                 Только вскрытые
               </label>
-              <span className="ml-auto text-sm text-slate-500">{filtered.length} записей</span>
+              <span className="ml-auto text-sm text-slate-500">
+                {loading ? 'Загрузка...' : `${filtered.length} записей`}
+              </span>
             </div>
           </div>
 
@@ -522,6 +713,13 @@ export function ReagentsRegistryPage({ user }: Props) {
                     <td className="px-3 py-3 text-xs text-slate-600">{reagent.responsible}</td>
                   </tr>
                 ))}
+                {!loading && filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-10 text-center text-sm text-slate-500">
+                      Записи не найдены. Проверьте фильтры или добавьте новую позицию.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -531,8 +729,14 @@ export function ReagentsRegistryPage({ user }: Props) {
           <DetailPanel
             reagent={selected}
             movements={movements.filter((m) => m.reagentId === selected.id)}
+            certificates={certificates}
+            loading={detailLoading}
             onClose={() => setSelectedId('')}
             onUsage={() => setShowUsageModal(true)}
+            onUploadCertificate={uploadCertificate}
+            onDownloadCertificate={downloadCertificate}
+            onAudit={showAudit}
+            onStatus={() => setShowStatusModal(true)}
           />
         )}
       </div>
@@ -540,7 +744,11 @@ export function ReagentsRegistryPage({ user }: Props) {
       {showUsageModal && selected && (
         <UsageModal reagent={selected} onClose={() => setShowUsageModal(false)} onSubmit={recordUsage} />
       )}
+      {showStatusModal && selected && (
+        <StatusModal reagent={selected} onClose={() => setShowStatusModal(false)} onSubmit={changeStatus} />
+      )}
       {showAddModal && <AddModal onClose={() => setShowAddModal(false)} onSubmit={addDraft} />}
+      {auditEvents && <AuditModal events={auditEvents} onClose={() => setAuditEvents(null)} />}
     </section>
   )
 }
@@ -577,8 +785,31 @@ function ExpiryWarning({ reagent }: { reagent: Reagent }) {
   return null
 }
 
-function DetailPanel({ reagent, movements, onClose, onUsage }: { reagent: Reagent; movements: Movement[]; onClose: () => void; onUsage: () => void }) {
+function DetailPanel({
+  reagent,
+  movements,
+  certificates,
+  loading,
+  onClose,
+  onUsage,
+  onUploadCertificate,
+  onDownloadCertificate,
+  onAudit,
+  onStatus,
+}: {
+  reagent: Reagent
+  movements: Movement[]
+  certificates: ReagentCertificateItem[]
+  loading: boolean
+  onClose: () => void
+  onUsage: () => void
+  onUploadCertificate: (file: File) => void
+  onDownloadCertificate: (certificateId: string) => void
+  onAudit: () => void
+  onStatus: () => void
+}) {
   const blocked = !canUse(reagent)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   return (
     <aside className="w-[480px] shrink-0 overflow-auto bg-white">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
@@ -591,6 +822,7 @@ function DetailPanel({ reagent, movements, onClose, onUsage }: { reagent: Reagen
         </button>
       </div>
       <div className="space-y-4 p-4">
+        {loading && <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">Обновляю карточку...</p>}
         <PanelCard icon={FileText} title="Паспорт">
           <Info label="Наименование" value={reagent.name} />
           <Info label="Тип" value={typeLabel[reagent.type]} />
@@ -622,15 +854,42 @@ function DetailPanel({ reagent, movements, onClose, onUsage }: { reagent: Reagen
         </PanelCard>
 
         <PanelCard icon={FileText} title="Документы">
-          {reagent.coaAttached ? (
-            <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
-              <span className="inline-flex items-center gap-2"><FileText size={15} className="text-slate-400" /> CoA / сертификат</span>
-              <button className="rounded p-1 text-slate-600 hover:bg-slate-200"><Download size={15} /></button>
-            </div>
+          {certificates.length > 0 ? (
+            certificates.map((certificate) => (
+              <div key={certificate.id} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
+                <span className="min-w-0 truncate">
+                  <FileText size={15} className="mr-2 inline text-slate-400" />
+                  {certificate.certificate_no || 'CoA / сертификат'} · {(certificate.file_size / 1024).toFixed(1)} KB
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onDownloadCertificate(certificate.id)}
+                  className="rounded p-1 text-slate-600 hover:bg-slate-200"
+                  title="Скачать сертификат"
+                >
+                  <Download size={15} />
+                </button>
+              </div>
+            ))
           ) : (
             <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">CoA не загружен. Утверждение заблокировано.</p>
           )}
-          <button className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,image/png,image/jpeg"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) onUploadCertificate(file)
+              event.currentTarget.value = ''
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-slate-300 text-sm hover:bg-slate-50"
+          >
             <Upload size={15} /> Загрузить документ
           </button>
         </PanelCard>
@@ -678,14 +937,26 @@ function DetailPanel({ reagent, movements, onClose, onUsage }: { reagent: Reagen
             </p>
           )}
           <div className="grid grid-cols-2 gap-2">
-            <button className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-300 text-sm hover:bg-slate-50">
+            <button
+              type="button"
+              onClick={onAudit}
+              className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-300 text-sm hover:bg-slate-50"
+            >
               <Eye size={14} /> Audit trail
             </button>
-            <button className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-300 text-sm hover:bg-slate-50">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-300 text-sm hover:bg-slate-50"
+            >
               <FileText size={14} /> Печать
             </button>
           </div>
-          <button className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-rose-300 text-sm font-medium text-rose-700 hover:bg-rose-50">
+          <button
+            type="button"
+            onClick={onStatus}
+            className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-rose-300 text-sm font-medium text-rose-700 hover:bg-rose-50"
+          >
             <Trash2 size={15} />
             Заблокировать / утилизировать
           </button>
@@ -713,7 +984,7 @@ function Info({ label, value, mono, strong }: { label: string; value: string; mo
   )
 }
 
-function UsageModal({ reagent, onClose, onSubmit }: { reagent: Reagent; onClose: () => void; onSubmit: (payload: { quantity: number; report: string; batch: string; reason: string }) => void }) {
+function UsageModal({ reagent, onClose, onSubmit }: { reagent: Reagent; onClose: () => void; onSubmit: (payload: { quantity: number; report: string; batch: string; reason: string; password: string }) => void }) {
   const [quantity, setQuantity] = useState('')
   const [report, setReport] = useState('')
   const [batch, setBatch] = useState('')
@@ -760,7 +1031,7 @@ function UsageModal({ reagent, onClose, onSubmit }: { reagent: Reagent; onClose:
           </Labeled>
           <div className="flex gap-3 border-t border-slate-200 pt-4">
             <button onClick={onClose} className="h-10 flex-1 rounded-lg border border-slate-300 hover:bg-slate-50">Отмена</button>
-            <button disabled={invalid} onClick={() => onSubmit({ quantity: qty, report, batch, reason })} className="h-10 flex-1 rounded-lg bg-blue-600 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+            <button disabled={invalid} onClick={() => onSubmit({ quantity: qty, report, batch, reason, password })} className="h-10 flex-1 rounded-lg bg-blue-600 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
               Списать и подписать
             </button>
           </div>
@@ -816,6 +1087,104 @@ function AddModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (form:
   )
 }
 
+function StatusModal({
+  reagent,
+  onClose,
+  onSubmit,
+}: {
+  reagent: Reagent
+  onClose: () => void
+  onSubmit: (payload: { status: ReagentStatus; reason: string; password: string }) => void
+}) {
+  const [status, setStatus] = useState<ReagentStatus>('blocked')
+  const [reason, setReason] = useState('')
+  const [password, setPassword] = useState('')
+  const invalid = !status || !reason || !password
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+      <div className="w-full max-w-lg rounded-lg bg-white">
+        <ModalHeader title="Изменение статуса" onClose={onClose} />
+        <div className="space-y-4 p-6">
+          <div className="rounded-lg bg-slate-50 p-3 text-sm">
+            <div className="font-semibold text-slate-900">{reagent.name}</div>
+            <div className="mt-1 text-xs text-slate-600">Текущий статус: <StatusBadge status={reagent.status} /></div>
+          </div>
+          <Labeled label="Новый статус *">
+            <select value={status} onChange={(e) => setStatus(e.target.value as ReagentStatus)} className="input">
+              <option value="blocked">Заблокирован</option>
+              <option value="disposed">Утилизирован</option>
+              <option value="approved">Разрешён</option>
+              <option value="opened">Вскрыт</option>
+              <option value="quarantine">Карантин</option>
+            </select>
+          </Labeled>
+          <Labeled label="Причина *">
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="input min-h-20" />
+          </Labeled>
+          <Labeled label="Пароль электронной подписи *">
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="input font-mono" />
+          </Labeled>
+          <div className="flex gap-3 border-t border-slate-200 pt-4">
+            <button type="button" onClick={onClose} className="h-10 flex-1 rounded-lg border border-slate-300 hover:bg-slate-50">Отмена</button>
+            <button
+              type="button"
+              disabled={invalid}
+              onClick={() => onSubmit({ status, reason, password })}
+              className="h-10 flex-1 rounded-lg bg-rose-700 font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Подписать
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AuditModal({ events, onClose }: { events: ReagentAuditEvent[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg bg-white">
+        <ModalHeader title="Audit trail" onClose={onClose} />
+        <div className="p-6">
+          {events.length === 0 ? (
+            <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">Событий audit trail пока нет.</p>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Дата</th>
+                    <th className="px-3 py-2">Действие</th>
+                    <th className="px-3 py-2">Роль</th>
+                    <th className="px-3 py-2">Причина</th>
+                    <th className="px-3 py-2">Новое значение</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((event) => (
+                    <tr key={event.id} className="border-t border-slate-100">
+                      <td className="px-3 py-2 font-mono text-xs">{new Date(event.created_at).toLocaleString('ru-RU')}</td>
+                      <td className="px-3 py-2 font-semibold">{event.action_type}</td>
+                      <td className="px-3 py-2">{event.role_code}</td>
+                      <td className="px-3 py-2">{event.reason || '—'}</td>
+                      <td className="px-3 py-2">
+                        <pre className="max-w-xs overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs">
+                          {event.new_value ? JSON.stringify(event.new_value, null, 2) : '—'}
+                        </pre>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ModalHeader({ title, onClose }: { title: string; onClose: () => void }) {
   return (
     <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
@@ -844,14 +1213,18 @@ function FormBlock({ title, children }: { title: string; children: React.ReactNo
 }
 
 function movementLabel(type: OperationType) {
-  const labels: Record<OperationType, string> = {
+  const labels: Record<string, string> = {
     receipt: 'приход',
     opening: 'вскрытие',
     consumption: 'расход',
     adjustment: 'корректировка',
     blocking: 'блокировка',
+    blocked: 'блокировка',
     disposal: 'утилизация',
+    disposed: 'утилизация',
+    approved: 'разрешение',
+    quarantine: 'карантин',
     return: 'возврат',
   }
-  return labels[type]
+  return labels[type] || type
 }

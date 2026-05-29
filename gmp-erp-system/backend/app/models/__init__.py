@@ -24,6 +24,7 @@ from app.models.quality import (
     QCReportParameter,
     SpecificationParameter,
 )
+from app.models.reagents import Reagent, ReagentCertificate, ReagentMovement
 
 __all__ = [
     "AuditEvent",
@@ -54,6 +55,9 @@ __all__ = [
     "QCReportParameter",
     "ReceiptDocument",
     "ReceiptLine",
+    "Reagent",
+    "ReagentCertificate",
+    "ReagentMovement",
     "Role",
     "SignatureEvent",
     "Supplier",

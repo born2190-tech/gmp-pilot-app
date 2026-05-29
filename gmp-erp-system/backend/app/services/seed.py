@@ -4,6 +4,7 @@ from app.core.security import hash_password
 from app.models.identity import Department, Permission, Role, User
 from app.models.master_data import InventoryAccount, Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import MaterialSpecification, SpecificationParameter
+from app.services.reagents import seed_reagents
 
 
 PERMISSIONS: list[tuple[str, str]] = [
@@ -243,6 +244,7 @@ def seed_foundation_data(db: Session) -> None:
     db.flush()
     seed_specifications(db)
     seed_inventory_accounts(db)
+    seed_reagents(db)
 
     db.commit()
 

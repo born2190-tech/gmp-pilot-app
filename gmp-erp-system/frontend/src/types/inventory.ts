@@ -1040,3 +1040,116 @@ export interface AllocationUpdateRequest {
 export interface IssueRequisitionRequest extends SignatureRequest {
   reason?: string
 }
+
+// ─── QC reagents / standards registry ───────────────────────────────────────
+
+export interface ReagentItem {
+  id: string
+  code: string
+  name: string
+  type: string
+  grade: string | null
+  manufacturer: string | null
+  supplier: string | null
+  batch_number: string | null
+  internal_batch_number: string
+  received_date: string
+  opened_date: string | null
+  expiry_date_unopened: string
+  expiry_date_after_opening_days: number
+  status: string
+  quantity: number
+  unit: string
+  storage_location: string | null
+  storage_conditions: string | null
+  responsible: string | null
+  notes: string | null
+  effective_expiry_date: string
+  days_to_expiry: number
+  has_certificate: boolean
+}
+
+export interface ReagentMovementItem {
+  id: string
+  reagent_id: string
+  operation_type: string
+  quantity_before: number
+  quantity_operation: number
+  quantity_after: number
+  analytical_sheet: string | null
+  material_batch: string | null
+  reason: string | null
+  signature_required: boolean
+  performed_by: string | null
+  performed_at: string
+}
+
+export interface ReagentCertificateItem {
+  id: string
+  reagent_id: string
+  certificate_no: string | null
+  note: string | null
+  mime_type: string
+  file_size: number
+  sha256_hash: string
+  uploaded_by: string | null
+  uploaded_at: string
+}
+
+export interface ReagentDetail extends ReagentItem {
+  movements: ReagentMovementItem[]
+  certificates: ReagentCertificateItem[]
+}
+
+export interface ReagentsResponse {
+  reagents: ReagentItem[]
+}
+
+export interface ReagentCreate {
+  code: string
+  name: string
+  type: string
+  grade?: string | null
+  manufacturer?: string | null
+  supplier?: string | null
+  batch_number?: string | null
+  internal_batch_number: string
+  received_date: string
+  opened_date?: string | null
+  expiry_date_unopened: string
+  expiry_date_after_opening_days: number
+  status?: string
+  quantity: number
+  unit: string
+  storage_location?: string | null
+  storage_conditions?: string | null
+  responsible?: string | null
+  notes?: string | null
+}
+
+export interface ReagentUpdate extends Partial<ReagentCreate> {
+  reason?: string | null
+}
+
+export interface ReagentUseRequest extends SignatureRequest {
+  quantity: number
+  analytical_sheet: string
+  material_batch: string
+}
+
+export interface ReagentAuditEvent {
+  id: string
+  created_at: string
+  user_id: string
+  role_code: string
+  workstation_id: string
+  action_type: string
+  old_value: Record<string, unknown> | null
+  new_value: Record<string, unknown> | null
+  reason: string | null
+  source: string
+}
+
+export interface ReagentAuditResponse {
+  events: ReagentAuditEvent[]
+}

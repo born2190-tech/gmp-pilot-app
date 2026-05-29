@@ -78,6 +78,13 @@ import type {
   EquipmentDetail,
   EquipmentListResponse,
   EquipmentUpdate,
+  ReagentAuditResponse,
+  ReagentCertificateItem,
+  ReagentCreate,
+  ReagentDetail,
+  ReagentUpdate,
+  ReagentUseRequest,
+  ReagentsResponse,
 } from '../types/inventory'
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT'
@@ -826,6 +833,83 @@ export function addEquipmentCalibration(
     token,
     body: payload,
   })
+}
+
+// ─── QC reagents / standards registry ───────────────────────────────────────
+
+export function listReagents(
+  token: string,
+  query?: { search?: string; type?: string; status?: string; opened_only?: boolean },
+): Promise<ReagentsResponse> {
+  const q: Record<string, string | number | undefined> = {}
+  if (query?.search) q.search = query.search
+  if (query?.type) q.type = query.type
+  if (query?.status) q.status = query.status
+  if (query?.opened_only !== undefined) q.opened_only = query.opened_only ? 'true' : 'false'
+  return request<ReagentsResponse>('/api/qc/reagents', 'GET', { token, query: q })
+}
+
+export function getReagent(token: string, reagentId: string): Promise<ReagentDetail> {
+  return request<ReagentDetail>(`/api/qc/reagents/${reagentId}`, 'GET', { token })
+}
+
+export function createReagent(token: string, payload: ReagentCreate): Promise<ReagentDetail> {
+  return request<ReagentDetail>('/api/qc/reagents', 'POST', { token, body: payload })
+}
+
+export function updateReagent(token: string, reagentId: string, payload: ReagentUpdate): Promise<ReagentDetail> {
+  return request<ReagentDetail>(`/api/qc/reagents/${reagentId}`, 'PATCH', { token, body: payload })
+}
+
+export function useReagent(token: string, reagentId: string, payload: ReagentUseRequest): Promise<ReagentDetail> {
+  return request<ReagentDetail>(`/api/qc/reagents/${reagentId}/use`, 'POST', { token, body: payload })
+}
+
+export function changeReagentStatus(
+  token: string,
+  reagentId: string,
+  payload: SignatureRequest & { status: string },
+): Promise<ReagentDetail> {
+  return request<ReagentDetail>(`/api/qc/reagents/${reagentId}/status`, 'POST', { token, body: payload })
+}
+
+export function getReagentAudit(token: string, reagentId: string): Promise<ReagentAuditResponse> {
+  return request<ReagentAuditResponse>(`/api/qc/reagents/${reagentId}/audit`, 'GET', { token })
+}
+
+export async function uploadReagentCertificate(
+  token: string,
+  reagentId: string,
+  file: File,
+  meta?: { certificate_no?: string; note?: string },
+): Promise<ReagentCertificateItem> {
+  const params = new URLSearchParams()
+  if (meta?.certificate_no) params.set('certificate_no', meta.certificate_no)
+  if (meta?.note) params.set('note', meta.note)
+  const form = new FormData()
+  form.append('file', file, file.name)
+  const response = await fetch(`/api/qc/reagents/${reagentId}/certificates${params.toString() ? `?${params}` : ''}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
+  return (await response.json()) as ReagentCertificateItem
+}
+
+export async function downloadReagentCertificate(token: string, certificateId: string): Promise<Blob> {
+  const response = await fetch(`/api/qc/reagents/certificates/${certificateId}/file`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
+  return response.blob()
 }
 
 // ─── Production Requisitions ─────────────────────────────────────────────────
