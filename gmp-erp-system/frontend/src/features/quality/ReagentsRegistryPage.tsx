@@ -25,6 +25,7 @@ import type { CurrentUser } from '../../types/auth'
 import {
   changeReagentStatus,
   createReagent,
+  downloadReagentCardPdf,
   downloadReagentCertificate,
   getReagent,
   getReagentAudit,
@@ -565,6 +566,19 @@ export function ReagentsRegistryPage({ token, user }: Props) {
     }
   }
 
+  async function printCard() {
+    if (!selected) return
+    setError('')
+    try {
+      const blob = await downloadReagentCardPdf(token, selected.id)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сформировать PDF-карточку')
+    }
+  }
+
   async function showAudit() {
     if (!selected) return
     setError('')
@@ -737,6 +751,7 @@ export function ReagentsRegistryPage({ token, user }: Props) {
             onDownloadCertificate={downloadCertificate}
             onAudit={showAudit}
             onStatus={() => setShowStatusModal(true)}
+            onPrintCard={printCard}
           />
         )}
       </div>
@@ -796,6 +811,7 @@ function DetailPanel({
   onDownloadCertificate,
   onAudit,
   onStatus,
+  onPrintCard,
 }: {
   reagent: Reagent
   movements: Movement[]
@@ -807,6 +823,7 @@ function DetailPanel({
   onDownloadCertificate: (certificateId: string) => void
   onAudit: () => void
   onStatus: () => void
+  onPrintCard: () => void
 }) {
   const blocked = !canUse(reagent)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -946,10 +963,10 @@ function DetailPanel({
             </button>
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={onPrintCard}
               className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-300 text-sm hover:bg-slate-50"
             >
-              <FileText size={14} /> Печать
+              <FileText size={14} /> Карточка PDF
             </button>
           </div>
           <button

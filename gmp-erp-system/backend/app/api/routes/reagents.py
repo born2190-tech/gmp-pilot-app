@@ -16,6 +16,7 @@ from app.schemas.reagents import (
     ReagentsResponse,
 )
 from app.services import reagents as service
+from app.services.reagent_card_pdf import render_reagent_card_pdf
 
 router = APIRouter(prefix="/api/qc/reagents", tags=["qc-reagents"])
 
@@ -113,6 +114,22 @@ def reagent_audit_route(
             for row in rows
         ]
     }
+
+
+@router.get("/{reagent_id}/card.pdf")
+def reagent_card_pdf_route(
+    reagent_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    reagent = service.get_reagent(db, current_user, reagent_id)
+    pdf = render_reagent_card_pdf(reagent)
+    filename = quote(f"reagent-card-{reagent.code}.pdf")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename*=UTF-8''{filename}"},
+    )
 
 
 @router.post("/{reagent_id}/certificates", response_model=ReagentCertificateItem, status_code=status.HTTP_201_CREATED)

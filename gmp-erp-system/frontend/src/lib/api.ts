@@ -912,6 +912,18 @@ export async function downloadReagentCertificate(token: string, certificateId: s
   return response.blob()
 }
 
+export async function downloadReagentCardPdf(token: string, reagentId: string): Promise<Blob> {
+  const response = await fetch(`/api/qc/reagents/${reagentId}/card.pdf`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
+  return response.blob()
+}
+
 // ─── Production Requisitions ─────────────────────────────────────────────────
 
 export function createRequisition(token: string, payload: RequisitionCreate): Promise<RequisitionItem> {
