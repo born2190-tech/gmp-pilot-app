@@ -501,6 +501,15 @@ export async function downloadLotQcReportPdf(token: string, lotId: string): Prom
   return response.blob()
 }
 
+export async function downloadLotQcReportDocx(token: string, lotId: string): Promise<Blob> {
+  const response = await fetch(`/api/quality/lots/${lotId}/qc-report/docx`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
 // Сертификат производителя (CoA) по партии (через приход).
 export async function downloadLotCertificate(token: string, lotId: string): Promise<Blob> {
   const response = await fetch(`/api/inventory/lots/${lotId}/certificate/file`, {
@@ -556,6 +565,15 @@ export async function downloadQcReportScan(token: string, scanId: string): Promi
 
 export async function downloadQcReportPdf(token: string, reportId: string): Promise<Blob> {
   const response = await fetch(`/api/quality/qc-reports/${reportId}/pdf`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+export async function downloadQcReportDocx(token: string, reportId: string): Promise<Blob> {
+  const response = await fetch(`/api/quality/qc-reports/${reportId}/docx`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   })

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import {
   createQcReport,
+  downloadQcReportDocx,
   downloadQcReportPdf,
   downloadQcReportScan,
   listEquipment,
@@ -401,6 +402,24 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
     }
   }
 
+  async function downloadWord() {
+    if (!draft) return
+    setError(null)
+    try {
+      const blob = await downloadQcReportDocx(token, draft.id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `analytical-sheet-${draft.report_no || draft.id}.docx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('quality.actionFailed'))
+    }
+  }
+
   async function uploadScan(file: File) {
     if (!draft) return
     setBusy(true)
@@ -481,6 +500,9 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
             </PillButton>
             <PillButton tone="neutral" icon={Printer} disabled={!draft} onClick={() => openPdf(true)}>
               {t('qcws.printF11')}
+            </PillButton>
+            <PillButton tone="neutral" icon={FileText} disabled={!draft} onClick={() => void downloadWord()}>
+              {t('qcws.downloadWord')}
             </PillButton>
             <PillButton tone="confirm" icon={ShieldCheck} disabled={!draft || signed || !password} onClick={() => void signProtocol()}>
               {t('qcws.signProtocol')}

@@ -378,6 +378,18 @@ def _qc_report_pdf_response(db: Session, report, inline: bool) -> Response:
     )
 
 
+def _qc_report_docx_response(db: Session, report) -> Response:
+    from app.services.qc_report_docx import render_qc_report_docx
+
+    docx_bytes = render_qc_report_docx(_build_qc_report_data(db, report))
+    filename = f"analytical-sheet-{report.report_no}.docx"
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
 @router.get("/lots/{lot_id}/qc-report/pdf")
 def lot_qc_report_pdf(
     lot_id: UUID,
@@ -398,6 +410,27 @@ def lot_qc_report_pdf(
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found for this lot")
     return _qc_report_pdf_response(db, report, inline)
+
+
+@router.get("/lots/{lot_id}/qc-report/docx")
+def lot_qc_report_docx(
+    lot_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    """Аналитический лист ОКК (Ф-11) для партии в формате Word (.docx)."""
+    require_permission(current_user, "VIEW_WAREHOUSE")
+    from app.models.quality import QCReport
+
+    report = (
+        db.query(QCReport)
+        .filter(QCReport.lot_id == lot_id)
+        .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
+        .first()
+    )
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found for this lot")
+    return _qc_report_docx_response(db, report)
 
 
 @router.get("/lots/{lot_id}/qc-report/scan")
@@ -529,6 +562,22 @@ def qc_report_pdf_route(
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found")
     return _qc_report_pdf_response(db, report, inline)
+
+
+@router.get("/qc-reports/{report_id}/docx")
+def qc_report_docx_route(
+    report_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    """Аналитический лист ОКК (Ф-11) по протоколу в формате Word (.docx)."""
+    require_permission(current_user, "VIEW_QC")
+    from app.models.quality import QCReport
+
+    report = db.get(QCReport, report_id)
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found")
+    return _qc_report_docx_response(db, report)
 
 
 # ---------------------------------------------------------------------------

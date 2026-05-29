@@ -3,10 +3,11 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # fonts-dejavu provides Cyrillic-capable TTF fonts used by the QC notification
-# PDF renderer (ReportLab). Without them the printed Извещение would show
-# Russian text as empty boxes.
+# PDF renderer (ReportLab). fonts-liberation adds Liberation Serif — a
+# metric-compatible, Cyrillic-capable substitute for Times New Roman, used by
+# the аналитический лист (Ф-11). Without them Russian text shows as boxes.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fonts-dejavu \
+    && apt-get install -y --no-install-recommends fonts-dejavu fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
@@ -20,6 +21,7 @@ RUN pip install --no-cache-dir \
     "passlib[bcrypt]>=1.7" \
     "python-jose[cryptography]>=3.3" \
     "reportlab>=4.2" \
+    "python-docx>=1.1" \
     "qrcode[pil]>=7.4" \
     "python-multipart>=0.0.9" \
     "httpx>=0.27"

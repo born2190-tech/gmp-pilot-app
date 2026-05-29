@@ -26,16 +26,19 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 
 _LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "assets" / "novugen-logo.png"
 
+# Times New Roman (или метрически совместимый Liberation Serif с кириллицей).
 _FONT_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("QCRBody", (
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/times.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+        "/usr/share/fonts/liberation/LiberationSerif-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
     )),
     ("QCRBold", (
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-        "C:/Windows/Fonts/arialbd.ttf",
+        "C:/Windows/Fonts/timesbd.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+        "/usr/share/fonts/liberation/LiberationSerif-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
     )),
 )
 
@@ -86,20 +89,20 @@ def render_qc_report_pdf(data: dict) -> bytes:
         title=f"Аналитический лист {data.get('report_no', '')}",
     )
 
-    # ── Стили ────────────────────────────────────────────────────────────
-    label = ParagraphStyle("label", fontName=bold_font, fontSize=8, leading=10)
-    value = ParagraphStyle("value", fontName=body_font, fontSize=8, leading=10)
-    small = ParagraphStyle("small", fontName=body_font, fontSize=6.8, leading=8.2)
-    cell = ParagraphStyle("cell", fontName=body_font, fontSize=8, leading=9.5)
-    cell_head = ParagraphStyle("cell_head", fontName=bold_font, fontSize=8.5, leading=10, alignment=1)
-    test_name = ParagraphStyle("test_name", fontName=bold_font, fontSize=8.2, leading=9.8)
-    test_ref = ParagraphStyle("test_ref", fontName=body_font, fontSize=7, leading=8.4,
+    # ── Стили (Times New Roman, базовый кегль 12) ─────────────────────────
+    label = ParagraphStyle("label", fontName=bold_font, fontSize=12, leading=14)
+    value = ParagraphStyle("value", fontName=body_font, fontSize=12, leading=14)
+    small = ParagraphStyle("small", fontName=body_font, fontSize=9, leading=11)
+    cell = ParagraphStyle("cell", fontName=body_font, fontSize=12, leading=14)
+    cell_head = ParagraphStyle("cell_head", fontName=bold_font, fontSize=12, leading=14, alignment=1)
+    test_name = ParagraphStyle("test_name", fontName=bold_font, fontSize=12, leading=14)
+    test_ref = ParagraphStyle("test_ref", fontName=body_font, fontSize=10, leading=12,
                               textColor=colors.HexColor("#334155"))
-    cmpl = ParagraphStyle("cmpl", fontName=body_font, fontSize=8, leading=10, alignment=1)
-    org_name = ParagraphStyle("org", fontName=bold_font, fontSize=11, leading=13, alignment=1)
-    org_sub = ParagraphStyle("org_sub", fontName=body_font, fontSize=8, leading=10, alignment=1)
-    title_style = ParagraphStyle("title", fontName=bold_font, fontSize=11, leading=13.5, alignment=1)
-    code_style = ParagraphStyle("code", fontName=body_font, fontSize=7.5, leading=9, alignment=2)
+    cmpl = ParagraphStyle("cmpl", fontName=body_font, fontSize=12, leading=14, alignment=1)
+    org_name = ParagraphStyle("org", fontName=bold_font, fontSize=13, leading=15, alignment=1)
+    org_sub = ParagraphStyle("org_sub", fontName=body_font, fontSize=12, leading=14, alignment=1)
+    title_style = ParagraphStyle("title", fontName=bold_font, fontSize=12, leading=14.5, alignment=1)
+    code_style = ParagraphStyle("code", fontName=body_font, fontSize=10, leading=12, alignment=2)
 
     elements: list = []
 
@@ -225,7 +228,7 @@ def render_qc_report_pdf(data: dict) -> bytes:
     # ── Подпись над таблицей ─────────────────────────────────────────────
     elements.append(Paragraph(
         "Результаты анализа в таблице",
-        ParagraphStyle("cap", fontName=bold_font, fontSize=8.5, leading=11),
+        ParagraphStyle("cap", fontName=bold_font, fontSize=12, leading=14),
     ))
     elements.append(Spacer(1, 1 * mm))
 
@@ -269,7 +272,7 @@ def render_qc_report_pdf(data: dict) -> bytes:
     add_info = data.get("additional_info") or "Отсутствует"
     note_verdict = "СООТВЕТСТВУЕТ СПЕЦИФИКАЦИИ" if complies_all else "НЕ СООТВЕТСТВУЕТ СПЕЦИФИКАЦИИ"
     subject = "Готовая продукция" if is_fg else "Сырьё"
-    note_style = ParagraphStyle("note", fontName=bold_font, fontSize=8.5, leading=11)
+    note_style = ParagraphStyle("note", fontName=bold_font, fontSize=12, leading=14)
     info_box = Table(
         [
             [Paragraph(f"<b>Дополнительная информация:</b> {add_info}", value)],
@@ -286,8 +289,8 @@ def render_qc_report_pdf(data: dict) -> bytes:
     elements.append(info_box)
 
     # ── Блок подписей (3 колонки в рамке) ────────────────────────────────
-    sig_label = ParagraphStyle("sig_l", fontName=bold_font, fontSize=8, leading=10)
-    sig_line = ParagraphStyle("sig_line", fontName=body_font, fontSize=8, leading=14)
+    sig_label = ParagraphStyle("sig_l", fontName=bold_font, fontSize=12, leading=14)
+    sig_line = ParagraphStyle("sig_line", fontName=body_font, fontSize=12, leading=16)
     sign = Table(
         [[
             [Paragraph("Ответственный исполнитель:", sig_label), Spacer(1, 9 * mm),
@@ -315,7 +318,7 @@ def render_qc_report_pdf(data: dict) -> bytes:
 
     # ── Предупредительная сноска ─────────────────────────────────────────
     warn = ParagraphStyle(
-        "warn", fontName=bold_font, fontSize=8, leading=10, alignment=1,
+        "warn", fontName=bold_font, fontSize=12, leading=14, alignment=1,
         textColor=colors.HexColor("#b91c1c"),
     )
     elements.append(Paragraph(
