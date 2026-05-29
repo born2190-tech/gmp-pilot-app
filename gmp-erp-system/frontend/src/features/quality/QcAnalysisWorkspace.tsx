@@ -588,21 +588,20 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                     <tr key={p.key} className={`border-b border-slate-100 align-top ${p.complies === false ? 'bg-rose-50/30' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
                       <td className="px-3 py-2.5 text-center font-mono text-[11.5px] text-slate-500">{i + 1}</td>
                       <td className="px-3 py-2.5">
-                        {locked ? <span className="font-medium text-slate-900">{p.parameter_name}</span>
-                          : <GhostInput value={p.parameter_name} onChange={(v) => patchPc(p.key, { parameter_name: v })} placeholder={t('quality.parameterName')} />}
+                        {locked ? <CellText strong>{p.parameter_name}</CellText>
+                          : <GhostTextArea value={p.parameter_name} onChange={(v) => patchPc(p.key, { parameter_name: v })} placeholder={t('quality.parameterName')} />}
                       </td>
                       <td className="px-3 py-2.5">
-                        {locked ? <span className="text-slate-700">{p.specification}</span>
-                          : <GhostInput value={p.specification} onChange={(v) => patchPc(p.key, specPatch(v, p.result_value))} placeholder={t('quality.specification')} />}
+                        {locked ? <CellText>{p.specification}</CellText>
+                          : <GhostTextArea value={p.specification} onChange={(v) => patchPc(p.key, specPatch(v, p.result_value))} placeholder={t('quality.specification')} />}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600">
-                        {locked ? p.method_reference
-                          : <GhostInput value={p.method_reference} onChange={(v) => patchPc(p.key, { method_reference: v })} placeholder={t('quality.methodReference')} />}
+                        {locked ? <CellText muted>{p.method_reference}</CellText>
+                          : <GhostTextArea value={p.method_reference} onChange={(v) => patchPc(p.key, { method_reference: v })} placeholder={t('quality.methodReference')} />}
                       </td>
                       <td className="px-3 py-2.5">
-                        {locked ? <span className="font-mono tabular-nums text-slate-900">{p.result_value}</span>
-                          : <input value={p.result_value} onChange={(e) => patchPc(p.key, resultPatch(p.specification, e.target.value))} placeholder="—"
-                              className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 font-mono text-[12.5px] tabular-nums text-slate-900 outline-none focus:border-slate-400" />}
+                        {locked ? <CellText mono>{p.result_value}</CellText>
+                          : <GhostTextArea value={p.result_value} onChange={(v) => patchPc(p.key, resultPatch(p.specification, v))} placeholder="—" mono bordered />}
                       </td>
                       <td className="px-3 py-2.5">
                         {locked ? <span className="font-mono text-[11.5px] text-slate-500">{p.unit}</span>
@@ -686,17 +685,16 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                         <tr key={p.key} className={`border-b border-slate-100 ${p.complies === false ? 'bg-rose-50/30' : i % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
                           <td className="px-3 py-2.5 text-center font-mono text-[11.5px] text-slate-500">{i + 1}</td>
                           <td className="px-3 py-2.5">
-                            {locked ? <span className="font-medium italic text-slate-900">{p.parameter_name}</span>
-                              : <GhostInput value={p.parameter_name} onChange={(v) => patchMicro(p.key, { parameter_name: v })} placeholder={t('qcws.colIndicator')} />}
+                            {locked ? <CellText strong italic>{p.parameter_name}</CellText>
+                              : <GhostTextArea value={p.parameter_name} onChange={(v) => patchMicro(p.key, { parameter_name: v })} placeholder={t('qcws.colIndicator')} />}
                           </td>
                           <td className="px-3 py-2.5 text-slate-700">
-                            {locked ? p.specification
-                              : <GhostInput value={p.specification} onChange={(v) => patchMicro(p.key, specPatch(v, p.result_value))} placeholder={t('qcws.colNorm')} />}
+                            {locked ? <CellText>{p.specification}</CellText>
+                              : <GhostTextArea value={p.specification} onChange={(v) => patchMicro(p.key, specPatch(v, p.result_value))} placeholder={t('qcws.colNorm')} />}
                           </td>
                           <td className="px-3 py-2.5">
-                            {locked ? <span className="font-mono tabular-nums text-slate-900">{p.result_value}</span>
-                              : <input value={p.result_value} onChange={(e) => patchMicro(p.key, resultPatch(p.specification, e.target.value))} placeholder="—"
-                                  className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 font-mono text-[12.5px] tabular-nums text-slate-900 outline-none focus:border-slate-400" />}
+                            {locked ? <CellText mono>{p.result_value}</CellText>
+                              : <GhostTextArea value={p.result_value} onChange={(v) => patchMicro(p.key, resultPatch(p.specification, v))} placeholder="—" mono bordered />}
                           </td>
                           <td className="px-3 py-2.5">
                             <ComplianceToggle value={p.complies} auto={p.auto} onChange={locked ? null : (v) => patchMicro(p.key, { complies: v, auto: false })} t={t} />
@@ -910,6 +908,59 @@ function GhostInput({ value, onChange, placeholder, mono }: { value: string; onC
   return (
     <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
       className={`w-full rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[12.5px] text-slate-800 outline-none transition hover:border-slate-200 hover:bg-white focus:border-slate-400 focus:bg-white ${mono ? 'font-mono tabular-nums' : ''}`} />
+  )
+}
+
+function GhostTextArea({
+  value,
+  onChange,
+  placeholder,
+  mono,
+  bordered,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  mono?: boolean
+  bordered?: boolean
+}) {
+  const rows = Math.min(5, Math.max(2, Math.ceil((value || placeholder || '').length / 38)))
+  return (
+    <textarea
+      value={value}
+      rows={rows}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={`min-h-9 w-full resize-y whitespace-pre-wrap break-words rounded-md px-2 py-1.5 text-[12.5px] leading-snug text-slate-800 outline-none transition placeholder:text-slate-400 ${
+        bordered
+          ? 'border border-slate-200 bg-white focus:border-slate-400'
+          : 'border border-transparent bg-transparent hover:border-slate-200 hover:bg-white focus:border-slate-400 focus:bg-white'
+      } ${mono ? 'font-mono tabular-nums' : ''}`}
+    />
+  )
+}
+
+function CellText({
+  children,
+  strong,
+  muted,
+  mono,
+  italic,
+}: {
+  children: React.ReactNode
+  strong?: boolean
+  muted?: boolean
+  mono?: boolean
+  italic?: boolean
+}) {
+  return (
+    <span
+      className={`block whitespace-pre-wrap break-words leading-snug ${
+        strong ? 'font-medium text-slate-900' : muted ? 'text-slate-600' : 'text-slate-700'
+      } ${mono ? 'font-mono tabular-nums text-slate-900' : ''} ${italic ? 'italic' : ''}`}
+    >
+      {children || '—'}
+    </span>
   )
 }
 

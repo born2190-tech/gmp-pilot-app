@@ -4,15 +4,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
-  ChevronUp,
   ClipboardSignature,
   Download,
   FileScan,
   FileText,
   FlaskConical,
   Inbox,
-  Lock,
-  Search,
   Upload,
   X,
 } from 'lucide-react'
@@ -39,9 +36,8 @@ import { SamplingActPanel } from './SamplingActPanel'
 import { QcAnalysisWorkspace } from './QcAnalysisWorkspace'
 
 type Phase = 'AWAITING_SAMPLING' | 'DRAFT' | 'SCAN_UPLOADED' | 'SAMPLING_VERIFIED' | 'RESULT_READY'
-type DisplayPhase = Phase | 'OVERDUE'
 
-const PHASE_ORDER: DisplayPhase[] = ['OVERDUE', 'SCAN_UPLOADED', 'AWAITING_SAMPLING', 'DRAFT', 'SAMPLING_VERIFIED', 'RESULT_READY']
+const PHASE_ORDER: Phase[] = ['AWAITING_SAMPLING', 'DRAFT', 'SCAN_UPLOADED', 'SAMPLING_VERIFIED', 'RESULT_READY']
 
 function phaseOf(lot: LotItem, act: SamplingActItem | undefined): Phase {
   if (lot.qc_result_received_at) return 'RESULT_READY'
@@ -55,17 +51,6 @@ function daysSince(value: string | null): number | null {
   if (!value) return null
   const diff = Date.now() - new Date(value).getTime()
   return Math.floor(diff / 86_400_000)
-}
-
-function isOverdueLot(lot: LotItem, phase: Phase): boolean {
-  if (phase === 'RESULT_READY') return false
-  const anchor = phase === 'SAMPLING_VERIFIED' ? lot.sampling_date : lot.incoming_control_notified_at
-  const days = daysSince(anchor)
-  return days !== null && days > 5
-}
-
-function displayPhaseOf(lot: LotItem, phase: Phase): DisplayPhase {
-  return isOverdueLot(lot, phase) ? 'OVERDUE' : phase
 }
 
 interface QualityBoardPageProps {
@@ -87,8 +72,8 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
   const [reportsModalOpen, setReportsModalOpen] = useState(false)
   const [oosList, setOosList] = useState<OOSItem[]>([])
   const [oosModalOpen, setOosModalOpen] = useState(false)
-  const [phaseFilter, setPhaseFilter] = useState<DisplayPhase | null>(null)
-  const [collapsedPhases, setCollapsedPhases] = useState<Set<DisplayPhase>>(new Set())
+  const [phaseFilter, setPhaseFilter] = useState<Phase | null>(null)
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<Phase>>(new Set())
   const [selectedLotId, setSelectedLotId] = useState('')
   const [filter, setFilter] = useState('')
   const panelRef = useRef<HTMLDivElement>(null)
@@ -195,11 +180,14 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
   }, [lots, actByLot])
 
   const kpi = useMemo(() => {
-    const c: Record<DisplayPhase, number> = { AWAITING_SAMPLING: 0, DRAFT: 0, SCAN_UPLOADED: 0, SAMPLING_VERIFIED: 0, RESULT_READY: 0, OVERDUE: 0 }
+    const c = { AWAITING_SAMPLING: 0, DRAFT: 0, SCAN_UPLOADED: 0, SAMPLING_VERIFIED: 0, RESULT_READY: 0, overdue: 0 }
     for (const lot of lots) {
       const ph = lotPhases.get(lot.id)!
       c[ph] += 1
-      if (isOverdueLot(lot, ph)) c.OVERDUE += 1
+      if (ph === 'SAMPLING_VERIFIED') {
+        const d = daysSince(lot.sampling_date)
+        if (d !== null && d > 5) c.overdue += 1
+      }
     }
     return c
   }, [lots, lotPhases])
@@ -207,24 +195,22 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
   const filteredQcLots = useMemo(() => {
     const q = filter.trim().toLowerCase()
     return lots.filter((lot) => {
-      const ph = lotPhases.get(lot.id)!
-      if (phaseFilter && displayPhaseOf(lot, ph) !== phaseFilter) return false
+      if (phaseFilter && lotPhases.get(lot.id) !== phaseFilter) return false
       if (!q) return true
       return (
         lot.material_name.toLowerCase().includes(q) ||
         lot.material_code.toLowerCase().includes(q) ||
         lot.internal_lot.toLowerCase().includes(q) ||
         (lot.supplier_lot || '').toLowerCase().includes(q) ||
-        lot.manufacturer_name.toLowerCase().includes(q) ||
-        lot.supplier_name.toLowerCase().includes(q)
+        lot.manufacturer_name.toLowerCase().includes(q)
       )
     })
   }, [lots, filter, phaseFilter, lotPhases])
 
   const groupedQc = useMemo(() => {
-    const groups = new Map<DisplayPhase, LotItem[]>()
+    const groups = new Map<Phase, LotItem[]>()
     for (const lot of filteredQcLots) {
-      const ph = displayPhaseOf(lot, lotPhases.get(lot.id)!)
+      const ph = lotPhases.get(lot.id)!
       if (!groups.has(ph)) groups.set(ph, [])
       groups.get(ph)!.push(lot)
     }
@@ -233,50 +219,38 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
 
   if (mode === 'qc') {
     return (
-      <section className="mx-auto max-w-7xl space-y-5">
+      <section className="space-y-4">
         <div>
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500">{t('quality.incomingControl')}</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{t('quality.incomingControl')}</p>
           <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-slate-950">{t('quality.qcBoard')}</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-500">{t('qc.dashboardSubtitle')}</p>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">{t('qc.dashboardSubtitle')}</p>
         </div>
 
         {error && <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
         {success && <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{success}</p>}
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <KpiTile icon={Inbox} label={t('qc.kpi.newNotifications')} phase="AWAITING_SAMPLING" value={kpi.AWAITING_SAMPLING} active={phaseFilter === 'AWAITING_SAMPLING'} onClick={() => setPhaseFilter((p) => (p === 'AWAITING_SAMPLING' ? null : 'AWAITING_SAMPLING'))} />
-          <KpiTile icon={ClipboardSignature} label={t('qc.kpi.awaitingSampling')} phase="DRAFT" value={kpi.DRAFT} active={phaseFilter === 'DRAFT'} onClick={() => setPhaseFilter((p) => (p === 'DRAFT' ? null : 'DRAFT'))} />
-          <KpiTile icon={FileScan} label={t('qc.kpi.scanUploaded')} phase="SCAN_UPLOADED" value={kpi.SCAN_UPLOADED} active={phaseFilter === 'SCAN_UPLOADED'} onClick={() => setPhaseFilter((p) => (p === 'SCAN_UPLOADED' ? null : 'SCAN_UPLOADED'))} />
-          <KpiTile icon={FlaskConical} label={t('qc.kpi.inAnalysis')} phase="SAMPLING_VERIFIED" value={kpi.SAMPLING_VERIFIED} active={phaseFilter === 'SAMPLING_VERIFIED'} onClick={() => setPhaseFilter((p) => (p === 'SAMPLING_VERIFIED' ? null : 'SAMPLING_VERIFIED'))} />
-          <KpiTile icon={CheckCircle2} label={t('qc.kpi.resultReady')} phase="RESULT_READY" value={kpi.RESULT_READY} active={phaseFilter === 'RESULT_READY'} onClick={() => setPhaseFilter((p) => (p === 'RESULT_READY' ? null : 'RESULT_READY'))} />
-          <KpiTile icon={AlertTriangle} label="Просрочены" phase="OVERDUE" value={kpi.OVERDUE} active={phaseFilter === 'OVERDUE'} onClick={() => setPhaseFilter((p) => (p === 'OVERDUE' ? null : 'OVERDUE'))} />
+        {/* KPI tiles */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
+          <KpiTile icon={Inbox} accent="bg-slate-100 text-slate-700" label={t('qc.kpi.newNotifications')} sub={t('qc.kpi.newNotificationsSub')} value={kpi.AWAITING_SAMPLING} active={phaseFilter === 'AWAITING_SAMPLING'} onClick={() => setPhaseFilter((p) => (p === 'AWAITING_SAMPLING' ? null : 'AWAITING_SAMPLING'))} />
+          <KpiTile icon={ClipboardSignature} accent="bg-amber-50 text-amber-700" label={t('qc.kpi.awaitingSampling')} sub={t('qc.kpi.awaitingSamplingSub')} value={kpi.DRAFT} active={phaseFilter === 'DRAFT'} onClick={() => setPhaseFilter((p) => (p === 'DRAFT' ? null : 'DRAFT'))} />
+          <KpiTile icon={FileScan} accent="bg-sky-50 text-sky-700" label={t('qc.kpi.scanUploaded')} sub={t('qc.kpi.scanUploadedSub')} value={kpi.SCAN_UPLOADED} active={phaseFilter === 'SCAN_UPLOADED'} onClick={() => setPhaseFilter((p) => (p === 'SCAN_UPLOADED' ? null : 'SCAN_UPLOADED'))} />
+          <KpiTile icon={FlaskConical} accent="bg-violet-50 text-violet-700" label={t('qc.kpi.inAnalysis')} sub={t('qc.kpi.inAnalysisSub')} value={kpi.SAMPLING_VERIFIED} active={phaseFilter === 'SAMPLING_VERIFIED'} onClick={() => setPhaseFilter((p) => (p === 'SAMPLING_VERIFIED' ? null : 'SAMPLING_VERIFIED'))} />
+          <KpiTile icon={CheckCircle2} accent="bg-emerald-50 text-emerald-700" label={t('qc.kpi.resultReady')} sub={t('qc.kpi.resultReadySub')} value={kpi.RESULT_READY} active={phaseFilter === 'RESULT_READY'} onClick={() => setPhaseFilter((p) => (p === 'RESULT_READY' ? null : 'RESULT_READY'))} />
+          <KpiTile icon={FileText} accent="bg-blue-50 text-blue-700" label={t('qc.kpi.analyticalSheets')} sub={t('qc.kpi.analyticalSheetsSub')} value={reports.length} onClick={() => setReportsModalOpen(true)} />
+          <KpiTile icon={AlertTriangle} accent="bg-rose-50 text-rose-700" label={t('qc.kpi.oos')} sub={t('qc.kpi.oosSub')} value={oosList.filter((o) => o.status !== 'closed').length} onClick={() => setOosModalOpen(true)} />
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search size={14} strokeWidth={1.5} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-4 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-2 focus:ring-cyan-400"
-              onChange={(event) => setFilter(event.target.value)}
-              placeholder="Поиск: материал, серия, поставщик..."
-              value={filter}
-            />
-          </div>
+        {/* Search */}
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+          <input className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60" onChange={(event) => setFilter(event.target.value)} placeholder={t('lots.search')} value={filter} />
           {phaseFilter && (
-            <button type="button" onClick={() => setPhaseFilter(null)} className="h-10 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50">
+            <button type="button" onClick={() => setPhaseFilter(null)} className="whitespace-nowrap rounded-md border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">
               {t('registry.resetFilters')}
             </button>
           )}
-          <button type="button" onClick={() => setReportsModalOpen(true)} className="hidden h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 lg:inline-flex">
-            <FileText size={14} strokeWidth={1.5} />
-            Листы · {reports.length}
-          </button>
-          <button type="button" onClick={() => setOosModalOpen(true)} className="hidden h-10 items-center gap-2 rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-700 hover:bg-rose-50 lg:inline-flex">
-            <AlertTriangle size={14} strokeWidth={1.5} />
-            OOS · {oosList.filter((o) => o.status !== 'closed').length}
-          </button>
         </div>
 
+        {/* Task cards grouped by phase */}
         {groupedQc.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-16">
             <Inbox size={26} className="text-slate-300" />
@@ -286,7 +260,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
           groupedQc.map((group) => {
             const collapsed = collapsedPhases.has(group.phase)
             return (
-            <div key={group.phase}>
+            <div key={group.phase} className="space-y-2">
               <button
                 type="button"
                 onClick={() =>
@@ -297,14 +271,15 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
                     return next
                   })
                 }
-                className="group mb-2 flex w-full items-center gap-2 text-left"
+                className="flex w-full items-center gap-2 px-1 text-left"
               >
-                <span className={`h-px w-3 flex-shrink-0 ${group.phase === 'OVERDUE' ? 'bg-rose-300' : 'bg-slate-300'}`} />
-                <span className={`whitespace-nowrap text-[10px] font-semibold uppercase tracking-widest ${group.phase === 'OVERDUE' ? 'text-rose-500' : 'text-slate-500'}`}>
-                  {SECTION_LABEL[group.phase]} · {group.lots.length}
+                <ChevronDown size={14} className={`text-slate-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${PHASE_DOT[group.phase]}`} />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t(SECTION_KEY[group.phase] as never)}</span>
+                <span className="text-[11px] font-medium text-slate-400">· {group.lots.length}</span>
+                <span className="ml-auto text-[11px] font-medium text-slate-400">
+                  {collapsed ? t('common.expand') : t('common.collapse')}
                 </span>
-                <span className="h-px flex-1 bg-slate-200" />
-                {collapsed ? <ChevronDown size={12} className="text-slate-400" /> : <ChevronUp size={12} className="text-slate-400" />}
               </button>
               {!collapsed && (
               <div className="space-y-2">
@@ -314,7 +289,6 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
                     lot={lot}
                     act={actByLot.get(lot.id)}
                     phase={lotPhases.get(lot.id)!}
-                    displayPhase={group.phase}
                     selected={selectedLotId === lot.id}
                     locale={locale}
                     t={t}
@@ -398,13 +372,20 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
 
 // ─── QC dashboard helpers ────────────────────────────────────────────────────
 
-const SECTION_LABEL: Record<DisplayPhase, string> = {
-  OVERDUE: 'ПРОСРОЧЕНЫ',
-  SCAN_UPLOADED: 'ОЖИДАЮТ ПОДПИСАНИЯ',
-  AWAITING_SAMPLING: 'ОЖИДАЮТ ОТБОРА',
-  DRAFT: 'АКТ В РАБОТЕ',
-  SAMPLING_VERIFIED: 'НА АНАЛИЗЕ',
-  RESULT_READY: 'РЕЗУЛЬТАТ ГОТОВ',
+const PHASE_DOT: Record<Phase, string> = {
+  AWAITING_SAMPLING: 'bg-slate-400',
+  DRAFT: 'bg-amber-500',
+  SCAN_UPLOADED: 'bg-sky-500',
+  SAMPLING_VERIFIED: 'bg-violet-500',
+  RESULT_READY: 'bg-emerald-500',
+}
+
+const SECTION_KEY: Record<Phase, string> = {
+  AWAITING_SAMPLING: 'qc.section.awaiting',
+  DRAFT: 'qc.section.draft',
+  SCAN_UPLOADED: 'qc.section.scan',
+  SAMPLING_VERIFIED: 'qc.section.analysis',
+  RESULT_READY: 'qc.section.result',
 }
 
 // Индекс текущей фазы для прогресс-полосы (4 шага: извещено→отобрано→анализ→результат)
@@ -418,39 +399,36 @@ const PHASE_PROGRESS: Record<Phase, number> = {
 
 function KpiTile({
   icon: Icon,
+  accent,
   label,
-  phase,
+  sub,
   value,
   active,
   onClick,
 }: {
   icon: typeof Inbox
+  accent: string
   label: string
-  phase: DisplayPhase
+  sub: string
   value: number
   active?: boolean
   onClick?: () => void
 }) {
-  const style: Record<DisplayPhase, { card: string; icon: string }> = {
-    AWAITING_SAMPLING: { card: 'bg-slate-50 border-slate-200 text-slate-700', icon: 'text-slate-500' },
-    DRAFT: { card: 'bg-amber-50 border-amber-200 text-amber-700', icon: 'text-amber-500' },
-    SCAN_UPLOADED: { card: 'bg-sky-50 border-sky-200 text-sky-700', icon: 'text-sky-500' },
-    SAMPLING_VERIFIED: { card: 'bg-violet-50 border-violet-200 text-violet-700', icon: 'text-violet-500' },
-    RESULT_READY: { card: 'bg-emerald-50 border-emerald-200 text-emerald-700', icon: 'text-emerald-500' },
-    OVERDUE: { card: 'bg-rose-50 border-rose-200 text-rose-700', icon: 'text-rose-500' },
-  }
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all ${
-        style[phase].card
-      } ${active ? 'shadow-sm ring-2 ring-current ring-offset-1' : 'hover:shadow-sm'} ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+      className={`flex flex-col items-start gap-1 rounded-xl border bg-white p-3 text-left transition ${
+        active ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'
+      } ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
     >
-      <Icon size={18} strokeWidth={1.5} className={`mb-2 ${style[phase].icon}`} />
-      <span className="mb-1 text-2xl font-bold leading-none tabular-nums">{value}</span>
-      <span className="text-[11px] font-medium leading-tight">{label}</span>
+      <span className={`grid h-8 w-8 place-items-center rounded-md ${accent}`}>
+        <Icon size={16} />
+      </span>
+      <span className="mt-1 font-mono text-[22px] font-semibold tabular-nums leading-none text-slate-950">{value}</span>
+      <span className="text-[12px] font-medium text-slate-800">{label}</span>
+      <span className="text-[10.5px] text-slate-500">{sub}</span>
     </button>
   )
 }
@@ -461,7 +439,6 @@ function QcTaskCard({
   lot,
   act,
   phase,
-  displayPhase,
   selected,
   locale,
   t,
@@ -470,22 +447,21 @@ function QcTaskCard({
   lot: LotItem
   act: SamplingActItem | undefined
   phase: Phase
-  displayPhase: DisplayPhase
   selected: boolean
   locale: string
   t: Translate
   onAction: () => void
 }) {
-  const days = daysSince(phase === 'SAMPLING_VERIFIED' ? lot.sampling_date : lot.incoming_control_notified_at)
-  const overdue = displayPhase === 'OVERDUE'
+  const days = daysSince(lot.incoming_control_notified_at)
+  const overdue = phase === 'SAMPLING_VERIFIED' && (daysSince(lot.sampling_date) ?? 0) > 5
   const sopForm = lot.warehouse_type === 'FG_WAREHOUSE' ? '548' : '533'
   const progress = PHASE_PROGRESS[phase]
-  const phaseSteps = ['Извещено', 'Отобрано', 'Проанализировано', 'Результат']
+  const phaseSteps = [t('qc.phase.notified'), t('qc.phase.sampled'), t('qc.phase.analyzed'), t('qc.phase.result')]
 
   const CTA: Record<Phase, { label: string; cls: string; disabled?: boolean }> = {
-    AWAITING_SAMPLING: { label: 'Сформировать акт отбора', cls: 'bg-slate-900 text-white hover:bg-slate-800' },
+    AWAITING_SAMPLING: { label: t('qc.card.createAct'), cls: 'bg-slate-900 text-white hover:bg-slate-800' },
     DRAFT: { label: t('qc.card.openAct'), cls: 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50' },
-    SCAN_UPLOADED: { label: 'Подтвердить и списать', cls: 'bg-emerald-700 text-white hover:bg-emerald-800' },
+    SCAN_UPLOADED: { label: t('qc.card.confirmAct'), cls: 'bg-emerald-700 text-white hover:bg-emerald-800' },
     SAMPLING_VERIFIED: { label: t('qc.card.enterResult'), cls: 'bg-violet-700 text-white hover:bg-violet-800' },
     RESULT_READY: { label: t('qc.card.sentToQa'), cls: 'border border-slate-200 bg-slate-50 text-slate-400 cursor-default', disabled: true },
   }
@@ -547,7 +523,7 @@ function QcTaskCard({
             disabled={cta.disabled}
             className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3.5 text-[13px] font-medium transition ${cta.cls}`}
           >
-            {cta.disabled ? <Lock size={15} /> : <ClipboardSignature size={15} />}
+            <ClipboardSignature size={15} />
             {cta.label}
           </button>
         </div>
