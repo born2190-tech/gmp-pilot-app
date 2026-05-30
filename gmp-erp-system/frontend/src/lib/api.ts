@@ -32,6 +32,10 @@ import type {
   QCPendingScansResponse,
   QCScanRejectRequest,
   QCScanVerifyRequest,
+  VerificationQueueResponse,
+  ScanVerifyRequest,
+  ScanRejectRequest,
+  QcReportListItem,
   InventoryWaveCancelRequest,
   InventoryWaveItem,
   InventoryWaveLineUpdate,
@@ -743,6 +747,45 @@ export function verifyQcScan(token: string, scanId: string, payload: QCScanVerif
 
 export function rejectQcScan(token: string, scanId: string, payload: QCScanRejectRequest): Promise<QCNotificationScanItem> {
   return request<QCNotificationScanItem>(`/api/inventory/qc-notifications/scans/${scanId}/reject`, 'POST', { token, body: payload })
+}
+
+// --- Unified ДОК verification queue (Ф-14 / Ф-10 / Ф-11) -------------------
+export function listVerificationQueue(token: string): Promise<VerificationQueueResponse> {
+  return request<VerificationQueueResponse>('/api/quality/verification-queue', 'GET', { token })
+}
+
+export function verifySamplingScan(token: string, scanId: string, payload: ScanVerifyRequest): Promise<SamplingActItem> {
+  return request<SamplingActItem>(`/api/quality/sampling-scans/${scanId}/verify`, 'POST', { token, body: payload })
+}
+
+export function rejectSamplingScan(token: string, scanId: string, payload: ScanRejectRequest): Promise<SamplingActItem> {
+  return request<SamplingActItem>(`/api/quality/sampling-scans/${scanId}/reject`, 'POST', { token, body: payload })
+}
+
+export function verifyQcReportScan(token: string, scanId: string, payload: ScanVerifyRequest): Promise<QcReportListItem> {
+  return request<QcReportListItem>(`/api/quality/qc-report-scans/${scanId}/verify`, 'POST', { token, body: payload })
+}
+
+export function rejectQcReportScan(token: string, scanId: string, payload: ScanRejectRequest): Promise<QcReportListItem> {
+  return request<QcReportListItem>(`/api/quality/qc-report-scans/${scanId}/reject`, 'POST', { token, body: payload })
+}
+
+export async function downloadSamplingScanFile(token: string, scanId: string): Promise<Blob> {
+  const response = await fetch(`/api/quality/sampling-scans/${scanId}/file`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+export async function downloadQcReportScanFile(token: string, scanId: string): Promise<Blob> {
+  const response = await fetch(`/api/quality/qc-report-scans/${scanId}/file`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
 }
 
 export function listQaLots(token: string): Promise<QualityLotsResponse> {

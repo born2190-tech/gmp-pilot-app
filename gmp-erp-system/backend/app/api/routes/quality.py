@@ -38,6 +38,10 @@ from app.schemas.quality import (
     SamplingActItem,
     SamplingActPost,
     SamplingActsResponse,
+    ScanRejectRequest,
+    ScanVerifyRequest,
+    VerificationQueueItem,
+    VerificationQueueResponse,
 )
 from app.services.permissions import require_permission
 from app.services.quality import create_qc_report, qa_decision, sample_lot, submit_qc_report, submit_qc_result
@@ -52,6 +56,34 @@ router = APIRouter(prefix="/api/quality", tags=["quality"])
 
 def _sampling_item(db: Session, act) -> SamplingActItem:
     return SamplingActItem.model_validate(sampling_service.build_item(db, act))
+
+
+def _qc_report_list_item(db: Session, report_id: UUID) -> QCReportListItem:
+    """Build a QCReportListItem row (incl. latest scan + ДОК-verification status)."""
+    from app.models.quality import QCReport
+    from app.services.qc_report_scans import latest_scan
+
+    r = db.get(QCReport, report_id)
+    if not r:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="QC report not found")
+    lot = db.get(Lot, r.lot_id)
+    material = db.get(Material, lot.material_id) if lot else None
+    manufacturer = db.get(Manufacturer, lot.manufacturer_id) if lot else None
+    scan = latest_scan(db, r.id)
+    return QCReportListItem(
+        id=r.id,
+        lot_id=r.lot_id,
+        report_no=r.report_no,
+        status=r.status,
+        overall_result=r.overall_result,
+        submitted_at=r.submitted_at,
+        internal_lot=(lot.supplier_lot or lot.internal_lot) if lot else None,
+        material_name=material.name if material else None,
+        manufacturer_name=manufacturer.name if manufacturer else None,
+        scan_id=scan.id if scan else None,
+        scan_sha256=scan.sha256_hash if scan else None,
+        scan_status=scan.status if scan else None,
+    )
 
 
 def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
@@ -657,6 +689,172 @@ def download_sampling_scan_route(
 ) -> Response:
     raw, mime = sampling_service.load_scan_file(db, current_user, scan_id)
     return Response(content=raw, media_type=mime)
+
+
+# ---------------------------------------------------------------------------
+# ДОК (QA) 4-eyes verification of Ф-10 (sampling) and Ф-11 (analytical) scans
+# ---------------------------------------------------------------------------
+
+
+@router.post("/sampling-scans/{scan_id}/verify", response_model=SamplingActItem)
+def verify_sampling_scan_route(
+    scan_id: UUID,
+    payload: ScanVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActItem:
+    scan = sampling_service.verify_sampling_scan(
+        db, current_user, scan_id,
+        signature_1_ok=payload.signature_1_ok,
+        signature_2_ok=payload.signature_2_ok,
+        signature_3_ok=payload.signature_3_ok,
+        remarks=payload.remarks,
+        username=payload.username, password=payload.password,
+        meaning=payload.meaning, reason=payload.reason,
+    )
+    act = sampling_service.get_sampling_act(db, current_user, scan.sampling_act_id)
+    return _sampling_item(db, act)
+
+
+@router.post("/sampling-scans/{scan_id}/reject", response_model=SamplingActItem)
+def reject_sampling_scan_route(
+    scan_id: UUID,
+    payload: ScanRejectRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> SamplingActItem:
+    scan = sampling_service.reject_sampling_scan(
+        db, current_user, scan_id,
+        remarks=payload.remarks,
+        username=payload.username, password=payload.password,
+        meaning=payload.meaning, reason=payload.reason,
+    )
+    act = sampling_service.get_sampling_act(db, current_user, scan.sampling_act_id)
+    return _sampling_item(db, act)
+
+
+@router.post("/qc-report-scans/{scan_id}/verify", response_model=QCReportListItem)
+def verify_qc_report_scan_route(
+    scan_id: UUID,
+    payload: ScanVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCReportListItem:
+    from app.services.qc_report_scans import verify_report_scan
+
+    scan = verify_report_scan(
+        db, current_user, scan_id,
+        signature_1_ok=payload.signature_1_ok,
+        signature_2_ok=payload.signature_2_ok,
+        signature_3_ok=payload.signature_3_ok,
+        remarks=payload.remarks,
+        username=payload.username, password=payload.password,
+        meaning=payload.meaning, reason=payload.reason,
+    )
+    return _qc_report_list_item(db, scan.report_id)
+
+
+@router.post("/qc-report-scans/{scan_id}/reject", response_model=QCReportListItem)
+def reject_qc_report_scan_route(
+    scan_id: UUID,
+    payload: ScanRejectRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> QCReportListItem:
+    from app.services.qc_report_scans import reject_report_scan
+
+    scan = reject_report_scan(
+        db, current_user, scan_id,
+        remarks=payload.remarks,
+        username=payload.username, password=payload.password,
+        meaning=payload.meaning, reason=payload.reason,
+    )
+    return _qc_report_list_item(db, scan.report_id)
+
+
+@router.get("/verification-queue", response_model=VerificationQueueResponse)
+def verification_queue_route(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> VerificationQueueResponse:
+    """Unified ДОК queue: pending wet-ink scans across Ф-14 / Ф-10 / Ф-11."""
+    require_permission(current_user, "VERIFY_QC_SCAN")
+    from app.models.identity import User
+    from app.models.quality import (
+        QCNotificationScan,
+        QCReport,
+        QCReportScan,
+        SamplingAct,
+        SamplingScan,
+    )
+
+    items: list[VerificationQueueItem] = []
+
+    # Ф-14 — QC notifications
+    notif_rows = (
+        db.query(
+            QCNotificationScan.id, QCNotificationScan.notification_id,
+            QCNotification.notification_no, Warehouse.warehouse_type,
+            QCNotificationScan.uploaded_at, QCNotificationScan.uploaded_by,
+            User.full_name, QCNotificationScan.version,
+        )
+        .join(QCNotification, QCNotification.id == QCNotificationScan.notification_id)
+        .join(Warehouse, Warehouse.id == QCNotification.warehouse_id)
+        .outerjoin(User, User.id == QCNotificationScan.uploaded_by)
+        .filter(QCNotificationScan.status == "pending_verification")
+        .all()
+    )
+    for r in notif_rows:
+        items.append(VerificationQueueItem(
+            doc_type="qc_notification", scan_id=r[0], doc_id=r[1], doc_no=r[2],
+            sop_form="14", title=r[3], uploaded_at=r[4], uploaded_by=r[5],
+            uploaded_by_name=r[6], version=r[7],
+        ))
+
+    # Ф-10 — sampling acts
+    sampling_rows = (
+        db.query(
+            SamplingScan.id, SamplingAct.id, SamplingAct.act_no, SamplingAct.sop_form,
+            Material.name, SamplingScan.uploaded_at, SamplingScan.uploaded_by,
+            User.full_name, SamplingScan.version,
+        )
+        .join(SamplingAct, SamplingAct.id == SamplingScan.sampling_act_id)
+        .outerjoin(Lot, Lot.id == SamplingAct.lot_id)
+        .outerjoin(Material, Material.id == Lot.material_id)
+        .outerjoin(User, User.id == SamplingScan.uploaded_by)
+        .filter(SamplingScan.status == "pending_verification")
+        .all()
+    )
+    for r in sampling_rows:
+        items.append(VerificationQueueItem(
+            doc_type="sampling_act", scan_id=r[0], doc_id=r[1], doc_no=r[2],
+            sop_form=r[3], title=r[4], uploaded_at=r[5], uploaded_by=r[6],
+            uploaded_by_name=r[7], version=r[8],
+        ))
+
+    # Ф-11 — analytical sheets
+    report_rows = (
+        db.query(
+            QCReportScan.id, QCReport.id, QCReport.report_no,
+            Material.name, QCReportScan.uploaded_at, QCReportScan.uploaded_by,
+            User.full_name, QCReportScan.version,
+        )
+        .join(QCReport, QCReport.id == QCReportScan.report_id)
+        .outerjoin(Lot, Lot.id == QCReport.lot_id)
+        .outerjoin(Material, Material.id == Lot.material_id)
+        .outerjoin(User, User.id == QCReportScan.uploaded_by)
+        .filter(QCReportScan.status == "pending_verification")
+        .all()
+    )
+    for r in report_rows:
+        items.append(VerificationQueueItem(
+            doc_type="qc_report", scan_id=r[0], doc_id=r[1], doc_no=r[2],
+            sop_form="11", title=r[3], uploaded_at=r[4], uploaded_by=r[5],
+            uploaded_by_name=r[6], version=r[7],
+        ))
+
+    items.sort(key=lambda it: it.uploaded_at)
+    return VerificationQueueResponse(items=items)
 
 
 @router.post("/sampling-acts/{act_id}/cancel", response_model=SamplingActItem)

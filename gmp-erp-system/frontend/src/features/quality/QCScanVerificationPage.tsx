@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -12,12 +12,18 @@ import {
 import { useI18n } from '../../i18n/I18nProvider'
 import {
   downloadQcNotificationScan,
-  listPendingQcScans,
+  downloadQcReportScanFile,
+  downloadSamplingScanFile,
+  listVerificationQueue,
+  rejectQcReportScan,
   rejectQcScan,
+  rejectSamplingScan,
+  verifyQcReportScan,
   verifyQcScan,
+  verifySamplingScan,
 } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
-import type { QCPendingScanItem } from '../../types/inventory'
+import type { VerificationDocType, VerificationQueueItem } from '../../types/inventory'
 
 interface QCScanVerificationPageProps {
   token: string
@@ -25,34 +31,54 @@ interface QCScanVerificationPageProps {
 }
 
 type Translate = ReturnType<typeof useI18n>['t']
+type DocFilter = 'all' | VerificationDocType
 
 function formatDateTime(value: string, locale: string) {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
 }
 
 interface VerifyDraft {
-  warehouseOk: boolean
-  qcOk: boolean
-  managerOk: boolean
+  sig1: boolean
+  sig2: boolean
+  sig3: boolean
   remarks: string
   password: string
 }
 
-const emptyDraft = (): VerifyDraft => ({
-  warehouseOk: false,
-  qcOk: false,
-  managerOk: false,
-  remarks: '',
-  password: '',
-})
+const emptyDraft = (): VerifyDraft => ({ sig1: false, sig2: false, sig3: false, remarks: '', password: '' })
+
+function docLabel(t: Translate, docType: VerificationDocType): string {
+  if (docType === 'qc_notification') return t('qcVerification.docF14')
+  if (docType === 'sampling_act') return t('qcVerification.docF10')
+  return t('qcVerification.docF11')
+}
+
+function docBadgeClass(docType: VerificationDocType): string {
+  if (docType === 'qc_notification') return 'border-sky-200 bg-sky-50 text-sky-700'
+  if (docType === 'sampling_act') return 'border-violet-200 bg-violet-50 text-violet-700'
+  return 'border-amber-200 bg-amber-50 text-amber-700'
+}
+
+function sigLabels(t: Translate, docType: VerificationDocType): [string, string, string] {
+  if (docType === 'qc_notification') return [t('qcVerification.sigWarehouse'), t('qcVerification.sigQc'), t('qcVerification.sigManager')]
+  if (docType === 'sampling_act') return [t('qcVerification.sigSampler'), t('qcVerification.sigWitness'), t('qcVerification.sigApprover')]
+  return [t('qcVerification.sigExecutor'), t('qcVerification.sigReviewer'), t('qcVerification.sigDkkHead')]
+}
+
+async function downloadScanBlob(token: string, item: VerificationQueueItem): Promise<Blob> {
+  if (item.doc_type === 'qc_notification') return downloadQcNotificationScan(token, item.scan_id)
+  if (item.doc_type === 'sampling_act') return downloadSamplingScanFile(token, item.scan_id)
+  return downloadQcReportScanFile(token, item.scan_id)
+}
 
 export function QCScanVerificationPage({ token, user }: QCScanVerificationPageProps) {
   const { locale, t } = useI18n()
-  const [items, setItems] = useState<QCPendingScanItem[]>([])
+  const [items, setItems] = useState<VerificationQueueItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [active, setActive] = useState<QCPendingScanItem | null>(null)
+  const [filter, setFilter] = useState<DocFilter>('all')
+  const [active, setActive] = useState<VerificationQueueItem | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [draft, setDraft] = useState<VerifyDraft>(emptyDraft())
   const [rejecting, setRejecting] = useState(false)
@@ -62,8 +88,8 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     setLoading(true)
     setError(null)
     try {
-      const response = await listPendingQcScans(token)
-      setItems(response.scans)
+      const response = await listVerificationQueue(token)
+      setItems(response.items)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('qcVerification.loadFailed'))
     } finally {
@@ -82,7 +108,19 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function openScan(item: QCPendingScanItem) {
+  const counts = useMemo(() => ({
+    all: items.length,
+    qc_notification: items.filter((i) => i.doc_type === 'qc_notification').length,
+    sampling_act: items.filter((i) => i.doc_type === 'sampling_act').length,
+    qc_report: items.filter((i) => i.doc_type === 'qc_report').length,
+  }), [items])
+
+  const visible = useMemo(
+    () => (filter === 'all' ? items : items.filter((i) => i.doc_type === filter)),
+    [items, filter],
+  )
+
+  async function openScan(item: VerificationQueueItem) {
     setError(null)
     setSuccess(null)
     if (pdfUrl) URL.revokeObjectURL(pdfUrl)
@@ -91,7 +129,7 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     setDraft(emptyDraft())
     setRejecting(false)
     try {
-      const blob = await downloadQcNotificationScan(token, item.scan_id)
+      const blob = await downloadScanBlob(token, item)
       setPdfUrl(URL.createObjectURL(blob))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('qcVerification.fileFailed'))
@@ -108,7 +146,7 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
 
   async function submitVerify() {
     if (!active) return
-    if (!draft.warehouseOk || !draft.qcOk || !draft.managerOk) {
+    if (!draft.sig1 || !draft.sig2 || !draft.sig3) {
       setError(t('qcVerification.allSignaturesRequired'))
       return
     }
@@ -118,18 +156,24 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     }
     setSubmitting(true)
     setError(null)
+    const meaning = t('qcVerification.signatureMeaning')
+    const reason = draft.remarks.trim() || t('qcVerification.signatureReasonDefault')
+    const remarks = draft.remarks.trim() || null
     try {
-      await verifyQcScan(token, active.scan_id, {
-        signature_warehouse_ok: draft.warehouseOk,
-        signature_qc_ok: draft.qcOk,
-        signature_manager_ok: draft.managerOk,
-        remarks: draft.remarks.trim() || null,
-        username: user.username,
-        password: draft.password,
-        meaning: t('qcVerification.signatureMeaning'),
-        reason: draft.remarks.trim() || t('qcVerification.signatureReasonDefault'),
-      })
-      setSuccess(t('qcVerification.verifiedSuccess', { no: active.notification_no }))
+      if (active.doc_type === 'qc_notification') {
+        await verifyQcScan(token, active.scan_id, {
+          signature_warehouse_ok: draft.sig1, signature_qc_ok: draft.sig2, signature_manager_ok: draft.sig3,
+          remarks, username: user.username, password: draft.password, meaning, reason,
+        })
+      } else {
+        const payload = {
+          signature_1_ok: draft.sig1, signature_2_ok: draft.sig2, signature_3_ok: draft.sig3,
+          remarks, username: user.username, password: draft.password, meaning, reason,
+        }
+        if (active.doc_type === 'sampling_act') await verifySamplingScan(token, active.scan_id, payload)
+        else await verifyQcReportScan(token, active.scan_id, payload)
+      }
+      setSuccess(t('qcVerification.verifiedSuccess', { no: active.doc_no }))
       closeModal()
       await reload()
     } catch (err) {
@@ -151,15 +195,15 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     }
     setSubmitting(true)
     setError(null)
+    const payload = {
+      remarks: draft.remarks.trim(), username: user.username, password: draft.password,
+      meaning: t('qcVerification.rejectMeaning'), reason: draft.remarks.trim(),
+    }
     try {
-      await rejectQcScan(token, active.scan_id, {
-        remarks: draft.remarks.trim(),
-        username: user.username,
-        password: draft.password,
-        meaning: t('qcVerification.rejectMeaning'),
-        reason: draft.remarks.trim(),
-      })
-      setSuccess(t('qcVerification.rejectedSuccess', { no: active.notification_no }))
+      if (active.doc_type === 'qc_notification') await rejectQcScan(token, active.scan_id, payload)
+      else if (active.doc_type === 'sampling_act') await rejectSamplingScan(token, active.scan_id, payload)
+      else await rejectQcReportScan(token, active.scan_id, payload)
+      setSuccess(t('qcVerification.rejectedSuccess', { no: active.doc_no }))
       closeModal()
       await reload()
     } catch (err) {
@@ -169,13 +213,20 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     }
   }
 
+  const filterTabs: { value: DocFilter; label: string; count: number }[] = [
+    { value: 'all', label: t('qcVerification.filterAll'), count: counts.all },
+    { value: 'qc_notification', label: t('qcVerification.docF14'), count: counts.qc_notification },
+    { value: 'sampling_act', label: t('qcVerification.docF10'), count: counts.sampling_act },
+    { value: 'qc_report', label: t('qcVerification.docF11'), count: counts.qc_report },
+  ]
+
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{t('qcVerification.kicker')}</p>
           <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-slate-950">{t('qcVerification.title')}</h1>
-          <p className="max-w-2xl text-sm text-slate-600">{t('qcVerification.subtitle')}</p>
+          <p className="max-w-2xl text-sm text-slate-600">{t('qcVerification.subtitleAll')}</p>
         </div>
         <button
           type="button"
@@ -204,32 +255,41 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
       )}
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/60 px-3 py-2.5">
-          <span className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-            <span className="font-medium">{t('qcVerification.queueLabel')}</span>
-            <span className="tabular-nums text-slate-500">· {items.length}</span>
-          </span>
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-slate-50/60 px-3 py-2.5">
+          {filterTabs.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setFilter(tab.value)}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition ${
+                filter === tab.value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {tab.label}
+              <span className={`tabular-nums ${filter === tab.value ? 'text-slate-300' : 'text-slate-400'}`}>{tab.count}</span>
+            </button>
+          ))}
         </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/40 text-left text-[11px] font-medium uppercase tracking-wider text-slate-500">
-              <th className="px-4 py-2 font-medium">{t('qcVerification.uploadedAt')}</th>
+              <th className="px-4 py-2 font-medium">{t('qcVerification.docColumn')}</th>
               <th className="px-4 py-2 font-medium">{t('qcNotifications.notificationNo')}</th>
+              <th className="px-4 py-2 font-medium">{t('qcVerification.titleColumn')}</th>
               <th className="px-4 py-2 font-medium">{t('qcVerification.uploadedBy')}</th>
-              <th className="px-4 py-2 text-right font-medium">{t('qcNotifications.linesCount')}</th>
+              <th className="px-4 py-2 font-medium">{t('qcVerification.uploadedAt')}</th>
               <th className="px-4 py-2 text-right font-medium">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">{t('common.loadingRecords')}</td>
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">{t('common.loadingRecords')}</td>
               </tr>
             )}
-            {!loading && items.length === 0 && (
+            {!loading && visible.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-16">
+                <td colSpan={6} className="px-4 py-16">
                   <div className="mx-auto flex max-w-sm flex-col items-center gap-2 text-center">
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                       <Inbox size={20} />
@@ -240,26 +300,34 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
                 </td>
               </tr>
             )}
-            {!loading && items.map((item) => (
-              <tr key={item.scan_id} className="border-b border-slate-100 hover:bg-slate-50/70">
-                <td className="px-4 py-3 tabular-nums text-slate-700">{formatDateTime(item.uploaded_at, locale)}</td>
-                <td className="px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">{item.notification_no}</td>
-                <td className="px-4 py-3 text-slate-700">{item.uploaded_by_name ?? item.uploaded_by.slice(0, 8)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{item.lines_count}</td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => void openScan(item)}
-                    disabled={item.uploaded_by_name === user.username}
-                    title={item.uploaded_by_name === user.username ? t('qcVerification.cannotSelfVerify') : ''}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    {item.uploaded_by_name === user.username ? <Lock size={13} /> : <ShieldCheck size={13} />}
-                    {t('qcVerification.open')}
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {!loading && visible.map((item) => {
+              const isSelf = item.uploaded_by_name === user.username
+              return (
+                <tr key={item.scan_id} className="border-b border-slate-100 hover:bg-slate-50/70">
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${docBadgeClass(item.doc_type)}`}>
+                      {docLabel(t, item.doc_type)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-[13px] font-semibold text-slate-900">{item.doc_no}</td>
+                  <td className="px-4 py-3 text-slate-700">{item.title ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-700">{item.uploaded_by_name ?? item.uploaded_by.slice(0, 8)}</td>
+                  <td className="px-4 py-3 tabular-nums text-slate-600">{formatDateTime(item.uploaded_at, locale)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => void openScan(item)}
+                      disabled={isSelf}
+                      title={isSelf ? t('qcVerification.cannotSelfVerify') : ''}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    >
+                      {isSelf ? <Lock size={13} /> : <ShieldCheck size={13} />}
+                      {t('qcVerification.open')}
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -285,20 +353,9 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
 }
 
 function VerifyModal({
-  item,
-  pdfUrl,
-  draft,
-  onDraft,
-  onClose,
-  onVerify,
-  onReject,
-  submitting,
-  rejectMode,
-  setRejectMode,
-  t,
-  locale,
+  item, pdfUrl, draft, onDraft, onClose, onVerify, onReject, submitting, rejectMode, setRejectMode, t, locale,
 }: {
-  item: QCPendingScanItem
+  item: VerificationQueueItem
   pdfUrl: string | null
   draft: VerifyDraft
   onDraft: (draft: VerifyDraft) => void
@@ -311,17 +368,20 @@ function VerifyModal({
   t: Translate
   locale: string
 }) {
+  const [l1, l2, l3] = sigLabels(t, item.doc_type)
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/40 p-4">
       <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
         <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{t('qcVerification.modalKicker')}</p>
-            <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">
-              {t('qcNotifications.detailTitle')} <span className="font-mono">{item.notification_no}</span>
+            <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${docBadgeClass(item.doc_type)}`}>
+              {docLabel(t, item.doc_type)}
+            </span>
+            <h2 className="mt-1.5 text-lg font-semibold tracking-tight text-slate-950">
+              <span className="font-mono">{item.doc_no}</span>
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              {t('qcVerification.uploadedBy')}: {item.uploaded_by_name ?? '—'} · {formatDateTime(item.uploaded_at, locale)}
+              {item.title ? `${item.title} · ` : ''}{t('qcVerification.uploadedBy')}: {item.uploaded_by_name ?? '—'} · {formatDateTime(item.uploaded_at, locale)}
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900" aria-label="close">
@@ -348,24 +408,9 @@ function VerifyModal({
             </div>
 
             <div className="space-y-2">
-              <CheckboxRow
-                label={t('qcVerification.sigWarehouse')}
-                checked={draft.warehouseOk}
-                onChange={(v) => onDraft({ ...draft, warehouseOk: v })}
-                disabled={rejectMode}
-              />
-              <CheckboxRow
-                label={t('qcVerification.sigQc')}
-                checked={draft.qcOk}
-                onChange={(v) => onDraft({ ...draft, qcOk: v })}
-                disabled={rejectMode}
-              />
-              <CheckboxRow
-                label={t('qcVerification.sigManager')}
-                checked={draft.managerOk}
-                onChange={(v) => onDraft({ ...draft, managerOk: v })}
-                disabled={rejectMode}
-              />
+              <CheckboxRow label={l1} checked={draft.sig1} onChange={(v) => onDraft({ ...draft, sig1: v })} disabled={rejectMode} />
+              <CheckboxRow label={l2} checked={draft.sig2} onChange={(v) => onDraft({ ...draft, sig2: v })} disabled={rejectMode} />
+              <CheckboxRow label={l3} checked={draft.sig3} onChange={(v) => onDraft({ ...draft, sig3: v })} disabled={rejectMode} />
             </div>
 
             <div>

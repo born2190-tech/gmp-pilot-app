@@ -150,6 +150,45 @@ class QCPendingScansResponse(BaseModel):
     scans: list[QCPendingScanItem]
 
 
+# --- Unified ДОК verification queue (Ф-14 / Ф-10 / Ф-11) --------------------
+class ScanVerifyRequest(BaseModel):
+    """Generic verify payload for sampling-act / analytical-sheet scans."""
+    signature_1_ok: bool
+    signature_2_ok: bool
+    signature_3_ok: bool
+    remarks: str | None = Field(default=None, max_length=1000)
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    meaning: str = Field(min_length=1)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class ScanRejectRequest(BaseModel):
+    remarks: str = Field(min_length=1, max_length=1000)
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+    meaning: str = Field(min_length=1)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class VerificationQueueItem(BaseModel):
+    """One pending scan in the unified ДОК verification queue."""
+    doc_type: str  # qc_notification | sampling_act | qc_report
+    scan_id: UUID
+    doc_id: UUID
+    doc_no: str
+    sop_form: str | None = None
+    title: str | None = None
+    uploaded_at: datetime
+    uploaded_by: UUID
+    uploaded_by_name: str | None = None
+    version: int
+
+
+class VerificationQueueResponse(BaseModel):
+    items: list[VerificationQueueItem]
+
+
 class QCReportParameterCreate(BaseModel):
     category: str = Field(default="physicochemical", pattern="^(physicochemical|microbiological)$")
     parameter_name: str = Field(min_length=1, max_length=255)
@@ -245,6 +284,8 @@ class QCReportListItem(BaseModel):
     manufacturer_name: str | None = None
     scan_id: UUID | None = None
     scan_sha256: str | None = None
+    # ДОК-верификация подписанного скана: pending_verification | verified | rejected | None
+    scan_status: str | None = None
 
 
 class QCReportsListResponse(BaseModel):

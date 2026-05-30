@@ -282,6 +282,26 @@ def qa_decision(db: Session, user: CurrentUser, lot_id: UUID, payload: QADecisio
                 detail="Допуск невозможен: по серии открыто расследование OOS/РНС (СОП-549). Закройте расследование.",
             )
 
+        # Допуск серии заблокирован, пока ДОК не верифицировал подписанный
+        # аналитический лист (Ф-11): если скан загружен, но его последняя
+        # версия не подтверждена ДОК (мокрые подписи, 4-eyes) — допуск нельзя.
+        from app.models.quality import QCReport
+        from app.services.qc_report_scans import latest_scan
+
+        report = (
+            db.query(QCReport)
+            .filter(QCReport.lot_id == lot.id)
+            .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
+            .first()
+        )
+        if report is not None:
+            last_scan = latest_scan(db, report.id)
+            if last_scan is not None and last_scan.status != "verified":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Допуск невозможен: подписанный аналитический лист (Ф-11) ещё не верифицирован ДОК.",
+                )
+
     validate_signature(db, user, payload, "QA_DECISION", "lot", str(lot.id))
     old_status = lot.quality_status
     lot.quality_status = payload.decision

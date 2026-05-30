@@ -377,6 +377,145 @@ def load_scan_file(db: Session, user: CurrentUser, scan_id: UUID) -> tuple[bytes
 
 
 # ---------------------------------------------------------------------------
+# ДОК (QA) 4-eyes verification of the wet-ink-signed sampling act (Ф-10).
+# Must happen BEFORE the ОКК posts the act (debits the sample) — see
+# post_sampling_act, which gates on the latest scan being verified.
+# ---------------------------------------------------------------------------
+
+def latest_scan(db: Session, act_id: UUID) -> SamplingScan | None:
+    return (
+        db.query(SamplingScan)
+        .filter(SamplingScan.sampling_act_id == act_id)
+        .order_by(SamplingScan.version.desc())
+        .first()
+    )
+
+
+def is_act_scan_verified(db: Session, act_id: UUID) -> bool:
+    last = latest_scan(db, act_id)
+    return bool(last and last.status == "verified")
+
+
+def verify_sampling_scan(
+    db: Session,
+    user: CurrentUser,
+    scan_id: UUID,
+    *,
+    signature_1_ok: bool,
+    signature_2_ok: bool,
+    signature_3_ok: bool,
+    remarks: str | None,
+    username: str,
+    password: str,
+    meaning: str,
+    reason: str | None,
+) -> SamplingScan:
+    require_permission(user, "VERIFY_QC_SCAN")
+    scan = db.get(SamplingScan, scan_id)
+    if not scan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+    if scan.status != "pending_verification":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not pending verification")
+    if scan.uploaded_by == user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The user who uploaded the scan cannot verify it (4-eyes rule)",
+        )
+    if not (signature_1_ok and signature_2_ok and signature_3_ok):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="All three wet-ink signatures must be confirmed to verify the scan",
+        )
+
+    from app.schemas.inventory import SignatureRequest
+
+    signature = SignatureRequest(username=username, password=password, meaning=meaning, reason=reason)
+    validate_signature(db, user, signature, "VERIFY_SAMPLING_SCAN", "sampling_scan", str(scan.id))
+
+    act = db.get(SamplingAct, scan.sampling_act_id)
+    scan.status = "verified"
+    scan.verified_by = user.id
+    scan.verified_at = now_utc()
+    scan.signature_1_ok = signature_1_ok
+    scan.signature_2_ok = signature_2_ok
+    scan.signature_3_ok = signature_3_ok
+    scan.remarks = (remarks or "").strip() or None
+    write_audit(
+        db,
+        user,
+        object_type="sampling_scan",
+        object_id=str(scan.id),
+        action_type="VERIFY_SAMPLING_SCAN",
+        new_value={"act_no": act.act_no if act else None, "version": scan.version, "remarks": scan.remarks},
+        reason=reason,
+    )
+    db.commit()
+    db.refresh(scan)
+    return scan
+
+
+def reject_sampling_scan(
+    db: Session,
+    user: CurrentUser,
+    scan_id: UUID,
+    *,
+    remarks: str,
+    username: str,
+    password: str,
+    meaning: str,
+    reason: str | None,
+) -> SamplingScan:
+    require_permission(user, "VERIFY_QC_SCAN")
+    scan = db.get(SamplingScan, scan_id)
+    if not scan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+    if scan.status != "pending_verification":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Scan is not pending verification")
+    if scan.uploaded_by == user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The user who uploaded the scan cannot reject it either — escalate to another QA officer",
+        )
+    if not remarks.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Rejection requires remarks")
+
+    from app.schemas.inventory import SignatureRequest
+
+    signature = SignatureRequest(username=username, password=password, meaning=meaning, reason=reason)
+    validate_signature(db, user, signature, "REJECT_SAMPLING_SCAN", "sampling_scan", str(scan.id))
+
+    act = db.get(SamplingAct, scan.sampling_act_id)
+    scan.status = "rejected"
+    scan.verified_by = user.id
+    scan.verified_at = now_utc()
+    scan.remarks = remarks.strip()
+    # Откат акта в draft, чтобы ДКК загрузил чистый скан.
+    has_other_pending = (
+        db.query(SamplingScan.id)
+        .filter(
+            SamplingScan.sampling_act_id == scan.sampling_act_id,
+            SamplingScan.id != scan.id,
+            SamplingScan.status == "pending_verification",
+        )
+        .first()
+    )
+    if act and not has_other_pending and act.status == "scan_uploaded":
+        act.status = "draft"
+    write_audit(
+        db,
+        user,
+        object_type="sampling_scan",
+        object_id=str(scan.id),
+        action_type="REJECT_SAMPLING_SCAN",
+        new_value={"act_no": act.act_no if act else None, "version": scan.version, "remarks": scan.remarks},
+        reason=reason,
+    )
+    db.commit()
+    db.refresh(scan)
+    return scan
+
+
+# ---------------------------------------------------------------------------
 
 def post_sampling_act(db: Session, user: CurrentUser, act_id: UUID, payload) -> SamplingAct:
     """Подпись акта ОКК → списание проб с партии + движение SAMPLING."""
@@ -388,6 +527,12 @@ def post_sampling_act(db: Session, user: CurrentUser, act_id: UUID, payload) -> 
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Upload the signed scan before confirming the act",
+        )
+    # ДОК (QA) должен подтвердить подписи на скане ДО списания пробы (4-eyes).
+    if not is_act_scan_verified(db, act.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Скан акта отбора не верифицирован ДОК — подтверждение и списание пробы заблокировано",
         )
     if not act.lines:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Act has no sample lines")

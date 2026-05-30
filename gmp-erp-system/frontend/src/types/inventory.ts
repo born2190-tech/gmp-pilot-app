@@ -213,6 +213,45 @@ export interface QCPendingScansResponse {
   scans: QCPendingScanItem[]
 }
 
+// --- Unified ДОК verification queue (Ф-14 / Ф-10 / Ф-11) -------------------
+export type VerificationDocType = 'qc_notification' | 'sampling_act' | 'qc_report'
+
+export interface VerificationQueueItem {
+  doc_type: VerificationDocType
+  scan_id: string
+  doc_id: string
+  doc_no: string
+  sop_form: string | null
+  title: string | null
+  uploaded_at: string
+  uploaded_by: string
+  uploaded_by_name: string | null
+  version: number
+}
+
+export interface VerificationQueueResponse {
+  items: VerificationQueueItem[]
+}
+
+export interface ScanVerifyRequest {
+  signature_1_ok: boolean
+  signature_2_ok: boolean
+  signature_3_ok: boolean
+  remarks?: string | null
+  username: string
+  password: string
+  meaning: string
+  reason?: string | null
+}
+
+export interface ScanRejectRequest {
+  remarks: string
+  username: string
+  password: string
+  meaning: string
+  reason?: string | null
+}
+
 export interface SampleLotRequest {
   reason: string
 }
@@ -948,6 +987,7 @@ export interface QcReportListItem {
   manufacturer_name: string | null
   scan_id: string | null
   scan_sha256: string | null
+  scan_status: string | null
 }
 
 export interface QcReportsListResponse {

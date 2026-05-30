@@ -77,6 +77,16 @@ class QCReportScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # ДОК (QA) 4-eyes verification of the wet-ink-signed Ф-11 scan.
+    # Lifecycle: pending_verification → verified | rejected.
+    # Три подписи Ф-11: 1) исполнитель, 2) проверил, 3) утвердил (нач. ДКК).
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending_verification")
+    verified_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    signature_1_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    signature_2_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    signature_3_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class OOSInvestigation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -320,5 +330,15 @@ class SamplingScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # ДОК (QA) 4-eyes verification of the wet-ink-signed Ф-10 scan.
+    # Lifecycle: pending_verification → verified | rejected.
+    # Три подписи Ф-10: 1) отбор провёл (ОКК), 2) присутствовал (склад), 3) утвердил.
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending_verification")
+    verified_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    signature_1_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    signature_2_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    signature_3_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     sampling_act: Mapped[SamplingAct] = relationship()
