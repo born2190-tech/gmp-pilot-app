@@ -8,6 +8,7 @@ from app.api.routes.equipment import router as equipment_router
 from app.api.routes.inventory import router as inventory_router
 from app.api.routes.master_data import router as master_data_router
 from app.api.routes.quality import router as quality_router
+from app.api.routes.production import router as production_router
 from app.api.routes.reagents import router as reagents_router
 from app.api.routes.requisitions import router as requisitions_router
 from app.core.database import SessionLocal
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(master_data_router)
     app.include_router(inventory_router)
     app.include_router(quality_router)
+    app.include_router(production_router)
     app.include_router(requisitions_router)
     app.include_router(equipment_router)
     app.include_router(reagents_router)

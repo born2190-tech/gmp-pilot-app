@@ -1082,6 +1082,74 @@ export interface IssueRequisitionRequest extends SignatureRequest {
   reason?: string
 }
 
+// ─── Production batch start / BMR issue ───────────────────────────────────
+
+export interface ProductionBatchItem {
+  id: string
+  batch_no: string
+  status: string
+  product_code: string
+  serial_no: number
+  product_name: string
+  dosage_form: string | null
+  batch_size: number
+  batch_size_unit: string
+  production_date: string
+  expiry_date: string
+  shelf_life_months: number
+  bmr_no: string | null
+  bmr_issued_at: string | null
+  room_ready: boolean
+  equipment_ready: boolean
+  scales_checked: boolean
+  materials_ready: boolean
+  qa_line_clearance: boolean
+  checklist_updated_at: string | null
+  started_at: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface ProductionBatchesResponse {
+  batches: ProductionBatchItem[]
+}
+
+export interface ProductionBatchPreviewRequest {
+  product_code: string
+  production_date: string
+  shelf_life_months: number
+}
+
+export interface ProductionBatchPreview {
+  batch_no: string
+  serial_no: number
+  expiry_date: string
+}
+
+export interface ProductionBatchCreate extends ProductionBatchPreviewRequest {
+  product_name: string
+  dosage_form?: string | null
+  batch_size: number
+  batch_size_unit: string
+  notes?: string | null
+}
+
+export interface ProductionBatchChecklistUpdate {
+  room_ready: boolean
+  equipment_ready: boolean
+  scales_checked: boolean
+  materials_ready: boolean
+  qa_line_clearance: boolean
+}
+
+export interface ProductionBatchBmrIssueRequest extends SignatureRequest {
+  bmr_no?: string | null
+}
+
+export interface ProductionBatchStartRequest extends SignatureRequest {
+  reason?: string
+}
+
 // ─── QC reagents / standards registry ───────────────────────────────────────
 
 export interface ReagentItem {

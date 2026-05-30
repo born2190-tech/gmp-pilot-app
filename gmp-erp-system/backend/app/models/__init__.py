@@ -11,6 +11,7 @@ from app.models.inventory import (
     InventoryCountLine,
     InventoryMovement,
     Lot,
+    ProductionBatch,
     ReceiptDocument,
     ReceiptLine,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "MaterialSpecification",
     "OOSInvestigation",
     "Permission",
+    "ProductionBatch",
     "QCNotification",
     "QCNotificationLine",
     "QCReport",

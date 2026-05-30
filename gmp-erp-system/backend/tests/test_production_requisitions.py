@@ -14,6 +14,7 @@ from app.models.inventory import (
     InventoryCountLine,
     InventoryMovement,
     Lot,
+    ProductionBatch,
     ProductionRequisition,
     ReceiptDocument,
     ReceiptLine,
@@ -42,6 +43,7 @@ def reset_requisition_data() -> None:
         db.query(RequisitionAllocationLine).delete()
         db.query(RequisitionLine).delete()
         db.query(ProductionRequisition).delete()
+        db.query(ProductionBatch).delete()
         db.query(Lot).delete()
         db.query(ReceiptLine).delete()
         db.query(ReceiptDocument).delete()
@@ -151,6 +153,84 @@ def test_production_requisition_creation_auto_allocates_released_lots_by_fefo() 
     allocations = payload["lines"][0]["allocation_lines"]
     assert [row["lot_id"] for row in allocations] == [ref["earlier_lot_id"], ref["later_lot_id"]]
     assert [row["allocated_quantity"] for row in allocations] == [80, 20]
+
+
+def test_production_batch_requires_bmr_and_start_checklist_before_start() -> None:
+    client = TestClient(create_app())
+    prod_token = login(client, "shift_master", "prod123", "WS-PROD-01")
+    qa_token = login(client, "head_qa", "qahead123", "WS-QA-01")
+
+    created = client.post(
+        "/api/production/batches",
+        headers={"Authorization": f"Bearer {prod_token}"},
+        json={
+            "product_code": "12",
+            "product_name": "Тигралис 5 мг",
+            "dosage_form": "таблетки, покрытые оболочкой",
+            "batch_size": 10000,
+            "batch_size_unit": "упак",
+            "production_date": "2026-05-12",
+            "shelf_life_months": 24,
+        },
+    )
+    assert created.status_code == 200, created.text
+    batch = created.json()
+    assert batch["batch_no"] == "12N2605001"
+    assert batch["status"] == "assigned"
+    assert batch["expiry_date"] == "2028-05-31"
+
+    blocked = client.post(
+        f"/api/production/batches/{batch['id']}/start",
+        headers={"Authorization": f"Bearer {prod_token}"},
+        json={
+            "username": "shift_master",
+            "password": "prod123",
+            "meaning": "Начало выпуска производственной серии",
+            "reason": "test",
+        },
+    )
+    assert blocked.status_code == 409
+    assert "BMR must be issued" in blocked.text
+
+    issued = client.post(
+        f"/api/production/batches/{batch['id']}/issue-bmr",
+        headers={"Authorization": f"Bearer {qa_token}"},
+        json={
+            "username": "head_qa",
+            "password": "qahead123",
+            "meaning": "Выдача ЗПС/BMR на производство серии",
+            "reason": "ЗПС выдана ДОК",
+        },
+    )
+    assert issued.status_code == 200, issued.text
+    assert issued.json()["status"] == "bmr_issued"
+
+    checklist = client.patch(
+        f"/api/production/batches/{batch['id']}/checklist",
+        headers={"Authorization": f"Bearer {prod_token}"},
+        json={
+            "room_ready": True,
+            "equipment_ready": True,
+            "scales_checked": True,
+            "materials_ready": True,
+            "qa_line_clearance": True,
+        },
+    )
+    assert checklist.status_code == 200, checklist.text
+    assert checklist.json()["status"] == "ready_to_start"
+
+    started = client.post(
+        f"/api/production/batches/{batch['id']}/start",
+        headers={"Authorization": f"Bearer {prod_token}"},
+        json={
+            "username": "shift_master",
+            "password": "prod123",
+            "meaning": "Начало выпуска производственной серии",
+            "reason": "Готовность подтверждена",
+        },
+    )
+    assert started.status_code == 200, started.text
+    assert started.json()["status"] == "in_production"
 
 
 def test_production_user_can_edit_auto_allocation_before_issue() -> None:

@@ -70,6 +70,14 @@ import type {
   RequisitionsResponse,
   AllocationUpdateRequest,
   IssueRequisitionRequest,
+  ProductionBatchBmrIssueRequest,
+  ProductionBatchChecklistUpdate,
+  ProductionBatchCreate,
+  ProductionBatchItem,
+  ProductionBatchPreview,
+  ProductionBatchPreviewRequest,
+  ProductionBatchesResponse,
+  ProductionBatchStartRequest,
   SamplingActCreate,
   SamplingActItem,
   SamplingActsResponse,
@@ -1009,4 +1017,30 @@ export function updateRequisitionAllocation(token: string, id: string, payload: 
 
 export function issueRequisition(token: string, id: string, payload: IssueRequisitionRequest): Promise<RequisitionItem> {
   return request<RequisitionItem>(`/api/requisitions/${id}/issue`, 'POST', { token, body: payload })
+}
+
+// ─── Production Batches ─────────────────────────────────────────────────────
+
+export function previewProductionBatch(token: string, payload: ProductionBatchPreviewRequest): Promise<ProductionBatchPreview> {
+  return request<ProductionBatchPreview>('/api/production/batches/preview', 'POST', { token, body: payload })
+}
+
+export function createProductionBatch(token: string, payload: ProductionBatchCreate): Promise<ProductionBatchItem> {
+  return request<ProductionBatchItem>('/api/production/batches', 'POST', { token, body: payload })
+}
+
+export function listProductionBatches(token: string, status?: string): Promise<ProductionBatchesResponse> {
+  return request<ProductionBatchesResponse>('/api/production/batches', 'GET', { token, query: status ? { status } : undefined })
+}
+
+export function issueProductionBmr(token: string, id: string, payload: ProductionBatchBmrIssueRequest): Promise<ProductionBatchItem> {
+  return request<ProductionBatchItem>(`/api/production/batches/${id}/issue-bmr`, 'POST', { token, body: payload })
+}
+
+export function updateProductionBatchChecklist(token: string, id: string, payload: ProductionBatchChecklistUpdate): Promise<ProductionBatchItem> {
+  return request<ProductionBatchItem>(`/api/production/batches/${id}/checklist`, 'PATCH', { token, body: payload })
+}
+
+export function startProductionBatch(token: string, id: string, payload: ProductionBatchStartRequest): Promise<ProductionBatchItem> {
+  return request<ProductionBatchItem>(`/api/production/batches/${id}/start`, 'POST', { token, body: payload })
 }

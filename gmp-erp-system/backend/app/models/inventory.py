@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -424,3 +424,39 @@ class RequisitionAllocationLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     requisition_line: Mapped[RequisitionLine] = relationship(back_populates="allocation_lines")
     lot: Mapped[Lot] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# Production batch start gate (СОП-409 + BMR readiness)
+# ---------------------------------------------------------------------------
+
+class ProductionBatch(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Controlled start of a manufacturing batch/series before material issue."""
+
+    __tablename__ = "production_batches"
+
+    batch_no: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="assigned")
+    product_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    serial_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    product_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    dosage_form: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    batch_size: Mapped[float] = mapped_column(Float, nullable=False)
+    batch_size_unit: Mapped[str] = mapped_column(String(32), nullable=False)
+    production_date: Mapped[date] = mapped_column(Date, nullable=False)
+    expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    shelf_life_months: Mapped[int] = mapped_column(Integer, nullable=False)
+    bmr_no: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    bmr_issued_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    bmr_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    room_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    equipment_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    scales_checked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    materials_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    qa_line_clearance: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    checklist_updated_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    checklist_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
