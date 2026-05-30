@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.schemas.production import (
+    BmrQueueItem,
+    BmrQueueResponse,
     ProductCreate,
     ProductItem,
     ProductUpdate,
@@ -32,6 +34,7 @@ from app.services.production_batches import (
     get_batch,
     issue_bmr,
     list_batch_audit,
+    list_bmr_queue,
     list_batches,
     preview_batch_number,
     request_bmr,
@@ -103,6 +106,14 @@ def list_all(
     return ProductionBatchesResponse(
         batches=[ProductionBatchItem.model_validate(batch) for batch in list_batches(db, user, status)]
     )
+
+
+@router.get("/bmr-queue", response_model=BmrQueueResponse)
+def bmr_queue_route(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> BmrQueueResponse:
+    return BmrQueueResponse(items=[BmrQueueItem.model_validate(item) for item in list_bmr_queue(db, user)])
 
 
 @router.get("/{batch_id}", response_model=ProductionBatchItem)

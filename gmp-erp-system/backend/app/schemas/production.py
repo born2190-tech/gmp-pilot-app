@@ -139,6 +139,24 @@ class ProductionBatchesResponse(BaseModel):
     batches: list[ProductionBatchItem]
 
 
+class BmrQueueItem(BaseModel):
+    id: UUID
+    batch_no: str
+    product_code: str
+    product_name: str
+    dosage_form: str | None
+    batch_size: float
+    batch_size_unit: str
+    production_date: date
+    expiry_date: date
+    bmr_requested_at: datetime
+    requested_by_name: str | None
+
+
+class BmrQueueResponse(BaseModel):
+    items: list[BmrQueueItem]
+
+
 class ProductionBatchAuditItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

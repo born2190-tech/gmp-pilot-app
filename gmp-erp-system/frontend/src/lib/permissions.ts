@@ -8,6 +8,7 @@ import {
   Coins,
   Database,
   Factory,
+  FileSignature,
   History,
   ListChecks,
   Microscope,
@@ -60,6 +61,7 @@ const NAV_ITEMS: NavItem[] = [
 
   // ─── ОКА ──────────────────────────────────────────────────────────────
   { labelKey: 'nav.qaDecisions',          section: 'qa',         permission: 'VIEW_QA',         route: 'qa-decisions',         icon: ShieldCheck },
+  { labelKey: 'nav.bmrIssue',             section: 'qa',         permission: 'QA_DECISION',     route: 'qa-bmr-issue',         icon: FileSignature },
   { labelKey: 'nav.qaScanVerification',   section: 'qa',         permission: 'VERIFY_QC_SCAN',  route: 'qa-scan-verification', icon: ScanLine },
 
   // ─── Производство ─────────────────────────────────────────────────────

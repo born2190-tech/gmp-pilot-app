@@ -69,6 +69,7 @@ import type {
   RequisitionItem,
   RequisitionsResponse,
   AllocationUpdateRequest,
+  BmrQueueResponse,
   IssueRequisitionRequest,
   ProductionBatchBmrIssueRequest,
   ProductionBatchCancelRequest,
@@ -1049,6 +1050,10 @@ export function createProductionBatch(token: string, payload: ProductionBatchCre
 
 export function listProductionBatches(token: string, status?: string): Promise<ProductionBatchesResponse> {
   return request<ProductionBatchesResponse>('/api/production/batches', 'GET', { token, query: status ? { status } : undefined })
+}
+
+export function listBmrQueue(token: string): Promise<BmrQueueResponse> {
+  return request<BmrQueueResponse>('/api/production/batches/bmr-queue', 'GET', { token })
 }
 
 export function getProductionBatchAudit(token: string, id: string): Promise<ProductionBatchAuditResponse> {

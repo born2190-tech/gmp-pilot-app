@@ -15,6 +15,7 @@ import { WarehouseOperationsPage } from './features/inventory/WarehouseOperation
 import { RequisitionsPage } from './features/inventory/RequisitionsPage'
 import { MasterDataPage } from './features/master-data/MasterDataPage'
 import { QualityBoardPage } from './features/quality/QualityBoardPage'
+import { BmrIssuancePage } from './features/quality/BmrIssuancePage'
 import { QCScanVerificationPage } from './features/quality/QCScanVerificationPage'
 import { SpecificationsAdminPage } from './features/quality/SpecificationsAdminPage'
 import { EquipmentAdminPage } from './features/quality/EquipmentAdminPage'
@@ -129,6 +130,8 @@ export function App() {
       <ReagentsRegistryPage token={token} user={user} />
     ) : route === 'qa-decisions' ? (
       <QualityBoardPage mode="qa" token={token} user={user} />
+    ) : route === 'qa-bmr-issue' ? (
+      <BmrIssuancePage token={token} user={user} />
     ) : route === 'qa-scan-verification' ? (
       <QCScanVerificationPage token={token} user={user} />
     ) : (

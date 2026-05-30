@@ -1148,6 +1148,24 @@ export interface ProductionBatchesResponse {
   batches: ProductionBatchItem[]
 }
 
+export interface BmrQueueItem {
+  id: string
+  batch_no: string
+  product_code: string
+  product_name: string
+  dosage_form: string | null
+  batch_size: number
+  batch_size_unit: string
+  production_date: string
+  expiry_date: string
+  bmr_requested_at: string
+  requested_by_name: string | null
+}
+
+export interface BmrQueueResponse {
+  items: BmrQueueItem[]
+}
+
 export interface ProductionBatchAuditItem {
   id: string
   action_type: string

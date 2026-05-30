@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
+from app.models.identity import User
 from app.models.inventory import Product, ProductionBatch
 from app.schemas.production import (
     ProductionBatchBmrIssueRequest,
@@ -238,6 +239,34 @@ def list_batches(db: Session, user: CurrentUser, status_filter: str | None = Non
     if status_filter:
         query = query.filter(ProductionBatch.status == status_filter)
     return query.all()
+
+
+def list_bmr_queue(db: Session, user: CurrentUser) -> list[dict]:
+    _require_any_permission(user, ("QA_DECISION",))
+    rows = (
+        db.query(ProductionBatch, User.full_name)
+        .outerjoin(User, User.id == ProductionBatch.bmr_requested_by)
+        .filter(ProductionBatch.status == "bmr_requested")
+        .order_by(ProductionBatch.bmr_requested_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": batch.id,
+            "batch_no": batch.batch_no,
+            "product_code": batch.product_code,
+            "product_name": batch.product_name,
+            "dosage_form": batch.dosage_form,
+            "batch_size": batch.batch_size,
+            "batch_size_unit": batch.batch_size_unit,
+            "production_date": batch.production_date,
+            "expiry_date": batch.expiry_date,
+            "bmr_requested_at": batch.bmr_requested_at,
+            "requested_by_name": full_name,
+        }
+        for batch, full_name in rows
+        if batch.bmr_requested_at
+    ]
 
 
 def get_batch(db: Session, user: CurrentUser, batch_id) -> ProductionBatch:
