@@ -2,8 +2,10 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.models.identity import Department, Permission, Role, User
+from app.models.inventory import Product
 from app.models.master_data import InventoryAccount, Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import MaterialSpecification, SpecificationParameter
+from app.services.products_catalog import PRODUCTS
 from app.services.reagents import seed_reagents
 
 
@@ -245,8 +247,30 @@ def seed_foundation_data(db: Session) -> None:
     seed_specifications(db)
     seed_inventory_accounts(db)
     seed_reagents(db)
+    seed_products(db)
 
     db.commit()
+
+
+def seed_products(db: Session) -> None:
+    """Идемпотентно наполняет справочник продуктов (ЛС) каталогом NOVUGEN
+    (коды по СОП-409, 3 знака). Существующие коды не трогаем — ручные правки
+    в справочнике сохраняются."""
+    existing = {p.code for p in db.query(Product.code).all()}
+    for code, name, dosage_form, afi in PRODUCTS:
+        if code in existing:
+            continue
+        db.add(
+            Product(
+                code=code,
+                name=name,
+                dosage_form=dosage_form or None,
+                default_shelf_life_months=24,
+                is_active=True,
+                notes=f"АФИ: {afi}" if afi else None,
+            )
+        )
+    db.flush()
 
 
 # Счета учёта запасов: (код, наименование, группа, зона).

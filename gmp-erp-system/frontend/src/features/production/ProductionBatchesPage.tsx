@@ -892,7 +892,7 @@ function CreateBatchModal({
               <select className="input" value={form.product_id} onChange={(e) => selectProduct(e.target.value)}>
                 <option value="">— выберите ЛС —</option>
                 {activeProducts.map((p) => (
-                  <option key={p.id} value={p.id}>{p.code} · {p.name}</option>
+                  <option key={p.id} value={p.id}>{p.code} · {p.name}{p.dosage_form ? ` · ${p.dosage_form}` : ''}</option>
                 ))}
               </select>
             </Field>
