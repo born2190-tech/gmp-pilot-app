@@ -9,6 +9,7 @@ import {
   Database,
   Factory,
   FileSignature,
+  FileText,
   History,
   ListChecks,
   Microscope,
@@ -66,6 +67,7 @@ const NAV_ITEMS: NavItem[] = [
 
   // ─── Производство ─────────────────────────────────────────────────────
   { labelKey: 'nav.productionOrders',     section: 'production', permission: 'VIEW_PRODUCTION', route: 'production-orders',    icon: Factory },
+  { labelKey: 'nav.bmrTemplates',         section: 'production', permission: 'MANAGE_BMR_TEMPLATES', route: 'bmr-templates',   icon: FileText },
   { labelKey: 'nav.requisitions',         section: 'production', permission: 'VIEW_PRODUCTION', route: 'requisitions',         icon: Send },
   { labelKey: 'nav.bmr',                  section: 'production', permission: 'EXECUTE_BMR',     route: 'bmr',                  icon: ClipboardSignature },
 

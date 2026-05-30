@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -496,3 +496,49 @@ class ProductionBatch(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Electronic BMR / ЗПС (СОП-11) — template constructor (Phase A)
+# ---------------------------------------------------------------------------
+
+class BmrTemplate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Шаблон электронного BMR (master-copy) на продукт, версионируемый.
+
+    Технолог собирает структуру (секции/шаги/поля), ДОК утверждает (СОП-11
+    п.5.1.3-5.1.5). Одна approved-версия активна на продукт; правка → новая
+    версия, старая → obsolete (СОП-11 п.5.1.13, 5.4)."""
+
+    __tablename__ = "bmr_templates"
+
+    product_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # draft | approved | obsolete
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    sections: Mapped[list["BmrSection"]] = relationship(
+        back_populates="template", cascade="all, delete-orphan", order_by="BmrSection.ordinal"
+    )
+
+
+class BmrSection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Одна секция шаблона BMR. `section_type` задаёт тип блока (product_header,
+    production_formula, distribution_list, stage, environment, equipment,
+    checklist, process_steps, in_process_control, yield, materials_used,
+    attachments). `config` (JSON) хранит поля/колонки секции."""
+
+    __tablename__ = "bmr_sections"
+
+    template_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bmr_templates.id"), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    section_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    template: Mapped[BmrTemplate] = relationship(back_populates="sections")

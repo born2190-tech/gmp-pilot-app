@@ -21,6 +21,7 @@ import { SpecificationsAdminPage } from './features/quality/SpecificationsAdminP
 import { EquipmentAdminPage } from './features/quality/EquipmentAdminPage'
 import { ReagentsRegistryPage } from './features/quality/ReagentsRegistryPage'
 import { ProductionBatchesPage } from './features/production/ProductionBatchesPage'
+import { BmrTemplatesPage } from './features/production/BmrTemplatesPage'
 import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
 import { login, logout, me } from './lib/api'
 import { getVisibleNavItems } from './lib/permissions'
@@ -106,6 +107,8 @@ export function App() {
       <WarehouseOperationsPage token={token} user={user} />
     ) : route === 'production-orders' ? (
       <ProductionBatchesPage token={token} user={user} />
+    ) : route === 'bmr-templates' ? (
+      <BmrTemplatesPage token={token} user={user} />
     ) : route === 'requisitions' ? (
       <RequisitionsPage token={token} user={user} />
     ) : route === 'fg-shipments' ? (

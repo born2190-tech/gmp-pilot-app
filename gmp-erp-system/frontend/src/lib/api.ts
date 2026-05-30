@@ -84,6 +84,9 @@ import type {
   ProductItem,
   ProductInput,
   ProductsResponse,
+  BmrTemplatesResponse,
+  BmrTemplateItem,
+  BmrTemplateInput,
   ProductionBatchStartRequest,
   SamplingActCreate,
   SamplingActItem,
@@ -1062,6 +1065,31 @@ export function getProductionBatchAudit(token: string, id: string): Promise<Prod
 
 export function getProductionBatchRequisitions(token: string, id: string): Promise<RequisitionsResponse> {
   return request<RequisitionsResponse>(`/api/production/batches/${id}/requisitions`, 'GET', { token })
+}
+
+// --- Electronic BMR templates (СОП-11) ------------------------------------
+export function listBmrTemplates(token: string): Promise<BmrTemplatesResponse> {
+  return request<BmrTemplatesResponse>('/api/bmr/templates', 'GET', { token })
+}
+
+export function getBmrTemplate(token: string, id: string): Promise<BmrTemplateItem> {
+  return request<BmrTemplateItem>(`/api/bmr/templates/${id}`, 'GET', { token })
+}
+
+export function createBmrTemplate(token: string, payload: BmrTemplateInput): Promise<BmrTemplateItem> {
+  return request<BmrTemplateItem>('/api/bmr/templates', 'POST', { token, body: payload })
+}
+
+export function updateBmrTemplate(token: string, id: string, payload: BmrTemplateInput): Promise<BmrTemplateItem> {
+  return request<BmrTemplateItem>(`/api/bmr/templates/${id}`, 'PUT', { token, body: payload })
+}
+
+export function duplicateBmrTemplate(token: string, id: string): Promise<BmrTemplateItem> {
+  return request<BmrTemplateItem>(`/api/bmr/templates/${id}/duplicate`, 'POST', { token })
+}
+
+export function approveBmrTemplate(token: string, id: string, effectiveDate: string | null): Promise<BmrTemplateItem> {
+  return request<BmrTemplateItem>(`/api/bmr/templates/${id}/approve`, 'POST', { token, body: { effective_date: effectiveDate } })
 }
 
 export function issueProductionBmr(token: string, id: string, payload: ProductionBatchBmrIssueRequest): Promise<ProductionBatchItem> {

@@ -1152,6 +1152,64 @@ export interface ProductionBatchesResponse {
   batches: ProductionBatchItem[]
 }
 
+// --- Electronic BMR template constructor (СОП-11) --------------------------
+export interface BmrSectionItem {
+  id?: string
+  ordinal?: number
+  section_type: string
+  title: string
+  config: { fields?: BmrFieldDef[]; note?: string }
+}
+
+export interface BmrFieldDef {
+  label: string
+  type: string // text|number|checkbox|select|datetime|signature_operator|signature_qa|calc
+  unit?: string | null
+  required?: boolean
+}
+
+export interface BmrTemplateListItem {
+  id: string
+  product_id: string
+  product_code: string | null
+  product_name: string | null
+  market_code: string | null
+  title: string
+  version: number
+  status: string
+  effective_date: string | null
+  sections_count: number
+  updated_at: string
+}
+
+export interface BmrTemplateItem {
+  id: string
+  product_id: string
+  product_code: string | null
+  product_name: string | null
+  market_code: string | null
+  title: string
+  version: number
+  status: string
+  effective_date: string | null
+  notes: string | null
+  created_by: string
+  approved_by: string | null
+  approved_at: string | null
+  sections: BmrSectionItem[]
+}
+
+export interface BmrTemplatesResponse {
+  templates: BmrTemplateListItem[]
+}
+
+export interface BmrTemplateInput {
+  product_id: string
+  title: string
+  notes?: string | null
+  sections: { section_type: string; title: string; config: Record<string, unknown> }[]
+}
+
 export interface BmrQueueItem {
   id: string
   batch_no: string
