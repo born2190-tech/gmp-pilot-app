@@ -227,6 +227,7 @@ export interface VerificationQueueItem {
   uploaded_by: string
   uploaded_by_name: string | null
   version: number
+  micro?: boolean | null
 }
 
 export interface VerificationQueueResponse {

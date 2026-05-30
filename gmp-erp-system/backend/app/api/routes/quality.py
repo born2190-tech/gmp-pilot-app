@@ -837,7 +837,7 @@ def verification_queue_route(
         db.query(
             QCReportScan.id, QCReport.id, QCReport.report_no,
             Material.name, QCReportScan.uploaded_at, QCReportScan.uploaded_by,
-            User.full_name, QCReportScan.version,
+            User.full_name, QCReportScan.version, QCReport.micro_required,
         )
         .join(QCReport, QCReport.id == QCReportScan.report_id)
         .outerjoin(Lot, Lot.id == QCReport.lot_id)
@@ -850,7 +850,7 @@ def verification_queue_route(
         items.append(VerificationQueueItem(
             doc_type="qc_report", scan_id=r[0], doc_id=r[1], doc_no=r[2],
             sop_form="11", title=r[3], uploaded_at=r[4], uploaded_by=r[5],
-            uploaded_by_name=r[6], version=r[7],
+            uploaded_by_name=r[6], version=r[7], micro=bool(r[8]),
         ))
 
     items.sort(key=lambda it: it.uploaded_at)

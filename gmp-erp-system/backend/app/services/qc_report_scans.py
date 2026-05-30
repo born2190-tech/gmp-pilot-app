@@ -138,18 +138,22 @@ def verify_report_scan(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The user who uploaded the scan cannot verify it (4-eyes rule)",
         )
-    if not (signature_1_ok and signature_2_ok and signature_3_ok):
+    report = db.get(QCReport, scan.report_id)
+    # Подписи Ф-11: 1) исполнитель (химик), 2) микробиолог (только если есть
+    # микробиология), 3) утвердил (нач. ДКК). Подпись микробиолога требуется
+    # лишь когда в протоколе есть микробиологический раздел.
+    need_micro = bool(report and report.micro_required)
+    missing = (not signature_1_ok) or (not signature_3_ok) or (need_micro and not signature_2_ok)
+    if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="All three wet-ink signatures must be confirmed to verify the scan",
+            detail="Подтвердите все требуемые подписи аналитического листа",
         )
 
     from app.schemas.inventory import SignatureRequest
 
     signature = SignatureRequest(username=username, password=password, meaning=meaning, reason=reason)
     validate_signature(db, user, signature, "VERIFY_QC_REPORT_SCAN", "qc_report_scan", str(scan.id))
-
-    report = db.get(QCReport, scan.report_id)
     scan.status = "verified"
     scan.verified_by = user.id
     scan.verified_at = now_utc()

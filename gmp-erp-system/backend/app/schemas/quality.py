@@ -183,6 +183,8 @@ class VerificationQueueItem(BaseModel):
     uploaded_by: UUID
     uploaded_by_name: str | None = None
     version: int
+    # Ф-11 only: есть ли микробиология (управляет составом подписей при верификации).
+    micro: bool | None = None
 
 
 class VerificationQueueResponse(BaseModel):

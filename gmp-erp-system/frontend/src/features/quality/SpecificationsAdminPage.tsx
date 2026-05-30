@@ -84,7 +84,7 @@ const STR: Record<string, Record<string, string>> = {
     archived_ok: 'НД перенесена в архив', restored_ok: 'НД возвращена в действующие',
     deleted_ok: 'НД удалена',
     f11_eyebrow: 'Предпросмотр аналитического листа', f11_title: 'Так параметры лягут в форму Ф-11',
-    f11_sub: 'Каждая строка спецификации становится строкой аналитического листа. Колонка «Результат» заполняется оператором ОКК при входном контроле.',
+    f11_sub: 'Каждая строка спецификации становится строкой аналитического листа. Колонка «Результат» заполняется оператором ДКК при входном контроле.',
     f11_col_test: 'Наименование показателя', f11_col_spec: 'Норма по НД', f11_col_method: 'Метод',
     f11_col_unit: 'Ед.', f11_col_result: 'Результат', f11_col_verdict: 'Откл.',
     f11_pc: 'Раздел 1. Физико-химические показатели', f11_micro: 'Раздел 2. Микробиологические показатели',
@@ -1064,7 +1064,7 @@ function F11Sheet({ d, t }: { d: UiSpec; t: Dict }) {
     <div className="rounded-lg border border-slate-200 bg-white p-5">
       <div className="flex items-start justify-between gap-4 border-b-2 border-slate-900 pb-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">ИП ООО «NOVUGEN PHARMA» · ДКК / ОКК</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">ИП ООО «NOVUGEN PHARMA» · ДКК</p>
           <h3 className="mt-1 text-[14px] font-bold uppercase leading-tight tracking-tight text-slate-900">{formTitle}</h3>
         </div>
         <div className="shrink-0 rounded border border-slate-300 px-2.5 py-1 text-center">
@@ -1082,10 +1082,15 @@ function F11Sheet({ d, t }: { d: UiSpec; t: Dict }) {
         {d.micro_required && d.micro.length > 0 && <Section titleKey="f11_micro" rows={d.micro} kind="micro" />}
       </div>
       <div className="mt-4 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-800">
-        <Info size={13} /><span>Поля «{t.f11_col_result}» и «{t.f11_col_verdict}» {t.f11_to_fill} — оператором ОКК.</span>
+        <Info size={13} /><span>Поля «{t.f11_col_result}» и «{t.f11_col_verdict}» {t.f11_to_fill} — оператором ДКК.</span>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-6 border-t border-slate-200 pt-3 text-[10.5px] sm:grid-cols-3">
-        {['Выполнил (аналитик)', 'Проверил (нач. ОКК)', 'Дата'].map((s) => (
+        {[
+          'Исполнитель (химик)',
+          ...(d.micro_required ? ['Микробиолог'] : []),
+          'Утвердил (нач. ДКК)',
+          'Дата',
+        ].map((s) => (
           <div key={s}><p className="text-slate-400">{s}</p><p className="mt-3 border-b border-dotted border-slate-300" /></div>
         ))}
       </div>

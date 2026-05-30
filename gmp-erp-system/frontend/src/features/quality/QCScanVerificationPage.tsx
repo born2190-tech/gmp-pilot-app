@@ -59,10 +59,31 @@ function docBadgeClass(docType: VerificationDocType): string {
   return 'border-amber-200 bg-amber-50 text-amber-700'
 }
 
-function sigLabels(t: Translate, docType: VerificationDocType): [string, string, string] {
-  if (docType === 'qc_notification') return [t('qcVerification.sigWarehouse'), t('qcVerification.sigQc'), t('qcVerification.sigManager')]
-  if (docType === 'sampling_act') return [t('qcVerification.sigSampler'), t('qcVerification.sigWitness'), t('qcVerification.sigApprover')]
-  return [t('qcVerification.sigExecutor'), t('qcVerification.sigReviewer'), t('qcVerification.sigDkkHead')]
+type SigSlot = 1 | 2 | 3
+interface SigRow { slot: SigSlot; label: string }
+
+// Список подписей зависит от формы. Для Ф-11 (аналит. лист) подпись
+// микробиолога (слот 2) показывается только если в протоколе есть микробиология.
+function sigRows(t: Translate, item: VerificationQueueItem): SigRow[] {
+  if (item.doc_type === 'qc_notification') {
+    return [
+      { slot: 1, label: t('qcVerification.sigWarehouse') },
+      { slot: 2, label: t('qcVerification.sigQc') },
+      { slot: 3, label: t('qcVerification.sigManager') },
+    ]
+  }
+  if (item.doc_type === 'sampling_act') {
+    return [
+      { slot: 1, label: t('qcVerification.sigSampler') },
+      { slot: 2, label: t('qcVerification.sigWitness') },
+      { slot: 3, label: t('qcVerification.sigApprover') },
+    ]
+  }
+  // qc_report (Ф-11): химик + микробиолог (если есть) + нач. ДКК
+  const rows: SigRow[] = [{ slot: 1, label: t('qcVerification.sigChemist') }]
+  if (item.micro) rows.push({ slot: 2, label: t('qcVerification.sigMicrobiologist') })
+  rows.push({ slot: 3, label: t('qcVerification.sigDkkHead') })
+  return rows
 }
 
 async function downloadScanBlob(token: string, item: VerificationQueueItem): Promise<Blob> {
@@ -146,7 +167,10 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
 
   async function submitVerify() {
     if (!active) return
-    if (!draft.sig1 || !draft.sig2 || !draft.sig3) {
+    const rows = sigRows(t, active)
+    const slots = new Set(rows.map((r) => r.slot))
+    const allChecked = rows.every((r) => draft[`sig${r.slot}` as 'sig1' | 'sig2' | 'sig3'])
+    if (!allChecked) {
       setError(t('qcVerification.allSignaturesRequired'))
       return
     }
@@ -159,15 +183,19 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     const meaning = t('qcVerification.signatureMeaning')
     const reason = draft.remarks.trim() || t('qcVerification.signatureReasonDefault')
     const remarks = draft.remarks.trim() || null
+    // Скрытые слоты (напр. микробиолог при отсутствии микробиологии) — N/A → true.
+    const s1 = slots.has(1) ? draft.sig1 : true
+    const s2 = slots.has(2) ? draft.sig2 : true
+    const s3 = slots.has(3) ? draft.sig3 : true
     try {
       if (active.doc_type === 'qc_notification') {
         await verifyQcScan(token, active.scan_id, {
-          signature_warehouse_ok: draft.sig1, signature_qc_ok: draft.sig2, signature_manager_ok: draft.sig3,
+          signature_warehouse_ok: s1, signature_qc_ok: s2, signature_manager_ok: s3,
           remarks, username: user.username, password: draft.password, meaning, reason,
         })
       } else {
         const payload = {
-          signature_1_ok: draft.sig1, signature_2_ok: draft.sig2, signature_3_ok: draft.sig3,
+          signature_1_ok: s1, signature_2_ok: s2, signature_3_ok: s3,
           remarks, username: user.username, password: draft.password, meaning, reason,
         }
         if (active.doc_type === 'sampling_act') await verifySamplingScan(token, active.scan_id, payload)
@@ -368,7 +396,7 @@ function VerifyModal({
   t: Translate
   locale: string
 }) {
-  const [l1, l2, l3] = sigLabels(t, item.doc_type)
+  const rows = sigRows(t, item)
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/40 p-4">
       <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
@@ -408,9 +436,18 @@ function VerifyModal({
             </div>
 
             <div className="space-y-2">
-              <CheckboxRow label={l1} checked={draft.sig1} onChange={(v) => onDraft({ ...draft, sig1: v })} disabled={rejectMode} />
-              <CheckboxRow label={l2} checked={draft.sig2} onChange={(v) => onDraft({ ...draft, sig2: v })} disabled={rejectMode} />
-              <CheckboxRow label={l3} checked={draft.sig3} onChange={(v) => onDraft({ ...draft, sig3: v })} disabled={rejectMode} />
+              {rows.map((r) => {
+                const key = `sig${r.slot}` as 'sig1' | 'sig2' | 'sig3'
+                return (
+                  <CheckboxRow
+                    key={r.slot}
+                    label={r.label}
+                    checked={draft[key]}
+                    onChange={(v) => onDraft({ ...draft, [key]: v })}
+                    disabled={rejectMode}
+                  />
+                )
+              })}
             </div>
 
             <div>
