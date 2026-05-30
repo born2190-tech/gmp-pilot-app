@@ -1118,6 +1118,12 @@ export function reviewBmrInstance(token: string, id: string, payload: { username
   return request<BmrInstanceItem>(`/api/bmr/instances/${id}/review`, 'POST', { token, body: payload })
 }
 
+export async function downloadBmrInstancePdf(token: string, id: string): Promise<Blob> {
+  const response = await fetch(`/api/bmr/instances/${id}/pdf`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
 export function issueProductionBmr(token: string, id: string, payload: ProductionBatchBmrIssueRequest): Promise<ProductionBatchItem> {
   return request<ProductionBatchItem>(`/api/production/batches/${id}/issue-bmr`, 'POST', { token, body: payload })
 }

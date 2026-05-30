@@ -1,7 +1,9 @@
 """Electronic BMR template constructor routes (СОП-11) — Phase A."""
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, get_current_user
@@ -59,6 +61,20 @@ def complete_route(instance_id: UUID, payload: BmrInstanceActionRequest, db: Ses
 @instances_router.post("/{instance_id}/review", response_model=BmrInstanceItem)
 def review_route(instance_id: UUID, payload: BmrInstanceActionRequest, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrInstanceItem:
     return BmrInstanceItem.model_validate(review_instance(db, user, instance_id, payload))
+
+
+@instances_router.get("/{instance_id}/pdf")
+def instance_pdf_route(instance_id: UUID, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> Response:
+    from app.services.bmr_pdf import render_bmr_pdf
+
+    data = get_instance(db, user, instance_id)
+    pdf = render_bmr_pdf(data)
+    filename = f"bmr-{(data.get('batch_no') or 'series')}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.get("", response_model=BmrTemplatesResponse)

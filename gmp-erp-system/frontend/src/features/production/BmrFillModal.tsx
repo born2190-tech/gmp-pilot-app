@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, FileText, PenLine, Save, ShieldCheck, X } from 'lucide-react'
+import { CheckCircle2, FileDown, FileText, PenLine, Save, ShieldCheck, X } from 'lucide-react'
 import {
   completeBmrInstance,
+  downloadBmrInstancePdf,
   getBmrInstance,
   reviewBmrInstance,
   saveBmrEntries,
@@ -91,6 +92,16 @@ export function BmrFillModal({ token, user, instanceId, onClose, onChanged }: Pr
     } catch (e) { setError(e instanceof Error ? e.message : 'sign failed') } finally { setBusy(false) }
   }
 
+  async function openPdf() {
+    if (!inst) return
+    try {
+      const blob = await downloadBmrInstancePdf(token, inst.id)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e) { setError(e instanceof Error ? e.message : 'pdf failed') }
+  }
+
   async function doAction() {
     if (!inst || !action) return
     setBusy(true); setError(null)
@@ -165,6 +176,7 @@ export function BmrFillModal({ token, user, instanceId, onClose, onChanged }: Pr
         {!readOnly && <button type="button" disabled={busy} onClick={() => void saveAll()} className="inline-flex h-11 items-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"><Save size={16} />Сохранить</button>}
         {inst && inst.status !== 'completed' && inst.status !== 'reviewed' && canFill && <button type="button" disabled={busy} onClick={() => { setAction('complete'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><CheckCircle2 size={16} />Завершить заполнение</button>}
         {inst && inst.status === 'completed' && canQa && <button type="button" disabled={busy} onClick={() => { setAction('review'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><ShieldCheck size={16} />Проверить (ДОК)</button>}
+        <button type="button" disabled={!inst} onClick={() => void openPdf()} className="inline-flex h-11 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"><FileDown size={16} />PDF</button>
         <button type="button" onClick={onClose} className="ml-auto inline-flex h-11 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Закрыть</button>
       </div>
 
