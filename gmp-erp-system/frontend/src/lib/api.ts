@@ -71,6 +71,7 @@ import type {
   AllocationUpdateRequest,
   IssueRequisitionRequest,
   ProductionBatchBmrIssueRequest,
+  ProductionBatchCancelRequest,
   ProductionBatchChecklistUpdate,
   ProductionBatchCompleteRequest,
   ProductionBatchCreate,
@@ -1052,6 +1053,14 @@ export function listProductionBatches(token: string, status?: string): Promise<P
 
 export function issueProductionBmr(token: string, id: string, payload: ProductionBatchBmrIssueRequest): Promise<ProductionBatchItem> {
   return request<ProductionBatchItem>(`/api/production/batches/${id}/issue-bmr`, 'POST', { token, body: payload })
+}
+
+export function assignProductionBatch(token: string, id: string): Promise<ProductionBatchItem> {
+  return request<ProductionBatchItem>(`/api/production/batches/${id}/assign`, 'POST', { token })
+}
+
+export function cancelProductionBatch(token: string, id: string, payload: ProductionBatchCancelRequest): Promise<ProductionBatchItem> {
+  return request<ProductionBatchItem>(`/api/production/batches/${id}/cancel`, 'POST', { token, body: payload })
 }
 
 export function checkProductionBatchNumber(token: string, id: string, payload: ProductionBatchNumberCheckRequest): Promise<ProductionBatchItem> {

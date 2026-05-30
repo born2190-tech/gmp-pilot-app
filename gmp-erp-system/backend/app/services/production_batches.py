@@ -125,7 +125,7 @@ def create_batch(db: Session, user: CurrentUser, payload: ProductionBatchCreate)
 
     batch = ProductionBatch(
         batch_no=batch_no,
-        status="assigned",
+        status="draft" if payload.as_draft else "assigned",
         product_id=product.id,
         product_code=product.code,
         serial_no=serial,
@@ -146,9 +146,10 @@ def create_batch(db: Session, user: CurrentUser, payload: ProductionBatchCreate)
         user,
         object_type="production_batch",
         object_id=str(batch.id),
-        action_type="ASSIGN_BATCH_NO",
+        action_type="SAVE_DRAFT_BATCH" if payload.as_draft else "ASSIGN_BATCH_NO",
         new_value={
             "batch_no": batch.batch_no,
+            "status": batch.status,
             "auto_batch_no": auto_batch_no,
             "manual_override": bool(override and override != auto_batch_no),
             "sop": "SOP-409",
@@ -156,6 +157,52 @@ def create_batch(db: Session, user: CurrentUser, payload: ProductionBatchCreate)
             "expiry_date": str(batch.expiry_date),
         },
         reason=(payload.override_reason or None) if (override and override != auto_batch_no) else None,
+    )
+    db.commit()
+    db.refresh(batch)
+    return batch
+
+
+def assign_batch(db: Session, user: CurrentUser, batch_id) -> ProductionBatch:
+    """Финализация черновика: draft → assigned (официальное присвоение номера)."""
+    _require_any_permission(user, ("MANAGE_PRODUCTION",))
+    batch = get_batch(db, user, batch_id)
+    if batch.status != "draft":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Присвоить можно только черновик")
+    batch.status = "assigned"
+    write_audit(
+        db, user, object_type="production_batch", object_id=str(batch.id),
+        action_type="ASSIGN_BATCH_NO",
+        new_value={"batch_no": batch.batch_no, "status": batch.status, "from": "draft", "sop": "SOP-409"},
+    )
+    db.commit()
+    db.refresh(batch)
+    return batch
+
+
+def cancel_batch(db: Session, user: CurrentUser, batch_id, payload) -> ProductionBatch:
+    """Отмена серии (до начала производства) с э-подписью и причиной."""
+    _require_any_permission(user, ("MANAGE_PRODUCTION", "QA_DECISION"))
+    batch = get_batch(db, user, batch_id)
+    if batch.status in {"in_production", "completed", "cancelled"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Нельзя отменить серию в производстве, завершённую или уже отменённую",
+        )
+    if not (payload.reason or "").strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Отмена серии требует указания причины")
+    validate_signature(db, user, payload, "CANCEL_PRODUCTION_BATCH", "production_batch", str(batch.id))
+    old_status = batch.status
+    batch.status = "cancelled"
+    batch.cancelled_by = user.id
+    batch.cancelled_at = now_utc()
+    batch.cancel_reason = payload.reason.strip()
+    write_audit(
+        db, user, object_type="production_batch", object_id=str(batch.id),
+        action_type="CANCEL_PRODUCTION_BATCH",
+        old_value={"status": old_status},
+        new_value={"batch_no": batch.batch_no, "status": batch.status},
+        reason=payload.reason,
     )
     db.commit()
     db.refresh(batch)

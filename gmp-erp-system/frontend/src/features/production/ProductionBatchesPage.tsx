@@ -14,8 +14,10 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Package } from 'lucide-react'
+import { Ban, Package } from 'lucide-react'
 import {
+  assignProductionBatch,
+  cancelProductionBatch,
   checkProductionBatchNumber,
   completeProductionBatch,
   createProduct,
@@ -47,24 +49,28 @@ const CHECKS: { key: CheckKey; label: string; sop: string }[] = [
 ]
 
 const STATUS_STYLE: Record<string, string> = {
+  draft: 'border-slate-200 bg-slate-100 text-slate-600',
   assigned: 'border-amber-200 bg-amber-50 text-amber-700',
   number_checked: 'border-cyan-200 bg-cyan-50 text-cyan-700',
   bmr_issued: 'border-blue-200 bg-blue-50 text-blue-700',
   ready_to_start: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   in_production: 'border-slate-300 bg-slate-900 text-white',
   completed: 'border-violet-200 bg-violet-50 text-violet-700',
+  cancelled: 'border-rose-200 bg-rose-50 text-rose-700',
 }
 
 const STATUS_LABEL: Record<string, string> = {
+  draft: 'Черновик',
   assigned: 'Серия присвоена',
   number_checked: 'Номер проверен',
   bmr_issued: 'ЗПС выдана',
   ready_to_start: 'Готово к старту',
   in_production: 'В производстве',
   completed: 'Завершена',
+  cancelled: 'Отменена',
 }
 
-const STATUS_FILTERS = ['', 'assigned', 'number_checked', 'bmr_issued', 'ready_to_start', 'in_production', 'completed']
+const STATUS_FILTERS = ['', 'draft', 'assigned', 'number_checked', 'bmr_issued', 'ready_to_start', 'in_production', 'completed', 'cancelled']
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -119,6 +125,8 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const [startReason, setStartReason] = useState('Начало выпуска серии после проверки готовности')
   const [completePassword, setCompletePassword] = useState('')
   const [completeReason, setCompleteReason] = useState('Производство серии завершено')
+  const [cancelPassword, setCancelPassword] = useState('')
+  const [cancelReason, setCancelReason] = useState('')
 
   const selected = useMemo(
     () => batches.find((batch) => batch.id === selectedId) ?? batches[0] ?? null,
@@ -212,7 +220,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     }
   }
 
-  async function handleCreate() {
+  async function handleCreate(asDraft: boolean) {
     await runAction(async () => {
       const created = await createProductionBatch(token, {
         product_id: form.product_id,
@@ -225,11 +233,33 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
         notes: form.notes || null,
         batch_no_override: form.manual_number ? form.batch_no_override.trim() || null : null,
         override_reason: form.manual_number ? form.override_reason.trim() || null : null,
+        as_draft: asDraft,
       })
       setSelectedId(created.id)
       setShowCreate(false)
       setForm(makeInitialForm())
-    }, 'Серия присвоена по СОП-409')
+    }, asDraft ? 'Черновик серии сохранён' : 'Серия присвоена по СОП-409')
+  }
+
+  async function handleAssign(batch: ProductionBatchItem) {
+    await runAction(async () => {
+      const updated = await assignProductionBatch(token, batch.id)
+      setSelectedId(updated.id)
+    }, 'Серия присвоена (номер зарегистрирован)')
+  }
+
+  async function handleCancel(batch: ProductionBatchItem) {
+    await runAction(async () => {
+      const updated = await cancelProductionBatch(token, batch.id, {
+        username: user.username,
+        password: cancelPassword,
+        meaning: 'Отмена производственной серии',
+        reason: cancelReason,
+      })
+      setSelectedId(updated.id)
+      setCancelPassword('')
+      setCancelReason('')
+    }, 'Серия отменена')
   }
 
   async function handleSaveProduct(input: Parameters<typeof createProduct>[1], id: string | null) {
@@ -313,10 +343,12 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     Number(form.shelf_life_months) <= 0 ||
     (form.manual_number && form.batch_no_override.trim().length > 0 && !form.override_reason.trim())
 
+  const kpiDraft = batches.filter((batch) => batch.status === 'draft').length
   const kpiAssigned = batches.filter((batch) => batch.status === 'assigned').length
   const kpiReady = batches.filter((batch) => batch.status === 'ready_to_start').length
   const kpiActive = batches.filter((batch) => batch.status === 'in_production').length
   const kpiCompleted = batches.filter((batch) => batch.status === 'completed').length
+  const kpiCancelled = batches.filter((batch) => batch.status === 'cancelled').length
 
   return (
     <section className="space-y-5">
@@ -363,11 +395,13 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       {error && <Notice tone="error" text={error} />}
       {success && <Notice tone="success" text={success} />}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <KpiCard label="Черновики" value={kpiDraft} />
         <KpiCard label="Ожидают проверки номера" value={kpiAssigned} />
         <KpiCard label="Готовы к старту" value={kpiReady} />
         <KpiCard label="В производстве" value={kpiActive} />
         <KpiCard label="Завершены" value={kpiCompleted} />
+        <KpiCard label="Отменены" value={kpiCancelled} />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -458,6 +492,13 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           canCheckNumber={canCheckNumber}
           canExecute={canExecute}
           canIssueBmr={canIssueBmr}
+          canManage={canCreate}
+          cancelPassword={cancelPassword}
+          cancelReason={cancelReason}
+          onCancelPassword={setCancelPassword}
+          onCancelReason={setCancelReason}
+          onCancel={() => void handleCancel(selected)}
+          onAssign={() => void handleAssign(selected)}
           checkPassword={checkPassword}
           bmrNo={bmrNo}
           bmrPassword={bmrPassword}
@@ -495,7 +536,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           isLoading={isLoading}
           onChange={setForm}
           onClose={() => setShowCreate(false)}
-          onCreate={() => void handleCreate()}
+          onCreate={(asDraft) => void handleCreate(asDraft)}
         />
       )}
 
@@ -516,6 +557,13 @@ function BatchDetail({
   canCheckNumber,
   canExecute,
   canIssueBmr,
+  canManage,
+  cancelPassword,
+  cancelReason,
+  onCancelPassword,
+  onCancelReason,
+  onCancel,
+  onAssign,
   checkPassword,
   bmrNo,
   bmrPassword,
@@ -541,6 +589,13 @@ function BatchDetail({
   canCheckNumber: boolean
   canExecute: boolean
   canIssueBmr: boolean
+  canManage: boolean
+  cancelPassword: string
+  cancelReason: string
+  onCancelPassword: (value: string) => void
+  onCancelReason: (value: string) => void
+  onCancel: () => void
+  onAssign: () => void
   checkPassword: string
   bmrNo: string
   bmrPassword: string
@@ -563,10 +618,35 @@ function BatchDetail({
   isLoading: boolean
 }) {
   const allChecks = CHECKS.every((check) => batch[check.key])
-  const canStart = canExecute && batch.bmr_issued_at && allChecks && !['in_production', 'completed'].includes(batch.status)
+  const canStart = canExecute && batch.bmr_issued_at && allChecks && !['in_production', 'completed', 'cancelled'].includes(batch.status)
   const canComplete = canExecute && batch.status === 'in_production' && !batch.completed_at
+  const isTerminal = ['in_production', 'completed', 'cancelled'].includes(batch.status)
+  const canCancel = canManage && !isTerminal
   return (
     <div className="space-y-4">
+      {batch.status === 'draft' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-50 p-4">
+          <div className="text-sm text-slate-700">
+            <span className="font-semibold">Черновик серии.</span> Номер ещё не зарегистрирован официально. Присвойте серию или отмените черновик.
+          </div>
+          {canManage && (
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={onAssign}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              <ShieldCheck size={16} />
+              Присвоить серию
+            </button>
+          )}
+        </div>
+      )}
+      {batch.status === 'cancelled' && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+          <span className="font-semibold">Серия отменена.</span> {formatDate(batch.cancelled_at)}{batch.cancel_reason ? ` · ${batch.cancel_reason}` : ''}. Запись остаётся в журнале серий.
+        </div>
+      )}
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -722,6 +802,29 @@ function BatchDetail({
           </p>
         )}
       </div>
+
+      {canCancel && (
+        <div className="rounded-lg border border-rose-200 bg-white p-5 shadow-sm">
+          <SectionTitle icon={Ban} title="Отменить серию" sub="До начала производства · с электронной подписью" />
+          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+            <Field label="Причина отмены">
+              <input className="input" value={cancelReason} onChange={(e) => onCancelReason(e.target.value)} placeholder="Напр.: ошибка планирования, отмена заказа" />
+            </Field>
+            <Field label="Пароль электронной подписи">
+              <input type="password" className="input" value={cancelPassword} onChange={(e) => onCancelPassword(e.target.value)} />
+            </Field>
+            <button
+              type="button"
+              disabled={!cancelReason.trim() || !cancelPassword || isLoading}
+              onClick={onCancel}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-rose-600 px-5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Ban size={16} />
+              Отменить серию
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -745,7 +848,7 @@ function CreateBatchModal({
   isLoading: boolean
   onChange: (form: BatchForm) => void
   onClose: () => void
-  onCreate: () => void
+  onCreate: (asDraft: boolean) => void
 }) {
   const activeProducts = products.filter((p) => p.is_active || p.id === form.product_id)
 
@@ -862,7 +965,7 @@ function CreateBatchModal({
         </div>
 
         <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4">
-          <p className="text-xs text-slate-500">Номер по умолчанию берётся из журнала серий (СОП-409). Ручная правка — только с причиной и фиксируется в аудите.</p>
+          <p className="text-xs text-slate-500">Черновик можно сохранить без присвоения. Номер берётся из журнала серий (СОП-409); ручная правка — только с причиной и фиксируется в аудите.</p>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
               Отмена
@@ -870,7 +973,15 @@ function CreateBatchModal({
             <button
               type="button"
               disabled={createInvalid || isLoading}
-              onClick={onCreate}
+              onClick={() => onCreate(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Сохранить черновик
+            </button>
+            <button
+              type="button"
+              disabled={createInvalid || isLoading}
+              onClick={() => onCreate(false)}
               className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ShieldCheck size={16} />

@@ -63,6 +63,12 @@ class ProductionBatchCreate(BaseModel):
     # Контролируемое ручное переопределение номера (СОП-409): требует причину.
     batch_no_override: str | None = Field(default=None, max_length=32)
     override_reason: str | None = Field(default=None, max_length=500)
+    # Сохранить как черновик (status=draft) вместо официального присвоения.
+    as_draft: bool = False
+
+
+class ProductionBatchCancelRequest(SignatureRequest):
+    pass
 
 
 class ProductionBatchChecklistUpdate(BaseModel):
@@ -122,6 +128,8 @@ class ProductionBatchItem(BaseModel):
     checklist_updated_at: datetime | None
     started_at: datetime | None
     completed_at: datetime | None
+    cancelled_at: datetime | None
+    cancel_reason: str | None
     notes: str | None
     created_at: datetime
 

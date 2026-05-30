@@ -12,6 +12,7 @@ from app.schemas.production import (
     ProductUpdate,
     ProductsResponse,
     ProductionBatchBmrIssueRequest,
+    ProductionBatchCancelRequest,
     ProductionBatchChecklistUpdate,
     ProductionBatchCompleteRequest,
     ProductionBatchCreate,
@@ -23,6 +24,8 @@ from app.schemas.production import (
     ProductionBatchStartRequest,
 )
 from app.services.production_batches import (
+    assign_batch,
+    cancel_batch,
     create_batch,
     check_batch_number,
     complete_batch,
@@ -117,6 +120,25 @@ def issue_bmr_route(
     user: CurrentUser = Depends(get_current_user),
 ) -> ProductionBatchItem:
     return ProductionBatchItem.model_validate(issue_bmr(db, user, batch_id, payload))
+
+
+@router.post("/{batch_id}/assign", response_model=ProductionBatchItem)
+def assign_route(
+    batch_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProductionBatchItem:
+    return ProductionBatchItem.model_validate(assign_batch(db, user, batch_id))
+
+
+@router.post("/{batch_id}/cancel", response_model=ProductionBatchItem)
+def cancel_route(
+    batch_id: UUID,
+    payload: ProductionBatchCancelRequest,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProductionBatchItem:
+    return ProductionBatchItem.model_validate(cancel_batch(db, user, batch_id, payload))
 
 
 @router.post("/{batch_id}/check-number", response_model=ProductionBatchItem)

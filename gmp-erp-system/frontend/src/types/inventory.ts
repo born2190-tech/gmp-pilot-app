@@ -1134,6 +1134,8 @@ export interface ProductionBatchItem {
   checklist_updated_at: string | null
   started_at: string | null
   completed_at: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
   notes: string | null
   created_at: string
 }
@@ -1165,6 +1167,11 @@ export interface ProductionBatchCreate {
   notes?: string | null
   batch_no_override?: string | null
   override_reason?: string | null
+  as_draft?: boolean
+}
+
+export interface ProductionBatchCancelRequest extends SignatureRequest {
+  reason?: string
 }
 
 export interface ProductionBatchChecklistUpdate {
