@@ -73,10 +73,13 @@ function sigRows(t: Translate, item: VerificationQueueItem): SigRow[] {
     ]
   }
   if (item.doc_type === 'sampling_act') {
+    // Комиссия Ф-10: нач. ДКК, член от склада (533 — помощник зав. склада,
+    // 548 — зав. склада Г/П), представитель ДКК.
+    const wh = item.sop_form === '548' ? t('qcVerification.sigF10WhFg') : t('qcVerification.sigF10WhSub')
     return [
-      { slot: 1, label: t('qcVerification.sigSampler') },
-      { slot: 2, label: t('qcVerification.sigWitness') },
-      { slot: 3, label: t('qcVerification.sigApprover') },
+      { slot: 1, label: t('qcVerification.sigF10Head') },
+      { slot: 2, label: wh },
+      { slot: 3, label: t('qcVerification.sigF10Rep') },
     ]
   }
   // qc_report (Ф-11): химик + микробиолог (если есть) + нач. ДКК
