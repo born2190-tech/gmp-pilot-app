@@ -140,6 +140,9 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const canCheckNumber = user.permissions.includes('ENTER_QC_RESULT') || user.permissions.includes('QA_DECISION') || user.role === 'SYS_ADMIN'
   const canIssueBmr = user.permissions.includes('QA_DECISION') || user.role === 'SYS_ADMIN'
   const canExecute = user.permissions.includes('EXECUTE_BMR') || user.permissions.includes('MANAGE_PRODUCTION')
+  // Журнал серии (audit trail) — у админа и ДОК; проверка номера/выдача ЗПС —
+  // у ДКК/ДОК, не у производства.
+  const canViewAudit = user.role === 'SYS_ADMIN' || user.permissions.includes('VIEW_AUDIT') || user.permissions.includes('VIEW_QA') || user.permissions.includes('QA_DECISION')
 
   const [batches, setBatches] = useState<ProductionBatchItem[]>([])
   const [products, setProducts] = useState<ProductItem[]>([])
@@ -553,6 +556,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           canExecute={canExecute}
           canIssueBmr={canIssueBmr}
           canManage={canCreate}
+          canViewAudit={canViewAudit}
           cancelPassword={cancelPassword}
           cancelReason={cancelReason}
           onCancelPassword={setCancelPassword}
@@ -620,6 +624,7 @@ function BatchDetail({
   canExecute,
   canIssueBmr,
   canManage,
+  canViewAudit,
   cancelPassword,
   cancelReason,
   onCancelPassword,
@@ -654,6 +659,7 @@ function BatchDetail({
   canExecute: boolean
   canIssueBmr: boolean
   canManage: boolean
+  canViewAudit: boolean
   cancelPassword: string
   cancelReason: string
   onCancelPassword: (value: string) => void
@@ -730,8 +736,9 @@ function BatchDetail({
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        {canCheckNumber && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <SectionTitle icon={ShieldCheck} title="Проверка номера серии" sub="Контроль по СОП-409" />
+          <SectionTitle icon={ShieldCheck} title="Проверка номера серии" sub="Контроль по СОП-409 · ДКК/ДОК" />
           {batch.number_checked_at ? (
             <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               Номер проверен: {formatDate(batch.number_checked_at)}
@@ -754,9 +761,11 @@ function BatchDetail({
             </div>
           )}
         </div>
+        )}
 
+        {canIssueBmr && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <SectionTitle icon={FileSignature} title="Выдача ЗПС / BMR" sub="СОП-436 п.6.2.10" />
+          <SectionTitle icon={FileSignature} title="Выдача ЗПС / BMR" sub="СОП-436 п.6.2.10 · ДОК" />
           {batch.bmr_issued_at ? (
             <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               ЗПС выдана: <span className="font-mono">{batch.bmr_no}</span> · {formatDate(batch.bmr_issued_at)}
@@ -786,7 +795,9 @@ function BatchDetail({
             </div>
           )}
         </div>
+        )}
 
+        {canExecute && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <SectionTitle icon={ClipboardCheck} title="Готовность к старту" sub="СОП-436 / СОП-442" />
           <div className="mt-4 space-y-2">
@@ -807,8 +818,10 @@ function BatchDetail({
             ))}
           </div>
         </div>
+        )}
       </div>
 
+      {canExecute && (
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle icon={Play} title="Начать выпуск серии" sub="Старт блокируется без ЗПС и полного чеклиста" />
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
@@ -834,7 +847,9 @@ function BatchDetail({
           </p>
         )}
       </div>
+      )}
 
+      {canExecute && (
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle icon={CheckCircle2} title="Завершить выпуск серии" sub="Серия остаётся в реестре как постоянная запись" />
         {batch.completed_at ? (
@@ -866,6 +881,7 @@ function BatchDetail({
           </p>
         )}
       </div>
+      )}
 
       {canCancel && (
         <div className="rounded-lg border border-rose-200 bg-white p-5 shadow-sm">
@@ -926,6 +942,7 @@ function BatchDetail({
         )}
       </div>
 
+      {canViewAudit && (
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle icon={History} title="Журнал серии" sub="Кто и когда — audit trail по СОП-409 / GMP" />
         {audit.length === 0 ? (
@@ -950,6 +967,7 @@ function BatchDetail({
           </ol>
         )}
       </div>
+      )}
     </div>
   )
 }
@@ -1164,7 +1182,7 @@ function ProductsManagerModal({
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <h2 className="text-[18px] font-semibold text-slate-950">Справочник продуктов (ЛС)</h2>
-            <p className="text-xs text-slate-500">Код по СОП-409 (2 знака). Нумерация серий ведётся отдельно по каждому ЛС.</p>
+            <p className="text-xs text-slate-500">Код по СОП-409 (3 знака). Нумерация серий ведётся отдельно по каждому ЛС.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
             <X size={18} />

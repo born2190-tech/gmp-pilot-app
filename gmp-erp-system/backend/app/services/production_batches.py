@@ -42,20 +42,19 @@ def _add_months_to_month_end(value: date, months: int) -> date:
     return date(year, month, day)
 
 
-def _next_serial(db: Session, product_id, production_date: date) -> int:
+def _next_serial(db: Session, product_id) -> int:
+    """Порядковый номер серии — сквозной по продукту (СОП-409)."""
     existing = (
         db.query(func.max(ProductionBatch.serial_no))
-        .filter(
-            ProductionBatch.product_id == product_id,
-            func.extract("year", ProductionBatch.production_date) == production_date.year,
-        )
+        .filter(ProductionBatch.product_id == product_id)
         .scalar()
     )
     return int(existing or 0) + 1
 
 
-def _format_batch_no(product_code: str, production_date: date, serial_no: int) -> str:
-    return f"{product_code}N{production_date:%y%m}{serial_no:03d}"
+def _format_batch_no(product_code: str, serial_no: int) -> str:
+    """Формат номера серии по СОП-409: <код>N<порядковый:03d>, напр. 012N003."""
+    return f"{product_code}N{serial_no:03d}"
 
 
 def _get_product(db: Session, product_id) -> Product:
@@ -95,9 +94,9 @@ def _update_status_from_gates(batch: ProductionBatch) -> None:
 def preview_batch_number(db: Session, user: CurrentUser, payload: ProductionBatchPreviewRequest) -> dict:
     _require_any_permission(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION", "EXECUTE_BMR"))
     product = _get_product(db, payload.product_id)
-    serial = _next_serial(db, product.id, payload.production_date)
+    serial = _next_serial(db, product.id)
     return {
-        "batch_no": _format_batch_no(product.code, payload.production_date, serial),
+        "batch_no": _format_batch_no(product.code, serial),
         "serial_no": serial,
         "expiry_date": _add_months_to_month_end(payload.production_date, payload.shelf_life_months),
     }
@@ -106,8 +105,8 @@ def preview_batch_number(db: Session, user: CurrentUser, payload: ProductionBatc
 def create_batch(db: Session, user: CurrentUser, payload: ProductionBatchCreate) -> ProductionBatch:
     _require_any_permission(user, ("MANAGE_PRODUCTION",))
     product = _get_product(db, payload.product_id)
-    serial = _next_serial(db, product.id, payload.production_date)
-    auto_batch_no = _format_batch_no(product.code, payload.production_date, serial)
+    serial = _next_serial(db, product.id)
+    auto_batch_no = _format_batch_no(product.code, serial)
 
     override = (payload.batch_no_override or "").strip()
     if override and override != auto_batch_no:
