@@ -22,6 +22,7 @@ import {
   listQcNotificationScans,
   uploadQcNotificationScan,
 } from '../../lib/api'
+import { printBlob } from '../../lib/print'
 import type { CurrentUser } from '../../types/auth'
 import type { QCNotificationItem, QCNotificationScanItem } from '../../types/inventory'
 
@@ -102,30 +103,14 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
   }
 
   function handlePrint(id: string) {
-    void withPdfBlob(id, (url) => {
-      const iframe = document.createElement('iframe')
-      iframe.style.position = 'fixed'
-      iframe.style.right = '0'
-      iframe.style.bottom = '0'
-      iframe.style.width = '0'
-      iframe.style.height = '0'
-      iframe.style.border = '0'
-      iframe.src = url
-      iframe.onload = () => {
-        try {
-          iframe.contentWindow?.focus()
-          iframe.contentWindow?.print()
-        } catch {
-          /* swallow */
-        }
-        // Revoke the blob URL & remove iframe after the print dialog has had a chance to grab it.
-        window.setTimeout(() => {
-          iframe.remove()
-          URL.revokeObjectURL(url)
-        }, 60_000)
+    void (async () => {
+      try {
+        const blob = await downloadQcNotificationPdf(token, id)
+        printBlob(blob)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('qcNotifications.printFailed'))
       }
-      document.body.appendChild(iframe)
-    })
+    })()
   }
 
   function handleView(id: string) {

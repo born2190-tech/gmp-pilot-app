@@ -36,6 +36,7 @@ import type {
 import { Button } from '../../components/ui/button'
 import { ScanButton } from '../../components/ui/ScanButton'
 import { useI18n } from '../../i18n/I18nProvider'
+import { printBlob } from '../../lib/print'
 
 interface ReceiptDocumentPageProps {
   token: string
@@ -386,31 +387,8 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
       setPostedSummary({ ...postedSummary, notificationId: notification.id, notificationNo: notification.notification_no })
       setNotificationDialogOpen(false)
       setNotificationDraftNo('')
-      // Open print dialog directly via hidden iframe so the operator can send
-      // the form to the printer in one click — same flow as on the QC page.
       const blob = await downloadQcNotificationPdf(token, notification.id)
-      const url = URL.createObjectURL(blob)
-      const iframe = document.createElement('iframe')
-      iframe.style.position = 'fixed'
-      iframe.style.right = '0'
-      iframe.style.bottom = '0'
-      iframe.style.width = '0'
-      iframe.style.height = '0'
-      iframe.style.border = '0'
-      iframe.src = url
-      iframe.onload = () => {
-        try {
-          iframe.contentWindow?.focus()
-          iframe.contentWindow?.print()
-        } catch {
-          /* swallow */
-        }
-        window.setTimeout(() => {
-          iframe.remove()
-          URL.revokeObjectURL(url)
-        }, 60_000)
-      }
-      document.body.appendChild(iframe)
+      printBlob(blob)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('qcNotifications.createFailed'))
     } finally {
