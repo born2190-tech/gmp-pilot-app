@@ -1056,6 +1056,10 @@ export function getProductionBatchAudit(token: string, id: string): Promise<Prod
   return request<ProductionBatchAuditResponse>(`/api/production/batches/${id}/audit`, 'GET', { token })
 }
 
+export function getProductionBatchRequisitions(token: string, id: string): Promise<RequisitionsResponse> {
+  return request<RequisitionsResponse>(`/api/production/batches/${id}/requisitions`, 'GET', { token })
+}
+
 export function issueProductionBmr(token: string, id: string, payload: ProductionBatchBmrIssueRequest): Promise<ProductionBatchItem> {
   return request<ProductionBatchItem>(`/api/production/batches/${id}/issue-bmr`, 'POST', { token, body: payload })
 }

@@ -1033,6 +1033,8 @@ export interface RequisitionItem {
   id: string
   requisition_no: string
   status: string
+  production_batch_id?: string | null
+  batch_no?: string | null
   product_name: string
   product_series: string | null
   production_date: string | null
@@ -1058,6 +1060,7 @@ export interface RequisitionCreate {
   product_series?: string | null
   production_date: string
   production_order_no?: string | null
+  production_batch_id?: string | null
   lines: RequisitionLineCreate[]
 }
 

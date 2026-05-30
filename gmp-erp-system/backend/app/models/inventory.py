@@ -375,6 +375,11 @@ class ProductionRequisition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requisition_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     # Overall status: draft → submitted → processing → partially_issued → issued | cancelled
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    # Связь с производственной серией (СОП-409). Опционально: product_series —
+    # снимок номера серии для печати/журнала.
+    production_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("production_batches.id"), nullable=True
+    )
     product_name: Mapped[str] = mapped_column(String(255), nullable=False)
     product_series: Mapped[str | None] = mapped_column(String(128), nullable=True)
     production_date: Mapped[date | None] = mapped_column(Date, nullable=True)

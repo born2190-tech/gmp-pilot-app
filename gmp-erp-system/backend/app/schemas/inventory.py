@@ -521,6 +521,8 @@ class RequisitionCreate(BaseModel):
     production_date: date | None = None
     production_order_no: str | None = None
     notes: str | None = None
+    # Опциональная привязка к производственной серии (СОП-409).
+    production_batch_id: UUID | None = None
     lines: list[RequisitionLineCreate] = Field(min_length=1)
 
 
@@ -593,6 +595,8 @@ class RequisitionItem(BaseModel):
     id: UUID
     requisition_no: str
     status: str
+    production_batch_id: UUID | None = None
+    batch_no: str | None = None
     product_name: str
     product_series: str | None
     production_date: date | None

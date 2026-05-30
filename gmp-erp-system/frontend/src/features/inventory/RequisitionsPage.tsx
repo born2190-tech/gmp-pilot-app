@@ -27,6 +27,7 @@ import {
   issueRequisition,
   listLots,
   listMaterials,
+  listProductionBatches,
   listRequisitions,
   updateRequisitionAllocation,
 } from '../../lib/api'
@@ -36,6 +37,7 @@ import type { CurrentUser } from '../../types/auth'
 import type {
   LotItem,
   MaterialItem,
+  ProductionBatchItem,
   RequisitionAllocationLineItem,
   RequisitionItem,
   RequisitionLineItem,
@@ -309,6 +311,7 @@ export function RequisitionsPage({ token, user }: RequisitionsPageProps) {
     return (
       <CreateView
         materials={materials}
+        token={token}
         isLoading={isLoading}
         error={error}
         t={t}
@@ -1165,6 +1168,7 @@ interface CreateLine {
 
 function CreateView({
   materials,
+  token,
   isLoading,
   error,
   t,
@@ -1172,6 +1176,7 @@ function CreateView({
   onCreate,
 }: {
   materials: MaterialItem[]
+  token: string
   isLoading: boolean
   error: string | null
   t: Translate
@@ -1181,6 +1186,7 @@ function CreateView({
     product_series: string | null
     production_date: string
     production_order_no: string | null
+    production_batch_id: string | null
     lines: { material_id: string; requested_quantity: number; unit: string }[]
   }) => Promise<void>
 }) {
@@ -1188,7 +1194,27 @@ function CreateView({
   const [productSeries, setProductSeries] = useState('')
   const [productionDate, setProductionDate] = useState(todayIso())
   const [productionOrderNo, setProductionOrderNo] = useState('')
+  const [productionBatchId, setProductionBatchId] = useState('')
+  const [batches, setBatches] = useState<ProductionBatchItem[]>([])
   const [lines, setLines] = useState<CreateLine[]>([])
+
+  useEffect(() => {
+    let ignore = false
+    listProductionBatches(token)
+      .then((r) => { if (!ignore) setBatches(r.batches.filter((b) => !['cancelled', 'completed'].includes(b.status))) })
+      .catch(() => { if (!ignore) setBatches([]) })
+    return () => { ignore = true }
+  }, [token])
+
+  function selectBatch(id: string) {
+    setProductionBatchId(id)
+    const b = batches.find((x) => x.id === id)
+    if (b) {
+      setProductName(b.product_name)
+      setProductSeries(b.batch_no)
+      setProductionDate(b.production_date.slice(0, 10))
+    }
+  }
 
   function addLine() {
     setLines((curr) => [...curr, { id: makeId(), material_id: '', requested_quantity: '', unit: '' }])
@@ -1247,6 +1273,19 @@ function CreateView({
         <h3 className="text-[15px] font-semibold text-slate-900">{t('requisitions.headerCardTitle')}</h3>
         <p className="mb-4 mt-0.5 text-[12px] text-slate-500">{t('requisitions.headerCardHint')}</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <FormField label="Производственная серия (СОП-409, опц.)">
+            <select
+              value={productionBatchId}
+              onChange={(event) => selectBatch(event.target.value)}
+              className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
+            >
+              <option value="">— без привязки к серии —</option>
+              {batches.map((b) => (
+                <option key={b.id} value={b.id}>{b.batch_no} · {b.product_name}</option>
+              ))}
+            </select>
+          </FormField>
+          <div className="hidden md:block" />
           <FormField label={t('requisitions.productName')} required>
             <input
               type="text"
@@ -1351,6 +1390,7 @@ function CreateView({
                   product_series: productSeries.trim() || null,
                   production_date: productionDate,
                   production_order_no: productionOrderNo.trim() || null,
+                  production_batch_id: productionBatchId || null,
                   lines: validLines.map((l) => ({
                     material_id: l.material_id,
                     requested_quantity: parseFloat(l.requested_quantity),

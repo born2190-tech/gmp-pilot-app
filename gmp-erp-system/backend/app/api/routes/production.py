@@ -125,6 +125,21 @@ def issue_bmr_route(
     return ProductionBatchItem.model_validate(issue_bmr(db, user, batch_id, payload))
 
 
+@router.get("/{batch_id}/requisitions")
+def batch_requisitions_route(
+    batch_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Требования в склад, привязанные к этой серии (FEFO-выдача материалов)."""
+    from app.schemas.inventory import RequisitionItem
+    from app.services.requisitions import build_requisition_item, list_requisitions_for_batch
+
+    get_batch(db, user, batch_id)
+    reqs = list_requisitions_for_batch(db, user, batch_id)
+    return {"requisitions": [RequisitionItem.model_validate(build_requisition_item(db, r)) for r in reqs]}
+
+
 @router.get("/{batch_id}/audit", response_model=ProductionBatchAuditResponse)
 def batch_audit_route(
     batch_id: UUID,

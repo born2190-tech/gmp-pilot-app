@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Ban, History, Package } from 'lucide-react'
+import { Ban, Boxes, History, Package } from 'lucide-react'
 import {
   assignProductionBatch,
   cancelProductionBatch,
@@ -23,6 +23,7 @@ import {
   createProduct,
   createProductionBatch,
   getProductionBatchAudit,
+  getProductionBatchRequisitions,
   issueProductionBmr,
   listProductionBatches,
   listProducts,
@@ -32,7 +33,24 @@ import {
   updateProductionBatchChecklist,
 } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
-import type { ProductionBatchAuditItem, ProductionBatchItem, ProductItem } from '../../types/inventory'
+import type { ProductionBatchAuditItem, ProductionBatchItem, ProductItem, RequisitionItem } from '../../types/inventory'
+
+const REQ_STATUS_LABEL: Record<string, string> = {
+  draft: 'Черновик',
+  submitted: 'Подано',
+  processing: 'В обработке',
+  partially_issued: 'Частично выдано',
+  issued: 'Выдано',
+  cancelled: 'Отменено',
+}
+
+const REQ_STATUS_STYLE: Record<string, string> = {
+  submitted: 'border-amber-200 bg-amber-50 text-amber-700',
+  processing: 'border-cyan-200 bg-cyan-50 text-cyan-700',
+  partially_issued: 'border-blue-200 bg-blue-50 text-blue-700',
+  issued: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  cancelled: 'border-rose-200 bg-rose-50 text-rose-700',
+}
 
 const ACTION_LABEL: Record<string, string> = {
   SAVE_DRAFT_BATCH: 'Сохранён черновик серии',
@@ -145,6 +163,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const [cancelPassword, setCancelPassword] = useState('')
   const [cancelReason, setCancelReason] = useState('')
   const [audit, setAudit] = useState<ProductionBatchAuditItem[]>([])
+  const [linkedReqs, setLinkedReqs] = useState<RequisitionItem[]>([])
 
   const selected = useMemo(
     () => batches.find((batch) => batch.id === selectedId) ?? batches[0] ?? null,
@@ -202,12 +221,15 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   useEffect(() => {
     let ignore = false
     async function loadAudit() {
-      if (!selectedAuditId) { setAudit([]); return }
+      if (!selectedAuditId) { setAudit([]); setLinkedReqs([]); return }
       try {
-        const resp = await getProductionBatchAudit(token, selectedAuditId)
-        if (!ignore) setAudit(resp.events)
+        const [auditResp, reqResp] = await Promise.all([
+          getProductionBatchAudit(token, selectedAuditId),
+          getProductionBatchRequisitions(token, selectedAuditId).catch(() => ({ requisitions: [] as RequisitionItem[] })),
+        ])
+        if (!ignore) { setAudit(auditResp.events); setLinkedReqs(reqResp.requisitions) }
       } catch {
-        if (!ignore) setAudit([])
+        if (!ignore) { setAudit([]); setLinkedReqs([]) }
       }
     }
     void loadAudit()
@@ -526,6 +548,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
         <BatchDetail
           batch={selected}
           audit={audit}
+          linkedReqs={linkedReqs}
           canCheckNumber={canCheckNumber}
           canExecute={canExecute}
           canIssueBmr={canIssueBmr}
@@ -592,6 +615,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
 function BatchDetail({
   batch,
   audit,
+  linkedReqs,
   canCheckNumber,
   canExecute,
   canIssueBmr,
@@ -625,6 +649,7 @@ function BatchDetail({
 }: {
   batch: ProductionBatchItem
   audit: ProductionBatchAuditItem[]
+  linkedReqs: RequisitionItem[]
   canCheckNumber: boolean
   canExecute: boolean
   canIssueBmr: boolean
@@ -864,6 +889,42 @@ function BatchDetail({
           </div>
         </div>
       )}
+
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <SectionTitle icon={Boxes} title="Связанные требования (FEFO-выдача)" sub="Материалы в производство по этой серии — СОП-415" />
+        {linkedReqs.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">К серии пока не привязано требований на выдачу материалов.</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {linkedReqs.map((req) => (
+              <div key={req.id} className="rounded-md border border-slate-200">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
+                  <span className="font-mono text-sm font-semibold text-slate-900">{req.requisition_no}</span>
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${REQ_STATUS_STYLE[req.status] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>{REQ_STATUS_LABEL[req.status] ?? req.status}</span>
+                </div>
+                <table className="w-full text-left text-sm">
+                  <thead className="text-[11px] uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-3 py-1.5">Материал</th>
+                      <th className="px-3 py-1.5 text-right">Запрошено</th>
+                      <th className="px-3 py-1.5 text-right">Выдано</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {req.lines.map((l) => (
+                      <tr key={l.id} className="border-t border-slate-100">
+                        <td className="px-3 py-1.5 text-slate-800">{l.material_name}</td>
+                        <td className="px-3 py-1.5 text-right font-mono text-slate-600">{l.requested_quantity} {l.unit}</td>
+                        <td className="px-3 py-1.5 text-right font-mono text-slate-900">{l.issued_quantity} {l.unit}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle icon={History} title="Журнал серии" sub="Кто и когда — audit trail по СОП-409 / GMP" />

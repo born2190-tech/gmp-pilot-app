@@ -12,6 +12,7 @@ from app.api.deps import CurrentUser
 from app.models.inventory import (
     InventoryMovement,
     Lot,
+    ProductionBatch,
     ProductionRequisition,
     RequisitionAllocationLine,
     RequisitionLine,
@@ -165,12 +166,25 @@ def create_requisition(db: Session, user: CurrentUser, payload: RequisitionCreat
     count = db.query(func.count(ProductionRequisition.id)).scalar() or 0
     req_no = f"REQ-{now_utc().strftime('%Y%m%d')}-{count + 1:04d}"
 
+    # Привязка к производственной серии (СОП-409): реквизиты берём из серии.
+    product_name = payload.product_name
+    product_series = payload.product_series
+    production_date = payload.production_date
+    batch_id = None
+    if payload.production_batch_id:
+        batch = _get_required(db, ProductionBatch, payload.production_batch_id, "Production batch")
+        batch_id = batch.id
+        product_name = batch.product_name
+        product_series = batch.batch_no
+        production_date = batch.production_date
+
     req = ProductionRequisition(
         requisition_no=req_no,
         status="submitted",
-        product_name=payload.product_name,
-        product_series=payload.product_series,
-        production_date=payload.production_date,
+        production_batch_id=batch_id,
+        product_name=product_name,
+        product_series=product_series,
+        production_date=production_date,
         production_order_no=payload.production_order_no,
         notes=payload.notes,
         submitted_by=user.id,
@@ -449,6 +463,16 @@ def get_requisition(db: Session, user: CurrentUser, requisition_id: uuid.UUID) -
     return _get_required(db, ProductionRequisition, requisition_id, "Requisition")
 
 
+def list_requisitions_for_batch(db: Session, user: CurrentUser, batch_id: uuid.UUID) -> list[ProductionRequisition]:
+    _require_any_permission(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION", "EXECUTE_BMR", "VIEW_WAREHOUSE", "VIEW_QA", "QA_DECISION"))
+    return (
+        db.query(ProductionRequisition)
+        .filter(ProductionRequisition.production_batch_id == batch_id)
+        .order_by(ProductionRequisition.created_at.desc())
+        .all()
+    )
+
+
 def build_requisition_item(db: Session, req: ProductionRequisition) -> dict:
     """Build full nested response dict with allocation details."""
     result_lines = []
@@ -491,10 +515,16 @@ def build_requisition_item(db: Session, req: ProductionRequisition) -> dict:
             "status": line.status,
             "allocation_lines": alloc_items,
         })
+    batch_no = None
+    if req.production_batch_id:
+        batch = db.get(ProductionBatch, req.production_batch_id)
+        batch_no = batch.batch_no if batch else None
     return {
         "id": req.id,
         "requisition_no": req.requisition_no,
         "status": req.status,
+        "production_batch_id": req.production_batch_id,
+        "batch_no": batch_no,
         "product_name": req.product_name,
         "product_series": req.product_series,
         "production_date": req.production_date,
