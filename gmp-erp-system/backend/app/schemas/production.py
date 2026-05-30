@@ -40,6 +40,10 @@ class ProductionBatchStartRequest(SignatureRequest):
     pass
 
 
+class ProductionBatchCompleteRequest(SignatureRequest):
+    pass
+
+
 class ProductionBatchPreview(BaseModel):
     batch_no: str
     serial_no: int
@@ -71,6 +75,7 @@ class ProductionBatchItem(BaseModel):
     qa_line_clearance: bool
     checklist_updated_at: datetime | None
     started_at: datetime | None
+    completed_at: datetime | None
     notes: str | None
     created_at: datetime
 

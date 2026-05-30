@@ -72,6 +72,7 @@ import type {
   IssueRequisitionRequest,
   ProductionBatchBmrIssueRequest,
   ProductionBatchChecklistUpdate,
+  ProductionBatchCompleteRequest,
   ProductionBatchCreate,
   ProductionBatchItem,
   ProductionBatchNumberCheckRequest,
@@ -1048,4 +1049,8 @@ export function updateProductionBatchChecklist(token: string, id: string, payloa
 
 export function startProductionBatch(token: string, id: string, payload: ProductionBatchStartRequest): Promise<ProductionBatchItem> {
   return request<ProductionBatchItem>(`/api/production/batches/${id}/start`, 'POST', { token, body: payload })
+}
+
+export function completeProductionBatch(token: string, id: string, payload: ProductionBatchCompleteRequest): Promise<ProductionBatchItem> {
+  return request<ProductionBatchItem>(`/api/production/batches/${id}/complete`, 'POST', { token, body: payload })
 }

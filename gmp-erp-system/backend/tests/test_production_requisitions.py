@@ -192,6 +192,19 @@ def test_production_batch_requires_bmr_and_start_checklist_before_start() -> Non
     assert blocked.status_code == 409
     assert "BMR must be issued" in blocked.text
 
+    checked = client.post(
+        f"/api/production/batches/{batch['id']}/check-number",
+        headers={"Authorization": f"Bearer {qa_token}"},
+        json={
+            "username": "head_qa",
+            "password": "qahead123",
+            "meaning": "Проверка корректности номера серии",
+            "reason": "test",
+        },
+    )
+    assert checked.status_code == 200, checked.text
+    assert checked.json()["status"] == "number_checked"
+
     issued = client.post(
         f"/api/production/batches/{batch['id']}/issue-bmr",
         headers={"Authorization": f"Bearer {qa_token}"},
@@ -231,6 +244,27 @@ def test_production_batch_requires_bmr_and_start_checklist_before_start() -> Non
     )
     assert started.status_code == 200, started.text
     assert started.json()["status"] == "in_production"
+
+    completed = client.post(
+        f"/api/production/batches/{batch['id']}/complete",
+        headers={"Authorization": f"Bearer {prod_token}"},
+        json={
+            "username": "shift_master",
+            "password": "prod123",
+            "meaning": "Завершение выпуска производственной серии",
+            "reason": "Серия произведена",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["status"] == "completed"
+    assert completed.json()["completed_at"]
+
+    listed = client.get(
+        "/api/production/batches",
+        headers={"Authorization": f"Bearer {prod_token}"},
+    )
+    assert listed.status_code == 200, listed.text
+    assert any(row["id"] == batch["id"] and row["status"] == "completed" for row in listed.json()["batches"])
 
 
 def test_production_user_can_edit_auto_allocation_before_issue() -> None:

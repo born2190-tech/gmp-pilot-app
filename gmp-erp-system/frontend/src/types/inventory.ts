@@ -1107,6 +1107,7 @@ export interface ProductionBatchItem {
   qa_line_clearance: boolean
   checklist_updated_at: string | null
   started_at: string | null
+  completed_at: string | null
   notes: string | null
   created_at: string
 }
@@ -1152,6 +1153,10 @@ export interface ProductionBatchNumberCheckRequest extends SignatureRequest {
 }
 
 export interface ProductionBatchStartRequest extends SignatureRequest {
+  reason?: string
+}
+
+export interface ProductionBatchCompleteRequest extends SignatureRequest {
   reason?: string
 }
 

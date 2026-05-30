@@ -16,6 +16,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import {
   checkProductionBatchNumber,
+  completeProductionBatch,
   createProductionBatch,
   issueProductionBmr,
   listProductionBatches,
@@ -47,6 +48,7 @@ const STATUS_STYLE: Record<string, string> = {
   bmr_issued: 'border-blue-200 bg-blue-50 text-blue-700',
   ready_to_start: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   in_production: 'border-slate-300 bg-slate-900 text-white',
+  completed: 'border-violet-200 bg-violet-50 text-violet-700',
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -55,9 +57,10 @@ const STATUS_LABEL: Record<string, string> = {
   bmr_issued: 'ЗПС выдана',
   ready_to_start: 'Готово к старту',
   in_production: 'В производстве',
+  completed: 'Завершена',
 }
 
-const STATUS_FILTERS = ['', 'assigned', 'number_checked', 'bmr_issued', 'ready_to_start', 'in_production']
+const STATUS_FILTERS = ['', 'assigned', 'number_checked', 'bmr_issued', 'ready_to_start', 'in_production', 'completed']
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -102,6 +105,8 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const [bmrNo, setBmrNo] = useState('')
   const [startPassword, setStartPassword] = useState('')
   const [startReason, setStartReason] = useState('Начало выпуска серии после проверки готовности')
+  const [completePassword, setCompletePassword] = useState('')
+  const [completeReason, setCompleteReason] = useState('Производство серии завершено')
 
   const selected = useMemo(
     () => batches.find((batch) => batch.id === selectedId) ?? batches[0] ?? null,
@@ -261,6 +266,19 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     }, 'Выпуск серии начат')
   }
 
+  async function handleComplete(batch: ProductionBatchItem) {
+    await runAction(async () => {
+      const updated = await completeProductionBatch(token, batch.id, {
+        username: user.username,
+        password: completePassword,
+        meaning: 'Завершение выпуска производственной серии',
+        reason: completeReason,
+      })
+      setSelectedId(updated.id)
+      setCompletePassword('')
+    }, 'Выпуск серии завершён')
+  }
+
   const createInvalid =
     !canCreate ||
     !/^\d{2}$/.test(form.product_code) ||
@@ -271,6 +289,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const kpiAssigned = batches.filter((batch) => batch.status === 'assigned').length
   const kpiReady = batches.filter((batch) => batch.status === 'ready_to_start').length
   const kpiActive = batches.filter((batch) => batch.status === 'in_production').length
+  const kpiCompleted = batches.filter((batch) => batch.status === 'completed').length
 
   return (
     <section className="space-y-5">
@@ -307,10 +326,11 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       {error && <Notice tone="error" text={error} />}
       {success && <Notice tone="success" text={success} />}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
         <KpiCard label="Ожидают проверки номера" value={kpiAssigned} />
         <KpiCard label="Готовы к старту" value={kpiReady} />
         <KpiCard label="В производстве" value={kpiActive} />
+        <KpiCard label="Завершены" value={kpiCompleted} />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -342,7 +362,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1120px] w-full text-left text-sm">
+          <table className="min-w-[1240px] w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
                 <th className="px-4 py-3">Номер серии</th>
@@ -353,12 +373,13 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
                 <th className="px-4 py-3">Статус</th>
                 <th className="px-4 py-3">ЗПС/BMR</th>
                 <th className="px-4 py-3">Начало</th>
+                <th className="px-4 py-3">Окончание</th>
               </tr>
             </thead>
             <tbody>
               {filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">
                     {isLoading ? 'Загрузка...' : 'Серии не найдены.'}
                   </td>
                 </tr>
@@ -385,6 +406,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
                     <td className="px-4 py-3"><StatusBadge status={batch.status} /></td>
                     <td className="px-4 py-3 font-mono text-slate-700">{batch.bmr_no || '-'}</td>
                     <td className="px-4 py-3 font-mono text-slate-700">{formatDate(batch.started_at)}</td>
+                    <td className="px-4 py-3 font-mono text-slate-700">{formatDate(batch.completed_at)}</td>
                   </tr>
                 ))
               )}
@@ -404,15 +426,20 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           bmrPassword={bmrPassword}
           startPassword={startPassword}
           startReason={startReason}
+          completePassword={completePassword}
+          completeReason={completeReason}
           onCheckPassword={setCheckPassword}
           onBmrNo={setBmrNo}
           onBmrPassword={setBmrPassword}
           onStartPassword={setStartPassword}
           onStartReason={setStartReason}
+          onCompletePassword={setCompletePassword}
+          onCompleteReason={setCompleteReason}
           onCheckNumber={() => void handleCheckNumber(selected)}
           onChecklist={(key, value) => void patchChecklist(selected, key, value)}
           onIssueBmr={() => void handleIssueBmr(selected)}
           onStart={() => void handleStart(selected)}
+          onComplete={() => void handleComplete(selected)}
           isLoading={isLoading}
         />
       ) : (
@@ -447,15 +474,20 @@ function BatchDetail({
   bmrPassword,
   startPassword,
   startReason,
+  completePassword,
+  completeReason,
   onCheckPassword,
   onBmrNo,
   onBmrPassword,
   onStartPassword,
   onStartReason,
+  onCompletePassword,
+  onCompleteReason,
   onCheckNumber,
   onChecklist,
   onIssueBmr,
   onStart,
+  onComplete,
   isLoading,
 }: {
   batch: ProductionBatchItem
@@ -467,19 +499,25 @@ function BatchDetail({
   bmrPassword: string
   startPassword: string
   startReason: string
+  completePassword: string
+  completeReason: string
   onCheckPassword: (value: string) => void
   onBmrNo: (value: string) => void
   onBmrPassword: (value: string) => void
   onStartPassword: (value: string) => void
   onStartReason: (value: string) => void
+  onCompletePassword: (value: string) => void
+  onCompleteReason: (value: string) => void
   onCheckNumber: () => void
   onChecklist: (key: CheckKey, value: boolean) => void
   onIssueBmr: () => void
   onStart: () => void
+  onComplete: () => void
   isLoading: boolean
 }) {
   const allChecks = CHECKS.every((check) => batch[check.key])
-  const canStart = canExecute && batch.bmr_issued_at && allChecks && batch.status !== 'in_production'
+  const canStart = canExecute && batch.bmr_issued_at && allChecks && !['in_production', 'completed'].includes(batch.status)
+  const canComplete = canExecute && batch.status === 'in_production' && !batch.completed_at
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -566,7 +604,7 @@ function BatchDetail({
                 <input
                   type="checkbox"
                   checked={batch[check.key]}
-                  disabled={!canExecute || batch.status === 'in_production'}
+                  disabled={!canExecute || batch.status === 'in_production' || batch.status === 'completed'}
                   onChange={(e) => onChecklist(check.key, e.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-slate-300"
                 />
@@ -602,6 +640,38 @@ function BatchDetail({
         {!canStart && batch.status !== 'in_production' && (
           <p className="mt-3 text-xs text-amber-700">
             Нужно: проверенный номер серии, выданная ЗПС/BMR и все пункты готовности.
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <SectionTitle icon={CheckCircle2} title="Завершить выпуск серии" sub="Серия остаётся в реестре как постоянная запись" />
+        {batch.completed_at ? (
+          <div className="mt-4 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
+            Производство завершено: {formatDate(batch.completed_at)}. Запись остаётся в журнале серий.
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+            <Field label="Пароль электронной подписи">
+              <input type="password" className="input" value={completePassword} onChange={(e) => onCompletePassword(e.target.value)} disabled={!canComplete} />
+            </Field>
+            <Field label="Основание">
+              <input className="input" value={completeReason} onChange={(e) => onCompleteReason(e.target.value)} disabled={!canComplete} />
+            </Field>
+            <button
+              type="button"
+              disabled={!canComplete || !completePassword || isLoading}
+              onClick={onComplete}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <CheckCircle2 size={16} />
+              Завершить
+            </button>
+          </div>
+        )}
+        {!canComplete && !batch.completed_at && (
+          <p className="mt-3 text-xs text-slate-500">
+            Завершить можно только серию со статусом “В производстве”.
           </p>
         )}
       </div>

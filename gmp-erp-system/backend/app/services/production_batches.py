@@ -12,6 +12,7 @@ from app.models.inventory import ProductionBatch
 from app.schemas.production import (
     ProductionBatchBmrIssueRequest,
     ProductionBatchChecklistUpdate,
+    ProductionBatchCompleteRequest,
     ProductionBatchCreate,
     ProductionBatchNumberCheckRequest,
     ProductionBatchPreviewRequest,
@@ -70,6 +71,8 @@ def _all_start_checks(batch: ProductionBatch) -> bool:
 
 
 def _update_status_from_gates(batch: ProductionBatch) -> None:
+    if batch.status == "completed":
+        return
     if batch.status == "in_production":
         return
     if batch.bmr_issued_at and _all_start_checks(batch):
@@ -198,6 +201,8 @@ def check_batch_number(db: Session, user: CurrentUser, batch_id, payload: Produc
 def update_checklist(db: Session, user: CurrentUser, batch_id, payload: ProductionBatchChecklistUpdate) -> ProductionBatch:
     _require_any_permission(user, ("MANAGE_PRODUCTION", "EXECUTE_BMR"))
     batch = get_batch(db, user, batch_id)
+    if batch.status == "completed":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Completed batch cannot be changed")
     if batch.status == "in_production":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batch already started")
     for field in ("room_ready", "equipment_ready", "scales_checked", "materials_ready", "qa_line_clearance"):
@@ -228,6 +233,10 @@ def update_checklist(db: Session, user: CurrentUser, batch_id, payload: Producti
 def start_batch(db: Session, user: CurrentUser, batch_id, payload: ProductionBatchStartRequest) -> ProductionBatch:
     _require_any_permission(user, ("MANAGE_PRODUCTION", "EXECUTE_BMR"))
     batch = get_batch(db, user, batch_id)
+    if batch.status == "completed":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Completed batch cannot be started again")
+    if batch.started_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batch already started")
     if not batch.bmr_issued_at:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR must be issued by QA before batch start")
     if not _all_start_checks(batch):
@@ -243,6 +252,32 @@ def start_batch(db: Session, user: CurrentUser, batch_id, payload: ProductionBat
         object_id=str(batch.id),
         action_type="START_PRODUCTION_BATCH",
         new_value={"batch_no": batch.batch_no, "status": batch.status},
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(batch)
+    return batch
+
+
+def complete_batch(db: Session, user: CurrentUser, batch_id, payload: ProductionBatchCompleteRequest) -> ProductionBatch:
+    _require_any_permission(user, ("MANAGE_PRODUCTION", "EXECUTE_BMR"))
+    batch = get_batch(db, user, batch_id)
+    if batch.completed_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batch already completed")
+    if batch.status != "in_production" or not batch.started_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only started production batch can be completed")
+    validate_signature(db, user, payload, "COMPLETE_PRODUCTION_BATCH", "production_batch", str(batch.id))
+    batch.status = "completed"
+    batch.completed_by = user.id
+    batch.completed_at = now_utc()
+    write_audit(
+        db,
+        user,
+        object_type="production_batch",
+        object_id=str(batch.id),
+        action_type="COMPLETE_PRODUCTION_BATCH",
+        old_value={"status": "in_production"},
+        new_value={"batch_no": batch.batch_no, "status": batch.status, "completed_at": batch.completed_at.isoformat()},
         reason=payload.reason,
     )
     db.commit()

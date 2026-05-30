@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.schemas.production import (
     ProductionBatchBmrIssueRequest,
     ProductionBatchChecklistUpdate,
+    ProductionBatchCompleteRequest,
     ProductionBatchCreate,
     ProductionBatchItem,
     ProductionBatchNumberCheckRequest,
@@ -20,6 +21,7 @@ from app.schemas.production import (
 from app.services.production_batches import (
     create_batch,
     check_batch_number,
+    complete_batch,
     get_batch,
     issue_bmr,
     list_batches,
@@ -108,3 +110,13 @@ def start_route(
     user: CurrentUser = Depends(get_current_user),
 ) -> ProductionBatchItem:
     return ProductionBatchItem.model_validate(start_batch(db, user, batch_id, payload))
+
+
+@router.post("/{batch_id}/complete", response_model=ProductionBatchItem)
+def complete_route(
+    batch_id: UUID,
+    payload: ProductionBatchCompleteRequest,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProductionBatchItem:
+    return ProductionBatchItem.model_validate(complete_batch(db, user, batch_id, payload))
