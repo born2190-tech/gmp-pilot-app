@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.schemas.production import (
+    ProductCreate,
+    ProductItem,
+    ProductUpdate,
+    ProductsResponse,
     ProductionBatchBmrIssueRequest,
     ProductionBatchChecklistUpdate,
     ProductionBatchCompleteRequest,
@@ -29,8 +33,41 @@ from app.services.production_batches import (
     start_batch,
     update_checklist,
 )
+from app.services.products import (
+    create_product,
+    list_products,
+    update_product,
+)
 
 router = APIRouter(prefix="/api/production/batches", tags=["production"])
+products_router = APIRouter(prefix="/api/production/products", tags=["production"])
+
+
+@products_router.get("", response_model=ProductsResponse)
+def list_products_route(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProductsResponse:
+    return ProductsResponse(products=[ProductItem.model_validate(p) for p in list_products(db, user)])
+
+
+@products_router.post("", response_model=ProductItem)
+def create_product_route(
+    payload: ProductCreate,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProductItem:
+    return ProductItem.model_validate(create_product(db, user, payload))
+
+
+@products_router.put("/{product_id}", response_model=ProductItem)
+def update_product_route(
+    product_id: UUID,
+    payload: ProductUpdate,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProductItem:
+    return ProductItem.model_validate(update_product(db, user, product_id, payload))
 
 
 @router.post("/preview", response_model=ProductionBatchPreview)

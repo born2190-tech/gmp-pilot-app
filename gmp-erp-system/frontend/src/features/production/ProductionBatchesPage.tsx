@@ -14,18 +14,22 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { Package } from 'lucide-react'
 import {
   checkProductionBatchNumber,
   completeProductionBatch,
+  createProduct,
   createProductionBatch,
   issueProductionBmr,
   listProductionBatches,
+  listProducts,
   previewProductionBatch,
   startProductionBatch,
+  updateProduct,
   updateProductionBatchChecklist,
 } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
-import type { ProductionBatchItem } from '../../types/inventory'
+import type { ProductionBatchItem, ProductItem } from '../../types/inventory'
 
 interface ProductionBatchesPageProps {
   token: string
@@ -73,16 +77,22 @@ function formatDate(value: string | null): string {
 
 function makeInitialForm() {
   return {
-    product_code: '12',
-    product_name: 'Тигралис 5 мг',
-    dosage_form: 'таблетки, покрытые оболочкой',
+    product_id: '',
+    product_code: '',
+    product_name: '',
+    dosage_form: '',
     batch_size: '10000',
     batch_size_unit: 'упак',
     production_date: todayIso(),
     shelf_life_months: '24',
     notes: '',
+    manual_number: false,
+    batch_no_override: '',
+    override_reason: '',
   }
 }
+
+type BatchForm = ReturnType<typeof makeInitialForm>
 
 export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProps) {
   const canCreate = user.permissions.includes('MANAGE_PRODUCTION')
@@ -91,8 +101,10 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const canExecute = user.permissions.includes('EXECUTE_BMR') || user.permissions.includes('MANAGE_PRODUCTION')
 
   const [batches, setBatches] = useState<ProductionBatchItem[]>([])
+  const [products, setProducts] = useState<ProductItem[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [showProducts, setShowProducts] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -128,20 +140,25 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   }, [batches, search, statusFilter])
 
   const lastForProduct = useMemo(() => {
+    if (!form.product_id) return null
     return [...batches]
-      .filter((batch) => batch.product_code === form.product_code)
+      .filter((batch) => batch.product_id === form.product_id)
       .sort((a, b) => b.serial_no - a.serial_no)[0] ?? null
-  }, [batches, form.product_code])
+  }, [batches, form.product_id])
 
   async function load() {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await listProductionBatches(token)
-      setBatches(response.batches)
+      const [batchResp, productResp] = await Promise.all([
+        listProductionBatches(token),
+        listProducts(token).catch(() => ({ products: [] as ProductItem[] })),
+      ])
+      setBatches(batchResp.batches)
+      setProducts(productResp.products)
       setSelectedId((current) => {
-        if (current && response.batches.some((batch) => batch.id === current)) return current
-        return response.batches[0]?.id ?? null
+        if (current && batchResp.batches.some((batch) => batch.id === current)) return current
+        return batchResp.batches[0]?.id ?? null
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить серии')
@@ -158,13 +175,13 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   useEffect(() => {
     let ignore = false
     async function runPreview() {
-      if (!showCreate || !/^\d{2}$/.test(form.product_code) || !form.production_date || Number(form.shelf_life_months) < 1) {
+      if (!showCreate || !form.product_id || !form.production_date || Number(form.shelf_life_months) < 1) {
         setPreview(null)
         return
       }
       try {
         const response = await previewProductionBatch(token, {
-          product_code: form.product_code,
+          product_id: form.product_id,
           production_date: form.production_date,
           shelf_life_months: Number(form.shelf_life_months),
         })
@@ -178,7 +195,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       ignore = true
       window.clearTimeout(timer)
     }
-  }, [form.product_code, form.production_date, form.shelf_life_months, showCreate, token])
+  }, [form.product_id, form.production_date, form.shelf_life_months, showCreate, token])
 
   async function runAction(fn: () => Promise<void>, done: string) {
     setError(null)
@@ -198,19 +215,28 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   async function handleCreate() {
     await runAction(async () => {
       const created = await createProductionBatch(token, {
-        product_code: form.product_code,
-        product_name: form.product_name,
+        product_id: form.product_id,
+        product_name: form.product_name || null,
         dosage_form: form.dosage_form || null,
         batch_size: Number(form.batch_size),
         batch_size_unit: form.batch_size_unit,
         production_date: form.production_date,
         shelf_life_months: Number(form.shelf_life_months),
         notes: form.notes || null,
+        batch_no_override: form.manual_number ? form.batch_no_override.trim() || null : null,
+        override_reason: form.manual_number ? form.override_reason.trim() || null : null,
       })
       setSelectedId(created.id)
       setShowCreate(false)
       setForm(makeInitialForm())
     }, 'Серия присвоена по СОП-409')
+  }
+
+  async function handleSaveProduct(input: Parameters<typeof createProduct>[1], id: string | null) {
+    await runAction(async () => {
+      if (id) await updateProduct(token, id, input)
+      else await createProduct(token, input)
+    }, id ? 'Продукт обновлён' : 'Продукт добавлен в справочник')
   }
 
   async function handleCheckNumber(batch: ProductionBatchItem) {
@@ -281,10 +307,11 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
 
   const createInvalid =
     !canCreate ||
-    !/^\d{2}$/.test(form.product_code) ||
+    !form.product_id ||
     !form.product_name.trim() ||
     Number(form.batch_size) <= 0 ||
-    Number(form.shelf_life_months) <= 0
+    Number(form.shelf_life_months) <= 0 ||
+    (form.manual_number && form.batch_no_override.trim().length > 0 && !form.override_reason.trim())
 
   const kpiAssigned = batches.filter((batch) => batch.status === 'assigned').length
   const kpiReady = batches.filter((batch) => batch.status === 'ready_to_start').length
@@ -313,7 +340,17 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           {canCreate && (
             <button
               type="button"
-              onClick={() => setShowCreate(true)}
+              onClick={() => setShowProducts(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Package size={16} />
+              Справочник ЛС
+            </button>
+          )}
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => { setForm(makeInitialForm()); setShowCreate(true) }}
               className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
             >
               <Plus size={16} />
@@ -451,6 +488,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       {showCreate && (
         <CreateBatchModal
           form={form}
+          products={products}
           preview={preview}
           lastForProduct={lastForProduct}
           createInvalid={createInvalid}
@@ -458,6 +496,15 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           onChange={setForm}
           onClose={() => setShowCreate(false)}
           onCreate={() => void handleCreate()}
+        />
+      )}
+
+      {showProducts && (
+        <ProductsManagerModal
+          products={products}
+          isLoading={isLoading}
+          onSave={(input, id) => void handleSaveProduct(input, id)}
+          onClose={() => setShowProducts(false)}
         />
       )}
     </section>
@@ -681,6 +728,7 @@ function BatchDetail({
 
 function CreateBatchModal({
   form,
+  products,
   preview,
   lastForProduct,
   createInvalid,
@@ -689,22 +737,41 @@ function CreateBatchModal({
   onClose,
   onCreate,
 }: {
-  form: ReturnType<typeof makeInitialForm>
+  form: BatchForm
+  products: ProductItem[]
   preview: { batch_no: string; expiry_date: string; serial_no: number } | null
   lastForProduct: ProductionBatchItem | null
   createInvalid: boolean
   isLoading: boolean
-  onChange: (form: ReturnType<typeof makeInitialForm>) => void
+  onChange: (form: BatchForm) => void
   onClose: () => void
   onCreate: () => void
 }) {
+  const activeProducts = products.filter((p) => p.is_active || p.id === form.product_id)
+
+  function selectProduct(productId: string) {
+    const product = products.find((p) => p.id === productId)
+    if (!product) {
+      onChange({ ...form, product_id: '', product_code: '', product_name: '', dosage_form: '' })
+      return
+    }
+    onChange({
+      ...form,
+      product_id: product.id,
+      product_code: product.code,
+      product_name: product.name,
+      dosage_form: product.dosage_form ?? '',
+      shelf_life_months: String(product.default_shelf_life_months),
+    })
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
       <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-slate-200 bg-white shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <h2 className="text-[18px] font-semibold text-slate-950">Новая производственная серия</h2>
-            <p className="text-xs text-slate-500">Система предлагает следующий номер по выбранному коду ЛС.</p>
+            <p className="text-xs text-slate-500">Выберите ЛС из справочника — код и следующий номер подставятся автоматически.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
             <X size={18} />
@@ -712,14 +779,27 @@ function CreateBatchModal({
         </div>
 
         <div className="space-y-4 p-5">
-          <div className="grid grid-cols-[110px_1fr] gap-3">
-            <Field label="Код продукта">
-              <input className="input font-mono" maxLength={2} value={form.product_code} onChange={(e) => onChange({ ...form, product_code: e.target.value.replace(/\D/g, '').slice(0, 2) })} />
+          {products.length === 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              В справочнике пока нет ЛС. Сначала добавьте продукт через «Справочник ЛС».
+            </div>
+          )}
+          <div className="grid grid-cols-[1fr_120px] gap-3">
+            <Field label="Лекарственное средство (ЛС)">
+              <select className="input" value={form.product_id} onChange={(e) => selectProduct(e.target.value)}>
+                <option value="">— выберите ЛС —</option>
+                {activeProducts.map((p) => (
+                  <option key={p.id} value={p.id}>{p.code} · {p.name}</option>
+                ))}
+              </select>
             </Field>
-            <Field label="Наименование ЛС">
-              <input className="input" value={form.product_name} onChange={(e) => onChange({ ...form, product_name: e.target.value })} />
+            <Field label="Код продукта">
+              <input className="input font-mono bg-slate-50" value={form.product_code} readOnly />
             </Field>
           </div>
+          <Field label="Наименование ЛС (можно править)">
+            <input className="input" value={form.product_name} onChange={(e) => onChange({ ...form, product_name: e.target.value })} />
+          </Field>
           <Field label="Лекарственная форма / дозировка">
             <input className="input" value={form.dosage_form} onChange={(e) => onChange({ ...form, dosage_form: e.target.value })} />
           </Field>
@@ -748,7 +828,7 @@ function CreateBatchModal({
               <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Последняя серия по этому ЛС</div>
               <div className="mt-1 font-mono text-lg font-semibold text-slate-950">{lastForProduct?.batch_no ?? '-'}</div>
               <div className="mt-1 text-xs text-slate-500">
-                {lastForProduct ? `${lastForProduct.product_name} · № ${String(lastForProduct.serial_no).padStart(3, '0')}` : 'В базе пока нет серий по этому коду'}
+                {lastForProduct ? `${lastForProduct.product_name} · № ${String(lastForProduct.serial_no).padStart(3, '0')}` : 'В базе пока нет серий по этому ЛС'}
               </div>
             </div>
             <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-3">
@@ -757,10 +837,32 @@ function CreateBatchModal({
               <div className="mt-1 text-xs text-blue-700">Годен до: {formatDate(preview?.expiry_date ?? null)}</div>
             </div>
           </div>
+
+          <div className="rounded-md border border-slate-200 px-3 py-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-800">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={form.manual_number}
+                onChange={(e) => onChange({ ...form, manual_number: e.target.checked, batch_no_override: e.target.checked ? (preview?.batch_no ?? '') : '', override_reason: '' })}
+              />
+              Править номер серии вручную (СОП-409 — с указанием причины)
+            </label>
+            {form.manual_number && (
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <Field label="Номер серии (вручную)">
+                  <input className="input font-mono" value={form.batch_no_override} onChange={(e) => onChange({ ...form, batch_no_override: e.target.value })} />
+                </Field>
+                <Field label="Причина корректировки (обязательно)">
+                  <input className="input" value={form.override_reason} onChange={(e) => onChange({ ...form, override_reason: e.target.value })} placeholder="Напр.: коррекция по журналу регистрации серий" />
+                </Field>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4">
-          <p className="text-xs text-slate-500">Свободная ручная правка номера не даётся: номер берётся из журнала серий.</p>
+          <p className="text-xs text-slate-500">Номер по умолчанию берётся из журнала серий (СОП-409). Ручная правка — только с причиной и фиксируется в аудите.</p>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
               Отмена
@@ -774,6 +876,135 @@ function CreateBatchModal({
               <ShieldCheck size={16} />
               Присвоить серию
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProductsManagerModal({
+  products,
+  isLoading,
+  onSave,
+  onClose,
+}: {
+  products: ProductItem[]
+  isLoading: boolean
+  onSave: (input: { code?: string; name: string; dosage_form: string | null; default_shelf_life_months: number; batch_format: string | null; is_active: boolean; notes: string | null }, id: string | null) => void
+  onClose: () => void
+}) {
+  const [editId, setEditId] = useState<string | null>(null)
+  const [code, setCode] = useState('')
+  const [name, setName] = useState('')
+  const [dosageForm, setDosageForm] = useState('')
+  const [shelfLife, setShelfLife] = useState('24')
+  const [isActive, setIsActive] = useState(true)
+
+  function reset() {
+    setEditId(null); setCode(''); setName(''); setDosageForm(''); setShelfLife('24'); setIsActive(true)
+  }
+  function startEdit(p: ProductItem) {
+    setEditId(p.id); setCode(p.code); setName(p.name); setDosageForm(p.dosage_form ?? '')
+    setShelfLife(String(p.default_shelf_life_months)); setIsActive(p.is_active)
+  }
+  function submit() {
+    onSave({
+      code: editId ? undefined : code.trim(),
+      name: name.trim(),
+      dosage_form: dosageForm.trim() || null,
+      default_shelf_life_months: Number(shelfLife) || 24,
+      batch_format: null,
+      is_active: isActive,
+      notes: null,
+    }, editId)
+    reset()
+  }
+  const invalid = (!editId && !/^\d{2,8}$/.test(code.trim())) || !name.trim()
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+          <div>
+            <h2 className="text-[18px] font-semibold text-slate-950">Справочник продуктов (ЛС)</h2>
+            <p className="text-xs text-slate-500">Код по СОП-409 (2 знака). Нумерация серий ведётся отдельно по каждому ЛС.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-[110px_1fr_140px]">
+            <Field label="Код">
+              <input className="input font-mono disabled:bg-slate-100" maxLength={8} value={code} disabled={!!editId} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} />
+            </Field>
+            <Field label="Наименование ЛС">
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+            </Field>
+            <Field label="Срок хр., мес.">
+              <input type="number" min={1} className="input" value={shelfLife} onChange={(e) => setShelfLife(e.target.value)} />
+            </Field>
+            <Field label="Лекарственная форма / дозировка">
+              <input className="input" value={dosageForm} onChange={(e) => setDosageForm(e.target.value)} />
+            </Field>
+            <Field label="Активен">
+              <label className="flex h-10 items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+                в работе
+              </label>
+            </Field>
+            <div className="flex items-end gap-2">
+              {editId && (
+                <button type="button" onClick={reset} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  Сброс
+                </button>
+              )}
+              <button type="button" disabled={invalid || isLoading} onClick={submit} className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                <Plus size={16} />
+                {editId ? 'Сохранить' : 'Добавить'}
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-md border border-slate-200">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-[11px] uppercase tracking-[0.08em] text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Код</th>
+                  <th className="px-3 py-2">Наименование</th>
+                  <th className="px-3 py-2">Форма</th>
+                  <th className="px-3 py-2">Срок хр.</th>
+                  <th className="px-3 py-2">Статус</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {products.length === 0 ? (
+                  <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">Справочник пуст.</td></tr>
+                ) : (
+                  products.map((p) => (
+                    <tr key={p.id} className="border-t border-slate-100">
+                      <td className="px-3 py-2 font-mono font-semibold text-slate-900">{p.code}</td>
+                      <td className="px-3 py-2 text-slate-800">{p.name}</td>
+                      <td className="px-3 py-2 text-slate-600">{p.dosage_form || '-'}</td>
+                      <td className="px-3 py-2 font-mono text-slate-600">{p.default_shelf_life_months} мес.</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${p.is_active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-500'}`}>
+                          {p.is_active ? 'Активен' : 'Архив'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button type="button" onClick={() => startEdit(p)} className="rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                          Изменить
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

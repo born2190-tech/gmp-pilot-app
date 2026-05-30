@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
-from app.models.inventory import ProductionBatch
+from app.models.inventory import Product, ProductionBatch
 from app.schemas.production import (
     ProductionBatchBmrIssueRequest,
     ProductionBatchChecklistUpdate,
@@ -42,11 +42,11 @@ def _add_months_to_month_end(value: date, months: int) -> date:
     return date(year, month, day)
 
 
-def _next_serial(db: Session, product_code: str, production_date: date) -> int:
+def _next_serial(db: Session, product_id, production_date: date) -> int:
     existing = (
         db.query(func.max(ProductionBatch.serial_no))
         .filter(
-            ProductionBatch.product_code == product_code,
+            ProductionBatch.product_id == product_id,
             func.extract("year", ProductionBatch.production_date) == production_date.year,
         )
         .scalar()
@@ -56,6 +56,13 @@ def _next_serial(db: Session, product_code: str, production_date: date) -> int:
 
 def _format_batch_no(product_code: str, production_date: date, serial_no: int) -> str:
     return f"{product_code}N{production_date:%y%m}{serial_no:03d}"
+
+
+def _get_product(db: Session, product_id) -> Product:
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Продукт (ЛС) не найден")
+    return product
 
 
 def _all_start_checks(batch: ProductionBatch) -> bool:
@@ -87,9 +94,10 @@ def _update_status_from_gates(batch: ProductionBatch) -> None:
 
 def preview_batch_number(db: Session, user: CurrentUser, payload: ProductionBatchPreviewRequest) -> dict:
     _require_any_permission(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION", "EXECUTE_BMR"))
-    serial = _next_serial(db, payload.product_code, payload.production_date)
+    product = _get_product(db, payload.product_id)
+    serial = _next_serial(db, product.id, payload.production_date)
     return {
-        "batch_no": _format_batch_no(payload.product_code, payload.production_date, serial),
+        "batch_no": _format_batch_no(product.code, payload.production_date, serial),
         "serial_no": serial,
         "expiry_date": _add_months_to_month_end(payload.production_date, payload.shelf_life_months),
     }
@@ -97,18 +105,36 @@ def preview_batch_number(db: Session, user: CurrentUser, payload: ProductionBatc
 
 def create_batch(db: Session, user: CurrentUser, payload: ProductionBatchCreate) -> ProductionBatch:
     _require_any_permission(user, ("MANAGE_PRODUCTION",))
-    preview = preview_batch_number(db, user, payload)
+    product = _get_product(db, payload.product_id)
+    serial = _next_serial(db, product.id, payload.production_date)
+    auto_batch_no = _format_batch_no(product.code, payload.production_date, serial)
+
+    override = (payload.batch_no_override or "").strip()
+    if override and override != auto_batch_no:
+        # Ручная корректировка номера разрешена только с причиной (СОП-409).
+        if not (payload.override_reason or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ручная корректировка номера серии требует указания причины (СОП-409)",
+            )
+        if db.query(ProductionBatch).filter(ProductionBatch.batch_no == override).first():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Серия {override} уже существует")
+        batch_no = override
+    else:
+        batch_no = auto_batch_no
+
     batch = ProductionBatch(
-        batch_no=preview["batch_no"],
+        batch_no=batch_no,
         status="assigned",
-        product_code=payload.product_code,
-        serial_no=preview["serial_no"],
-        product_name=payload.product_name.strip(),
-        dosage_form=(payload.dosage_form or "").strip() or None,
+        product_id=product.id,
+        product_code=product.code,
+        serial_no=serial,
+        product_name=(payload.product_name or product.name).strip(),
+        dosage_form=((payload.dosage_form or product.dosage_form) or "").strip() or None,
         batch_size=payload.batch_size,
         batch_size_unit=payload.batch_size_unit.strip(),
         production_date=payload.production_date,
-        expiry_date=preview["expiry_date"],
+        expiry_date=_add_months_to_month_end(payload.production_date, payload.shelf_life_months),
         shelf_life_months=payload.shelf_life_months,
         created_by=user.id,
         notes=payload.notes,
@@ -123,10 +149,13 @@ def create_batch(db: Session, user: CurrentUser, payload: ProductionBatchCreate)
         action_type="ASSIGN_BATCH_NO",
         new_value={
             "batch_no": batch.batch_no,
+            "auto_batch_no": auto_batch_no,
+            "manual_override": bool(override and override != auto_batch_no),
             "sop": "SOP-409",
             "production_date": str(batch.production_date),
             "expiry_date": str(batch.expiry_date),
         },
+        reason=(payload.override_reason or None) if (override and override != auto_batch_no) else None,
     )
     db.commit()
     db.refresh(batch)

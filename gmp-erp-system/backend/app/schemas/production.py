@@ -6,18 +6,63 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.inventory import SignatureRequest
 
 
+# --- Products (ЛС) reference -------------------------------------------------
+class ProductCreate(BaseModel):
+    code: str = Field(min_length=2, max_length=8, pattern=r"^\d{2,8}$")
+    name: str = Field(min_length=1, max_length=255)
+    dosage_form: str | None = Field(default=None, max_length=128)
+    default_shelf_life_months: int = Field(default=24, ge=1, le=120)
+    batch_format: str | None = Field(default=None, max_length=64)
+    is_active: bool = True
+    notes: str | None = None
+
+
+class ProductUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    dosage_form: str | None = Field(default=None, max_length=128)
+    default_shelf_life_months: int = Field(default=24, ge=1, le=120)
+    batch_format: str | None = Field(default=None, max_length=64)
+    is_active: bool = True
+    notes: str | None = None
+
+
+class ProductItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    code: str
+    name: str
+    dosage_form: str | None
+    default_shelf_life_months: int
+    batch_format: str | None
+    is_active: bool
+    notes: str | None
+
+
+class ProductsResponse(BaseModel):
+    products: list[ProductItem]
+
+
+# --- Production batches -------------------------------------------------------
 class ProductionBatchPreviewRequest(BaseModel):
-    product_code: str = Field(min_length=2, max_length=2, pattern=r"^\d{2}$")
+    product_id: UUID
     production_date: date
     shelf_life_months: int = Field(ge=1, le=120)
 
 
-class ProductionBatchCreate(ProductionBatchPreviewRequest):
-    product_name: str = Field(min_length=1, max_length=255)
+class ProductionBatchCreate(BaseModel):
+    product_id: UUID
+    production_date: date
+    shelf_life_months: int = Field(ge=1, le=120)
+    # Снимок реквизитов (по умолчанию из справочника, можно править вручную).
+    product_name: str | None = Field(default=None, max_length=255)
     dosage_form: str | None = Field(default=None, max_length=128)
     batch_size: float = Field(gt=0)
     batch_size_unit: str = Field(min_length=1, max_length=32)
     notes: str | None = None
+    # Контролируемое ручное переопределение номера (СОП-409): требует причину.
+    batch_no_override: str | None = Field(default=None, max_length=32)
+    override_reason: str | None = Field(default=None, max_length=500)
 
 
 class ProductionBatchChecklistUpdate(BaseModel):
@@ -56,6 +101,7 @@ class ProductionBatchItem(BaseModel):
     id: UUID
     batch_no: str
     status: str
+    product_id: UUID | None
     product_code: str
     serial_no: int
     product_name: str

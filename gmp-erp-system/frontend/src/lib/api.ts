@@ -79,6 +79,9 @@ import type {
   ProductionBatchPreview,
   ProductionBatchPreviewRequest,
   ProductionBatchesResponse,
+  ProductItem,
+  ProductInput,
+  ProductsResponse,
   ProductionBatchStartRequest,
   SamplingActCreate,
   SamplingActItem,
@@ -1022,6 +1025,18 @@ export function issueRequisition(token: string, id: string, payload: IssueRequis
 }
 
 // ─── Production Batches ─────────────────────────────────────────────────────
+
+export function listProducts(token: string): Promise<ProductsResponse> {
+  return request<ProductsResponse>('/api/production/products', 'GET', { token })
+}
+
+export function createProduct(token: string, payload: ProductInput): Promise<ProductItem> {
+  return request<ProductItem>('/api/production/products', 'POST', { token, body: payload })
+}
+
+export function updateProduct(token: string, id: string, payload: ProductInput): Promise<ProductItem> {
+  return request<ProductItem>(`/api/production/products/${id}`, 'PUT', { token, body: payload })
+}
 
 export function previewProductionBatch(token: string, payload: ProductionBatchPreviewRequest): Promise<ProductionBatchPreview> {
   return request<ProductionBatchPreview>('/api/production/batches/preview', 'POST', { token, body: payload })

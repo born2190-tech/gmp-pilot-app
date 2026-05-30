@@ -1084,10 +1084,36 @@ export interface IssueRequisitionRequest extends SignatureRequest {
 
 // ─── Production batch start / BMR issue ───────────────────────────────────
 
+export interface ProductItem {
+  id: string
+  code: string
+  name: string
+  dosage_form: string | null
+  default_shelf_life_months: number
+  batch_format: string | null
+  is_active: boolean
+  notes: string | null
+}
+
+export interface ProductsResponse {
+  products: ProductItem[]
+}
+
+export interface ProductInput {
+  code?: string
+  name: string
+  dosage_form?: string | null
+  default_shelf_life_months: number
+  batch_format?: string | null
+  is_active: boolean
+  notes?: string | null
+}
+
 export interface ProductionBatchItem {
   id: string
   batch_no: string
   status: string
+  product_id: string | null
   product_code: string
   serial_no: number
   product_name: string
@@ -1117,7 +1143,7 @@ export interface ProductionBatchesResponse {
 }
 
 export interface ProductionBatchPreviewRequest {
-  product_code: string
+  product_id: string
   production_date: string
   shelf_life_months: number
 }
@@ -1128,12 +1154,17 @@ export interface ProductionBatchPreview {
   expiry_date: string
 }
 
-export interface ProductionBatchCreate extends ProductionBatchPreviewRequest {
-  product_name: string
+export interface ProductionBatchCreate {
+  product_id: string
+  production_date: string
+  shelf_life_months: number
+  product_name?: string | null
   dosage_form?: string | null
   batch_size: number
   batch_size_unit: string
   notes?: string | null
+  batch_no_override?: string | null
+  override_reason?: string | null
 }
 
 export interface ProductionBatchChecklistUpdate {

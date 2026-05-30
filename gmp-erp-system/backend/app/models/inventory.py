@@ -430,6 +430,23 @@ class RequisitionAllocationLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 # Production batch start gate (СОП-409 + BMR readiness)
 # ---------------------------------------------------------------------------
 
+class Product(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Справочник продуктов (ЛС) для производства — источник кода и формата
+    номера серии по СОП-409. Код (2 знака) уникален; серия нумеруется отдельно
+    по каждому продукту."""
+
+    __tablename__ = "products"
+
+    code: Mapped[str] = mapped_column(String(8), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    dosage_form: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    default_shelf_life_months: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    # Шаблон номера серии (на будущее); пусто → формат по СОП-409.
+    batch_format: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class ProductionBatch(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Controlled start of a manufacturing batch/series before material issue."""
 
@@ -437,6 +454,7 @@ class ProductionBatch(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     batch_no: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="assigned")
+    product_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=True)
     product_code: Mapped[str] = mapped_column(String(8), nullable=False)
     serial_no: Mapped[int] = mapped_column(Integer, nullable=False)
     product_name: Mapped[str] = mapped_column(String(255), nullable=False)
