@@ -1127,6 +1127,7 @@ export interface ProductionBatchItem {
   expiry_date: string
   shelf_life_months: number
   bmr_no: string | null
+  bmr_requested_at: string | null
   number_checked_at: string | null
   bmr_issued_at: string | null
   room_ready: boolean

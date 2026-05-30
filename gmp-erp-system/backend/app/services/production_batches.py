@@ -14,7 +14,6 @@ from app.schemas.production import (
     ProductionBatchChecklistUpdate,
     ProductionBatchCompleteRequest,
     ProductionBatchCreate,
-    ProductionBatchNumberCheckRequest,
     ProductionBatchPreviewRequest,
     ProductionBatchStartRequest,
 )
@@ -77,16 +76,14 @@ def _all_start_checks(batch: ProductionBatch) -> bool:
 
 
 def _update_status_from_gates(batch: ProductionBatch) -> None:
-    if batch.status == "completed":
-        return
-    if batch.status == "in_production":
+    if batch.status in ("completed", "in_production", "draft", "cancelled"):
         return
     if batch.bmr_issued_at and _all_start_checks(batch):
         batch.status = "ready_to_start"
     elif batch.bmr_issued_at:
         batch.status = "bmr_issued"
-    elif batch.number_checked_at:
-        batch.status = "number_checked"
+    elif batch.bmr_requested_at:
+        batch.status = "bmr_requested"
     else:
         batch.status = "assigned"
 
@@ -251,13 +248,43 @@ def get_batch(db: Session, user: CurrentUser, batch_id) -> ProductionBatch:
     return batch
 
 
+def request_bmr(db: Session, user: CurrentUser, batch_id) -> ProductionBatch:
+    """Производство запрашивает у ДОК подготовку/выдачу ЗПС/BMR (СОП-11 п.5.1.3)."""
+    _require_any_permission(user, ("MANAGE_PRODUCTION",))
+    batch = get_batch(db, user, batch_id)
+    if batch.status not in ("assigned", "bmr_requested"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Запросить ЗПС можно только для присвоенной серии (после регистрации номера)",
+        )
+    if batch.bmr_issued_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="ЗПС уже выдана")
+    if batch.bmr_requested_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="ЗПС уже запрошена")
+    batch.bmr_requested_by = user.id
+    batch.bmr_requested_at = now_utc()
+    _update_status_from_gates(batch)
+    write_audit(
+        db, user, object_type="production_batch", object_id=str(batch.id),
+        action_type="REQUEST_BMR",
+        new_value={"batch_no": batch.batch_no, "status": batch.status, "sop": "SOP-11"},
+    )
+    db.commit()
+    db.refresh(batch)
+    return batch
+
+
 def issue_bmr(db: Session, user: CurrentUser, batch_id, payload: ProductionBatchBmrIssueRequest) -> ProductionBatch:
     _require_any_permission(user, ("QA_DECISION",))
     batch = get_batch(db, user, batch_id)
     if batch.bmr_issued_at:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR already issued")
-    if not batch.number_checked_at:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batch number must be checked before BMR issue")
+    if not batch.bmr_requested_at:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ЗПС не запрошена производством — выдача невозможна",
+        )
+    # ДОК при выдаче подтверждает корректность номера серии и реквизитов (СОП-11 п.5.1.4-5.1.5).
     validate_signature(db, user, payload, "ISSUE_BMR", "production_batch", str(batch.id))
     batch.bmr_no = (payload.bmr_no or f"BMR-{batch.batch_no}").strip()
     batch.bmr_issued_by = user.id
@@ -270,29 +297,6 @@ def issue_bmr(db: Session, user: CurrentUser, batch_id, payload: ProductionBatch
         object_id=str(batch.id),
         action_type="ISSUE_BMR",
         new_value={"bmr_no": batch.bmr_no, "status": batch.status, "sop": "SOP-436"},
-        reason=payload.reason,
-    )
-    db.commit()
-    db.refresh(batch)
-    return batch
-
-
-def check_batch_number(db: Session, user: CurrentUser, batch_id, payload: ProductionBatchNumberCheckRequest) -> ProductionBatch:
-    _require_any_permission(user, ("ENTER_QC_RESULT", "QA_DECISION"))
-    batch = get_batch(db, user, batch_id)
-    if batch.number_checked_at:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batch number already checked")
-    validate_signature(db, user, payload, "CHECK_PRODUCTION_BATCH_NUMBER", "production_batch", str(batch.id))
-    batch.number_checked_by = user.id
-    batch.number_checked_at = now_utc()
-    _update_status_from_gates(batch)
-    write_audit(
-        db,
-        user,
-        object_type="production_batch",
-        object_id=str(batch.id),
-        action_type="CHECK_PRODUCTION_BATCH_NUMBER",
-        new_value={"batch_no": batch.batch_no, "status": batch.status, "sop": "SOP-409"},
         reason=payload.reason,
     )
     db.commit()

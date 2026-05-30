@@ -18,7 +18,6 @@ import { Ban, Boxes, History, Package } from 'lucide-react'
 import {
   assignProductionBatch,
   cancelProductionBatch,
-  checkProductionBatchNumber,
   completeProductionBatch,
   createProduct,
   createProductionBatch,
@@ -28,6 +27,7 @@ import {
   listProductionBatches,
   listProducts,
   previewProductionBatch,
+  requestProductionBmr,
   startProductionBatch,
   updateProduct,
   updateProductionBatchChecklist,
@@ -55,8 +55,8 @@ const REQ_STATUS_STYLE: Record<string, string> = {
 const ACTION_LABEL: Record<string, string> = {
   SAVE_DRAFT_BATCH: 'Сохранён черновик серии',
   ASSIGN_BATCH_NO: 'Присвоен номер серии (СОП-409)',
-  CHECK_PRODUCTION_BATCH_NUMBER: 'Номер серии проверен (ДКК/ДОК)',
-  ISSUE_BMR: 'Выдана ЗПС/BMR',
+  REQUEST_BMR: 'Запрошена ЗПС/BMR у ДОК',
+  ISSUE_BMR: 'Выдана ЗПС/BMR (ДОК)',
   UPDATE_START_CHECKLIST: 'Обновлён чек-лист готовности',
   START_PRODUCTION_BATCH: 'Начат выпуск серии',
   COMPLETE_PRODUCTION_BATCH: 'Завершён выпуск серии',
@@ -81,7 +81,7 @@ const CHECKS: { key: CheckKey; label: string; sop: string }[] = [
 const STATUS_STYLE: Record<string, string> = {
   draft: 'border-slate-200 bg-slate-100 text-slate-600',
   assigned: 'border-amber-200 bg-amber-50 text-amber-700',
-  number_checked: 'border-cyan-200 bg-cyan-50 text-cyan-700',
+  bmr_requested: 'border-cyan-200 bg-cyan-50 text-cyan-700',
   bmr_issued: 'border-blue-200 bg-blue-50 text-blue-700',
   ready_to_start: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   in_production: 'border-slate-300 bg-slate-900 text-white',
@@ -92,7 +92,7 @@ const STATUS_STYLE: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Черновик',
   assigned: 'Серия присвоена',
-  number_checked: 'Номер проверен',
+  bmr_requested: 'ЗПС запрошена',
   bmr_issued: 'ЗПС выдана',
   ready_to_start: 'Готово к старту',
   in_production: 'В производстве',
@@ -100,7 +100,7 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: 'Отменена',
 }
 
-const STATUS_FILTERS = ['', 'draft', 'assigned', 'number_checked', 'bmr_issued', 'ready_to_start', 'in_production', 'completed', 'cancelled']
+const STATUS_FILTERS = ['', 'draft', 'assigned', 'bmr_requested', 'bmr_issued', 'ready_to_start', 'in_production', 'completed', 'cancelled']
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -137,7 +137,7 @@ type BatchForm = ReturnType<typeof makeInitialForm>
 
 export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProps) {
   const canCreate = user.permissions.includes('MANAGE_PRODUCTION')
-  const canCheckNumber = user.permissions.includes('ENTER_QC_RESULT') || user.permissions.includes('QA_DECISION') || user.role === 'SYS_ADMIN'
+  const canRequestBmr = user.permissions.includes('MANAGE_PRODUCTION') || user.role === 'SYS_ADMIN'
   const canIssueBmr = user.permissions.includes('QA_DECISION') || user.role === 'SYS_ADMIN'
   const canExecute = user.permissions.includes('EXECUTE_BMR') || user.permissions.includes('MANAGE_PRODUCTION')
   // Журнал серии (audit trail) — у админа и ДОК; проверка номера/выдача ЗПС —
@@ -156,7 +156,6 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const [isLoading, setIsLoading] = useState(false)
   const [form, setForm] = useState(makeInitialForm)
   const [preview, setPreview] = useState<{ batch_no: string; expiry_date: string; serial_no: number } | null>(null)
-  const [checkPassword, setCheckPassword] = useState('')
   const [bmrPassword, setBmrPassword] = useState('')
   const [bmrNo, setBmrNo] = useState('')
   const [startPassword, setStartPassword] = useState('')
@@ -329,17 +328,11 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     }, id ? 'Продукт обновлён' : 'Продукт добавлен в справочник')
   }
 
-  async function handleCheckNumber(batch: ProductionBatchItem) {
+  async function handleRequestBmr(batch: ProductionBatchItem) {
     await runAction(async () => {
-      const updated = await checkProductionBatchNumber(token, batch.id, {
-        username: user.username,
-        password: checkPassword,
-        meaning: 'Проверка корректности номера серии по СОП-409',
-        reason: 'Номер серии проверен перед выдачей ЗПС/BMR',
-      })
+      const updated = await requestProductionBmr(token, batch.id)
       setSelectedId(updated.id)
-      setCheckPassword('')
-    }, 'Номер серии проверен')
+    }, 'ЗПС/BMR запрошена у ДОК')
   }
 
   async function patchChecklist(batch: ProductionBatchItem, key: CheckKey, value: boolean) {
@@ -405,7 +398,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
 
   const kpiDraft = batches.filter((batch) => batch.status === 'draft').length
   const kpiAssigned = batches.filter((batch) => batch.status === 'assigned').length
-  const kpiNumberChecked = batches.filter((batch) => batch.status === 'number_checked').length
+  const kpiBmrRequested = batches.filter((batch) => batch.status === 'bmr_requested').length
   const kpiActive = batches.filter((batch) => batch.status === 'in_production').length
   const kpiCompleted = batches.filter((batch) => batch.status === 'completed').length
   const kpiCancelled = batches.filter((batch) => batch.status === 'cancelled').length
@@ -458,8 +451,8 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiCard label="Черновики" value={kpiDraft} active={statusFilter === 'draft'} onClick={() => toggleFilter('draft')} />
-        <KpiCard label="Ждут проверки номера (ДКК)" value={kpiAssigned} active={statusFilter === 'assigned'} onClick={() => toggleFilter('assigned')} />
-        <KpiCard label="Ждут выдачи ЗПС (ДОК)" value={kpiNumberChecked} active={statusFilter === 'number_checked'} onClick={() => toggleFilter('number_checked')} />
+        <KpiCard label="Серия присвоена" value={kpiAssigned} active={statusFilter === 'assigned'} onClick={() => toggleFilter('assigned')} />
+        <KpiCard label="Ждут выдачи ЗПС (ДОК)" value={kpiBmrRequested} active={statusFilter === 'bmr_requested'} onClick={() => toggleFilter('bmr_requested')} />
         <KpiCard label="В производстве" value={kpiActive} active={statusFilter === 'in_production'} onClick={() => toggleFilter('in_production')} />
         <KpiCard label="Завершены" value={kpiCompleted} active={statusFilter === 'completed'} onClick={() => toggleFilter('completed')} />
         <KpiCard label="Отменены" value={kpiCancelled} active={statusFilter === 'cancelled'} onClick={() => toggleFilter('cancelled')} />
@@ -552,7 +545,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           batch={selected}
           audit={audit}
           linkedReqs={linkedReqs}
-          canCheckNumber={canCheckNumber}
+          canRequestBmr={canRequestBmr}
           canExecute={canExecute}
           canIssueBmr={canIssueBmr}
           canManage={canCreate}
@@ -563,21 +556,19 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           onCancelReason={setCancelReason}
           onCancel={() => void handleCancel(selected)}
           onAssign={() => void handleAssign(selected)}
-          checkPassword={checkPassword}
+          onRequestBmr={() => void handleRequestBmr(selected)}
           bmrNo={bmrNo}
           bmrPassword={bmrPassword}
           startPassword={startPassword}
           startReason={startReason}
           completePassword={completePassword}
           completeReason={completeReason}
-          onCheckPassword={setCheckPassword}
           onBmrNo={setBmrNo}
           onBmrPassword={setBmrPassword}
           onStartPassword={setStartPassword}
           onStartReason={setStartReason}
           onCompletePassword={setCompletePassword}
           onCompleteReason={setCompleteReason}
-          onCheckNumber={() => void handleCheckNumber(selected)}
           onChecklist={(key, value) => void patchChecklist(selected, key, value)}
           onIssueBmr={() => void handleIssueBmr(selected)}
           onStart={() => void handleStart(selected)}
@@ -620,7 +611,7 @@ function BatchDetail({
   batch,
   audit,
   linkedReqs,
-  canCheckNumber,
+  canRequestBmr,
   canExecute,
   canIssueBmr,
   canManage,
@@ -631,21 +622,19 @@ function BatchDetail({
   onCancelReason,
   onCancel,
   onAssign,
-  checkPassword,
+  onRequestBmr,
   bmrNo,
   bmrPassword,
   startPassword,
   startReason,
   completePassword,
   completeReason,
-  onCheckPassword,
   onBmrNo,
   onBmrPassword,
   onStartPassword,
   onStartReason,
   onCompletePassword,
   onCompleteReason,
-  onCheckNumber,
   onChecklist,
   onIssueBmr,
   onStart,
@@ -655,7 +644,7 @@ function BatchDetail({
   batch: ProductionBatchItem
   audit: ProductionBatchAuditItem[]
   linkedReqs: RequisitionItem[]
-  canCheckNumber: boolean
+  canRequestBmr: boolean
   canExecute: boolean
   canIssueBmr: boolean
   canManage: boolean
@@ -666,21 +655,19 @@ function BatchDetail({
   onCancelReason: (value: string) => void
   onCancel: () => void
   onAssign: () => void
-  checkPassword: string
+  onRequestBmr: () => void
   bmrNo: string
   bmrPassword: string
   startPassword: string
   startReason: string
   completePassword: string
   completeReason: string
-  onCheckPassword: (value: string) => void
   onBmrNo: (value: string) => void
   onBmrPassword: (value: string) => void
   onStartPassword: (value: string) => void
   onStartReason: (value: string) => void
   onCompletePassword: (value: string) => void
   onCompleteReason: (value: string) => void
-  onCheckNumber: () => void
   onChecklist: (key: CheckKey, value: boolean) => void
   onIssueBmr: () => void
   onStart: () => void
@@ -736,28 +723,30 @@ function BatchDetail({
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        {canCheckNumber && (
+        {canRequestBmr && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <SectionTitle icon={ShieldCheck} title="Проверка номера серии" sub="Контроль по СОП-409 · ДКК/ДОК" />
-          {batch.number_checked_at ? (
+          <SectionTitle icon={FileSignature} title="Запросить ЗПС / BMR" sub="Производство → ДОК · СОП-11 п.5.1.3" />
+          {batch.bmr_issued_at ? (
             <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              Номер проверен: {formatDate(batch.number_checked_at)}
+              ЗПС выдана ДОК: <span className="font-mono">{batch.bmr_no}</span>. Можно начинать выпуск.
+            </div>
+          ) : batch.bmr_requested_at ? (
+            <div className="mt-4 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-800">
+              ЗПС запрошена: {formatDate(batch.bmr_requested_at)}. Ожидается подготовка и выдача ДОК.
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              <p className="text-sm text-slate-600">ДКК/ДОК подтверждает, что номер серии присвоен корректно перед выдачей ЗПС.</p>
-              <Field label="Пароль электронной подписи">
-                <input type="password" className="input" value={checkPassword} onChange={(event) => onCheckPassword(event.target.value)} disabled={!canCheckNumber} />
-              </Field>
+              <p className="text-sm text-slate-600">После регистрации номера серии производство запрашивает у ДОК подготовку и выдачу ЗПС/BMR.</p>
               <button
                 type="button"
-                disabled={!canCheckNumber || !checkPassword || isLoading}
-                onClick={onCheckNumber}
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canRequestBmr || batch.status !== 'assigned' || isLoading}
+                onClick={onRequestBmr}
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <ShieldCheck size={16} />
-                Проверить номер
+                <FileSignature size={16} />
+                Запросить ЗПС/BMR
               </button>
+              {batch.status === 'draft' && <p className="text-xs text-amber-700">Сначала присвойте серию (из черновика).</p>}
             </div>
           )}
         </div>
@@ -772,20 +761,21 @@ function BatchDetail({
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {!batch.number_checked_at && (
+              {!batch.bmr_requested_at && (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  Сначала нужна проверка номера серии.
+                  Производство ещё не запросило ЗПС по этой серии.
                 </p>
               )}
+              <p className="text-xs text-slate-500">ДОК готовит и проверяет ЗПС/BMR (корректность номера и реквизитов серии), затем выдаёт.</p>
               <Field label="Номер ЗПС/BMR">
-                <input className="input font-mono" value={bmrNo || `BMR-${batch.batch_no}`} onChange={(e) => onBmrNo(e.target.value)} disabled={!canIssueBmr || !batch.number_checked_at} />
+                <input className="input font-mono" value={bmrNo || `BMR-${batch.batch_no}`} onChange={(e) => onBmrNo(e.target.value)} disabled={!canIssueBmr || !batch.bmr_requested_at} />
               </Field>
               <Field label="Пароль электронной подписи ДОК">
-                <input type="password" className="input" value={bmrPassword} onChange={(e) => onBmrPassword(e.target.value)} disabled={!canIssueBmr || !batch.number_checked_at} />
+                <input type="password" className="input" value={bmrPassword} onChange={(e) => onBmrPassword(e.target.value)} disabled={!canIssueBmr || !batch.bmr_requested_at} />
               </Field>
               <button
                 type="button"
-                disabled={!canIssueBmr || !batch.number_checked_at || !bmrPassword || isLoading}
+                disabled={!canIssueBmr || !batch.bmr_requested_at || !bmrPassword || isLoading}
                 onClick={onIssueBmr}
                 className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -843,7 +833,7 @@ function BatchDetail({
         </div>
         {!canStart && batch.status !== 'in_production' && (
           <p className="mt-3 text-xs text-amber-700">
-            Нужно: проверенный номер серии, выданная ЗПС/BMR и все пункты готовности.
+            Нужно: выданная ДОК ЗПС/BMR и все пункты готовности.
           </p>
         )}
       </div>

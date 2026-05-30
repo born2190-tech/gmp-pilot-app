@@ -118,6 +118,7 @@ class ProductionBatchItem(BaseModel):
     expiry_date: date
     shelf_life_months: int
     bmr_no: str | None
+    bmr_requested_at: datetime | None
     number_checked_at: datetime | None
     bmr_issued_at: datetime | None
     room_ready: bool

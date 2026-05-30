@@ -470,6 +470,10 @@ class ProductionBatch(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
     shelf_life_months: Mapped[int] = mapped_column(Integer, nullable=False)
     bmr_no: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    # Запрос ЗПС/BMR производством (СОП-11 п.5.1.3).
+    bmr_requested_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    bmr_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Legacy (СОП-409 number check) — больше не используется в потоке.
     number_checked_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     number_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     bmr_issued_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

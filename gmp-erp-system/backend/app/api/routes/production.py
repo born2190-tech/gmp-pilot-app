@@ -19,7 +19,6 @@ from app.schemas.production import (
     ProductionBatchCompleteRequest,
     ProductionBatchCreate,
     ProductionBatchItem,
-    ProductionBatchNumberCheckRequest,
     ProductionBatchPreview,
     ProductionBatchPreviewRequest,
     ProductionBatchesResponse,
@@ -29,13 +28,13 @@ from app.services.production_batches import (
     assign_batch,
     cancel_batch,
     create_batch,
-    check_batch_number,
     complete_batch,
     get_batch,
     issue_bmr,
     list_batch_audit,
     list_batches,
     preview_batch_number,
+    request_bmr,
     start_batch,
     update_checklist,
 )
@@ -170,14 +169,13 @@ def cancel_route(
     return ProductionBatchItem.model_validate(cancel_batch(db, user, batch_id, payload))
 
 
-@router.post("/{batch_id}/check-number", response_model=ProductionBatchItem)
-def check_number_route(
+@router.post("/{batch_id}/request-bmr", response_model=ProductionBatchItem)
+def request_bmr_route(
     batch_id: UUID,
-    payload: ProductionBatchNumberCheckRequest,
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(get_current_user),
 ) -> ProductionBatchItem:
-    return ProductionBatchItem.model_validate(check_batch_number(db, user, batch_id, payload))
+    return ProductionBatchItem.model_validate(request_bmr(db, user, batch_id))
 
 
 @router.patch("/{batch_id}/checklist", response_model=ProductionBatchItem)
