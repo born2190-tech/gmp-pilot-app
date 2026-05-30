@@ -27,6 +27,7 @@ from app.core.config import settings
 from app.models.master_data import Warehouse
 from app.models.quality import QCNotification, QCNotificationLine, QCNotificationScan
 from app.services.audit import write_audit
+from app.services.document_qr import DOC_QC_NOTIFICATION, make_document_qr_payload, validate_scan_document_qr
 from app.services.permissions import require_permission
 from app.services.signature import validate_signature
 
@@ -75,7 +76,7 @@ def compute_state_hash(notification: QCNotification, lines: Iterable[QCNotificat
 
 def make_qr_payload(notification_id: UUID, state_hash: str) -> str:
     """Compact text encoded into the on-page QR code."""
-    return f"qcn:{notification_id}|h:{state_hash[:16]}"
+    return make_document_qr_payload(DOC_QC_NOTIFICATION, notification_id, state_hash)
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +174,21 @@ async def upload_scan(
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Scan exceeds 20 MiB limit")
     if not raw.startswith(PDF_MAGIC):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is not a valid PDF")
+
+    lines = (
+        db.query(QCNotificationLine)
+        .filter(QCNotificationLine.notification_id == notification.id)
+        .order_by(QCNotificationLine.created_at)
+        .all()
+    )
+    state_hash = notification.state_hash or compute_state_hash(notification, lines)
+    validate_scan_document_qr(
+        raw=raw,
+        mime_type=file.content_type,
+        expected_doc_type=DOC_QC_NOTIFICATION,
+        expected_document_id=notification.id,
+        expected_state_hash=state_hash,
+    )
 
     sha256 = hashlib.sha256(raw).hexdigest()
 

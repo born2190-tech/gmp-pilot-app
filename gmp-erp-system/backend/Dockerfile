@@ -23,6 +23,8 @@ RUN pip install --no-cache-dir \
     "reportlab>=4.2" \
     "python-docx>=1.1" \
     "qrcode[pil]>=7.4" \
+    "opencv-python-headless>=4.10" \
+    "pypdfium2>=4.30" \
     "python-multipart>=0.0.9" \
     "httpx>=0.27"
 

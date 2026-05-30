@@ -16,8 +16,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
 from app.core.config import settings
-from app.models.quality import QCReport, QCReportScan
+from app.models.quality import QCReport, QCReportParameter, QCReportScan
 from app.services.audit import write_audit
+from app.services.document_qr import DOC_QC_REPORT, canonical_hash, validate_scan_document_qr
 from app.services.permissions import require_permission
 from app.services.signature import validate_signature
 
@@ -38,6 +39,46 @@ def _safe_seg(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", value)[:64]
 
 
+def compute_qc_report_state_hash(db: Session, report: QCReport) -> str:
+    params = (
+        db.query(QCReportParameter)
+        .filter(QCReportParameter.report_id == report.id)
+        .order_by(QCReportParameter.created_at, QCReportParameter.id)
+        .all()
+    )
+    payload = {
+        "report_no": report.report_no,
+        "lot_id": str(report.lot_id),
+        "status": report.status,
+        "method_reference": report.method_reference,
+        "analysis_started_at": report.analysis_started_at.isoformat() if report.analysis_started_at else None,
+        "analysis_finished_at": report.analysis_finished_at.isoformat() if report.analysis_finished_at else None,
+        "overall_result": report.overall_result,
+        "equipment": report.equipment,
+        "room_temp": report.room_temp,
+        "humidity": report.humidity,
+        "micro_required": report.micro_required,
+        "micro_method_reference": report.micro_method_reference,
+        "micro_started_at": report.micro_started_at.isoformat() if report.micro_started_at else None,
+        "micro_finished_at": report.micro_finished_at.isoformat() if report.micro_finished_at else None,
+        "equipments": sorted(f"{item.code}:{item.name}" for item in report.equipments),
+        "parameters": [
+            {
+                "category": p.category,
+                "parameter_name": p.parameter_name,
+                "specification": p.specification,
+                "result_value": p.result_value,
+                "unit": p.unit,
+                "method_reference": p.method_reference,
+                "complies": p.complies,
+                "equipment_id": str(p.equipment_id) if p.equipment_id else None,
+            }
+            for p in params
+        ],
+    }
+    return canonical_hash(payload)
+
+
 async def upload_report_scan(db: Session, user: CurrentUser, report_id: UUID, file: UploadFile) -> QCReportScan:
     require_permission(user, "ENTER_QC_RESULT")
     report = db.get(QCReport, report_id)
@@ -50,6 +91,15 @@ async def upload_report_scan(db: Session, user: CurrentUser, report_id: UUID, fi
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file")
     if len(raw) > SCAN_MAX_BYTES:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Scan exceeds 15 MiB limit")
+
+    validate_scan_document_qr(
+        raw=raw,
+        mime_type=file.content_type,
+        expected_doc_type=DOC_QC_REPORT,
+        expected_document_id=report.id,
+        expected_lot_id=report.lot_id,
+        expected_state_hash=compute_qc_report_state_hash(db, report),
+    )
 
     sha = hashlib.sha256(raw).hexdigest()
     when = now_utc()

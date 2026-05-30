@@ -399,8 +399,16 @@ def _build_qc_report_data(db: Session, report) -> dict:
 
 def _qc_report_pdf_response(db: Session, report, inline: bool) -> Response:
     from app.services.qc_report_pdf import render_qc_report_pdf
+    from app.services.document_qr import DOC_QC_REPORT, make_document_qr_payload
+    from app.services.qc_report_scans import compute_qc_report_state_hash
 
-    pdf_bytes = render_qc_report_pdf(_build_qc_report_data(db, report))
+    qr_payload = make_document_qr_payload(
+        DOC_QC_REPORT,
+        report.id,
+        compute_qc_report_state_hash(db, report),
+        lot_id=report.lot_id,
+    )
+    pdf_bytes = render_qc_report_pdf(_build_qc_report_data(db, report), qr_payload=qr_payload)
     filename = f"analytical-sheet-{report.report_no}.pdf"
     disposition = "inline" if inline else "attachment"
     return Response(
@@ -887,7 +895,15 @@ def sampling_act_pdf_route(
 ) -> Response:
     act = sampling_service.get_sampling_act(db, current_user, act_id)
     data = sampling_service.build_item(db, act)
-    pdf_bytes = render_sampling_act_pdf(data)
+    from app.services.document_qr import DOC_SAMPLING_ACT, make_document_qr_payload
+
+    qr_payload = make_document_qr_payload(
+        DOC_SAMPLING_ACT,
+        act.id,
+        sampling_service.compute_sampling_act_state_hash(act),
+        lot_id=act.lot_id,
+    )
+    pdf_bytes = render_sampling_act_pdf(data, qr_payload=qr_payload)
     filename = f"sampling-act-{act.act_no}.pdf"
     disposition = "inline" if inline else "attachment"
     return Response(

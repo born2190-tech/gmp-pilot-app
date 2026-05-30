@@ -31,6 +31,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from app.services.document_qr import make_qr_image
+
 
 _LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "assets" / "novugen-logo.png"
 
@@ -99,7 +101,7 @@ def _fmt_date(value) -> str:
     return str(value)
 
 
-def render_sampling_act_pdf(act: dict) -> bytes:
+def render_sampling_act_pdf(act: dict, qr_payload: str | None = None) -> bytes:
     """`act` — dict из sampling_acts.build_item()."""
     body_font, bold_font = _register_fonts()
     is_fg = act.get("sop_form") == "548"
@@ -161,18 +163,34 @@ def render_sampling_act_pdf(act: dict) -> bytes:
     elements.append(Paragraph(ORG_ADDRESS, small))
     elements.append(Spacer(1, 3 * mm))
 
-    # ── Заголовок ──────────────────────────────────────────────────────
-    elements.append(Paragraph(f"АКТ № {act.get('act_no', '')}", title_style))
-    if is_fg:
-        elements.append(Paragraph("Отбора средней пробы готовой продукции (ГП) для испытания", subtitle))
-    else:
-        elements.append(
-            Paragraph(
-                "Отбор средней пробы сырья, вспомогательных материалов, "
-                "промежуточных продуктов для входного контроля",
-                subtitle,
+    # ── Заголовок + QR привязки документа ─────────────────────────────
+    qr_image = make_qr_image(qr_payload) if qr_payload else None
+    title_block = [
+        Paragraph(f"АКТ № {act.get('act_no', '')}", title_style),
+        Paragraph(
+            "Отбора средней пробы готовой продукции (ГП) для испытания"
+            if is_fg
+            else "Отбор средней пробы сырья, вспомогательных материалов, промежуточных продуктов для входного контроля",
+            subtitle,
+        ),
+    ]
+    if qr_image is not None:
+        title_row = Table([[title_block, qr_image]], colWidths=[152 * mm, 30 * mm])
+        title_row.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]
             )
         )
+        elements.append(title_row)
+    else:
+        elements.extend(title_block)
     elements.append(Spacer(1, 3 * mm))
 
     # ── Комиссия ───────────────────────────────────────────────────────

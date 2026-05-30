@@ -23,6 +23,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from app.services.document_qr import make_qr_image
 
 _LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "assets" / "novugen-logo.png"
 
@@ -77,7 +78,7 @@ def _fmt_dt(value) -> str:
     return str(value)
 
 
-def render_qc_report_pdf(data: dict) -> bytes:
+def render_qc_report_pdf(data: dict, qr_payload: str | None = None) -> bytes:
     """`data` — dict с полями протокола, партии и параметров (см. эндпоинт)."""
     body_font, bold_font = _register_fonts()
     is_fg = data.get("sop_form") == "548"
@@ -124,8 +125,13 @@ def render_qc_report_pdf(data: dict) -> bytes:
         Spacer(1, 1.5 * mm),
         Paragraph(subtitle, title_style),
     ]
+    right_block: object = Paragraph(f"СОП-{sop_form}, Ф-11", code_style)
+    qr_image = make_qr_image(qr_payload, size_mm=21.0) if qr_payload else None
+    if qr_image is not None:
+        right_block = [Paragraph(f"СОП-{sop_form}, Ф-11", code_style), Spacer(1, 1 * mm), qr_image]
+
     header = Table(
-        [[logo_cell, center_block, Paragraph(f"СОП-{sop_form}, Ф-11", code_style)]],
+        [[logo_cell, center_block, right_block]],
         colWidths=[32 * mm, 116 * mm, 38 * mm],
     )
     header.setStyle(TableStyle([

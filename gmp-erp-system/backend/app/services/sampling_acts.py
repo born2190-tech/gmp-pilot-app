@@ -34,6 +34,7 @@ from app.models.master_data import Manufacturer, Material, Warehouse
 from app.models.quality import SamplingAct, SamplingLine, SamplingScan
 from app.schemas.quality import SamplingActCreate
 from app.services.audit import write_audit
+from app.services.document_qr import DOC_SAMPLING_ACT, canonical_hash, validate_scan_document_qr
 from app.services.permissions import require_permission
 from app.services.signature import validate_signature
 
@@ -80,6 +81,41 @@ def _generate_act_no(db: Session) -> str:
         except ValueError:
             seq = 1
     return f"{base}-{seq:03d}"
+
+
+def compute_sampling_act_state_hash(act: SamplingAct) -> str:
+    payload = {
+        "act_no": act.act_no,
+        "lot_id": str(act.lot_id),
+        "sop_form": act.sop_form,
+        "head_qc_user_id": str(act.head_qc_user_id) if act.head_qc_user_id else None,
+        "warehouse_member_user_id": str(act.warehouse_member_user_id) if act.warehouse_member_user_id else None,
+        "qc_representative_user_id": str(act.qc_representative_user_id) if act.qc_representative_user_id else None,
+        "sampling_date": act.sampling_date.isoformat() if act.sampling_date else None,
+        "sampling_location": act.sampling_location,
+        "sample_condition": act.sample_condition,
+        "temperature_c": act.temperature_c,
+        "humidity_pct": act.humidity_pct,
+        "scale_model": act.scale_model,
+        "scale_calibration_no": act.scale_calibration_no,
+        "transport_with_ice": act.transport_with_ice,
+        "specification_ref": act.specification_ref,
+        "registration_no": act.registration_no,
+        "containers_outer_total": act.containers_outer_total,
+        "containers_outer_sampled": act.containers_outer_sampled,
+        "containers_inner_total": act.containers_inner_total,
+        "containers_inner_sampled": act.containers_inner_sampled,
+        "notes": act.notes,
+        "lines": [
+            {
+                "purpose": line.purpose,
+                "quantity": line.quantity,
+                "unit": line.unit,
+            }
+            for line in sorted(act.lines, key=lambda item: ((item.created_at.isoformat() if item.created_at else ""), str(item.id)))
+        ],
+    }
+    return canonical_hash(payload)
 
 
 def multistep_sample_count(total: int | None) -> int | None:
@@ -310,6 +346,15 @@ async def upload_scan(db: Session, user: CurrentUser, act_id: UUID, file: Upload
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file")
     if len(raw) > SCAN_MAX_BYTES:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Scan exceeds 10 MiB limit")
+
+    validate_scan_document_qr(
+        raw=raw,
+        mime_type=file.content_type,
+        expected_doc_type=DOC_SAMPLING_ACT,
+        expected_document_id=act.id,
+        expected_lot_id=act.lot_id,
+        expected_state_hash=compute_sampling_act_state_hash(act),
+    )
 
     sha = hashlib.sha256(raw).hexdigest()
     when = now_utc()
