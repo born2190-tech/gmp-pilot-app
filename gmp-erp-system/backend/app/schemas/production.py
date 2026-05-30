@@ -32,6 +32,10 @@ class ProductionBatchBmrIssueRequest(SignatureRequest):
     bmr_no: str | None = Field(default=None, max_length=64)
 
 
+class ProductionBatchNumberCheckRequest(SignatureRequest):
+    pass
+
+
 class ProductionBatchStartRequest(SignatureRequest):
     pass
 
@@ -58,6 +62,7 @@ class ProductionBatchItem(BaseModel):
     expiry_date: date
     shelf_life_months: int
     bmr_no: str | None
+    number_checked_at: datetime | None
     bmr_issued_at: datetime | None
     room_ready: bool
     equipment_ready: bool

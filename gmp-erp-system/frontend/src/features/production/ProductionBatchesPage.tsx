@@ -1,8 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, ClipboardCheck, FileSignature, Play, Plus, RefreshCw, ShieldCheck } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardCheck,
+  FileSignature,
+  ListFilter,
+  Play,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  X,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
+  checkProductionBatchNumber,
   createProductionBatch,
   issueProductionBmr,
   listProductionBatches,
@@ -30,6 +43,7 @@ const CHECKS: { key: CheckKey; label: string; sop: string }[] = [
 
 const STATUS_STYLE: Record<string, string> = {
   assigned: 'border-amber-200 bg-amber-50 text-amber-700',
+  number_checked: 'border-cyan-200 bg-cyan-50 text-cyan-700',
   bmr_issued: 'border-blue-200 bg-blue-50 text-blue-700',
   ready_to_start: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   in_production: 'border-slate-300 bg-slate-900 text-white',
@@ -37,31 +51,25 @@ const STATUS_STYLE: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   assigned: 'Серия присвоена',
+  number_checked: 'Номер проверен',
   bmr_issued: 'ЗПС выдана',
   ready_to_start: 'Готово к старту',
   in_production: 'В производстве',
 }
+
+const STATUS_FILTERS = ['', 'assigned', 'number_checked', 'bmr_issued', 'ready_to_start', 'in_production']
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return '—'
+  if (!value) return '-'
   return new Intl.DateTimeFormat('ru-RU').format(new Date(value))
 }
 
-export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProps) {
-  const canCreate = user.permissions.includes('MANAGE_PRODUCTION')
-  const canIssueBmr = user.permissions.includes('QA_DECISION') || user.role === 'SYS_ADMIN'
-  const canExecute = user.permissions.includes('EXECUTE_BMR') || user.permissions.includes('MANAGE_PRODUCTION')
-
-  const [batches, setBatches] = useState<ProductionBatchItem[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [form, setForm] = useState({
+function makeInitialForm() {
+  return {
     product_code: '12',
     product_name: 'Тигралис 5 мг',
     dosage_form: 'таблетки, покрытые оболочкой',
@@ -70,8 +78,26 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     production_date: todayIso(),
     shelf_life_months: '24',
     notes: '',
-  })
-  const [preview, setPreview] = useState<{ batch_no: string; expiry_date: string } | null>(null)
+  }
+}
+
+export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProps) {
+  const canCreate = user.permissions.includes('MANAGE_PRODUCTION')
+  const canCheckNumber = user.permissions.includes('ENTER_QC_RESULT') || user.permissions.includes('QA_DECISION') || user.role === 'SYS_ADMIN'
+  const canIssueBmr = user.permissions.includes('QA_DECISION') || user.role === 'SYS_ADMIN'
+  const canExecute = user.permissions.includes('EXECUTE_BMR') || user.permissions.includes('MANAGE_PRODUCTION')
+
+  const [batches, setBatches] = useState<ProductionBatchItem[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [form, setForm] = useState(makeInitialForm)
+  const [preview, setPreview] = useState<{ batch_no: string; expiry_date: string; serial_no: number } | null>(null)
+  const [checkPassword, setCheckPassword] = useState('')
   const [bmrPassword, setBmrPassword] = useState('')
   const [bmrNo, setBmrNo] = useState('')
   const [startPassword, setStartPassword] = useState('')
@@ -82,13 +108,36 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     [batches, selectedId],
   )
 
+  const filteredBatches = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return batches.filter((batch) => {
+      if (statusFilter && batch.status !== statusFilter) return false
+      if (!q) return true
+      return (
+        batch.batch_no.toLowerCase().includes(q) ||
+        batch.product_name.toLowerCase().includes(q) ||
+        batch.product_code.toLowerCase().includes(q) ||
+        (batch.bmr_no ?? '').toLowerCase().includes(q)
+      )
+    })
+  }, [batches, search, statusFilter])
+
+  const lastForProduct = useMemo(() => {
+    return [...batches]
+      .filter((batch) => batch.product_code === form.product_code)
+      .sort((a, b) => b.serial_no - a.serial_no)[0] ?? null
+  }, [batches, form.product_code])
+
   async function load() {
     setIsLoading(true)
     setError(null)
     try {
       const response = await listProductionBatches(token)
       setBatches(response.batches)
-      if (!selectedId && response.batches[0]) setSelectedId(response.batches[0].id)
+      setSelectedId((current) => {
+        if (current && response.batches.some((batch) => batch.id === current)) return current
+        return response.batches[0]?.id ?? null
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить серии')
     } finally {
@@ -104,7 +153,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   useEffect(() => {
     let ignore = false
     async function runPreview() {
-      if (!/^\d{2}$/.test(form.product_code) || !form.production_date || Number(form.shelf_life_months) < 1) {
+      if (!showCreate || !/^\d{2}$/.test(form.product_code) || !form.production_date || Number(form.shelf_life_months) < 1) {
         setPreview(null)
         return
       }
@@ -114,7 +163,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           production_date: form.production_date,
           shelf_life_months: Number(form.shelf_life_months),
         })
-        if (!ignore) setPreview({ batch_no: response.batch_no, expiry_date: response.expiry_date })
+        if (!ignore) setPreview(response)
       } catch {
         if (!ignore) setPreview(null)
       }
@@ -124,7 +173,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       ignore = true
       window.clearTimeout(timer)
     }
-  }, [form.product_code, form.production_date, form.shelf_life_months, token])
+  }, [form.product_code, form.production_date, form.shelf_life_months, showCreate, token])
 
   async function runAction(fn: () => Promise<void>, done: string) {
     setError(null)
@@ -154,7 +203,22 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
         notes: form.notes || null,
       })
       setSelectedId(created.id)
+      setShowCreate(false)
+      setForm(makeInitialForm())
     }, 'Серия присвоена по СОП-409')
+  }
+
+  async function handleCheckNumber(batch: ProductionBatchItem) {
+    await runAction(async () => {
+      const updated = await checkProductionBatchNumber(token, batch.id, {
+        username: user.username,
+        password: checkPassword,
+        meaning: 'Проверка корректности номера серии по СОП-409',
+        reason: 'Номер серии проверен перед выдачей ЗПС/BMR',
+      })
+      setSelectedId(updated.id)
+      setCheckPassword('')
+    }, 'Номер серии проверен')
   }
 
   async function patchChecklist(batch: ProductionBatchItem, key: CheckKey, value: boolean) {
@@ -204,174 +268,211 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     Number(form.batch_size) <= 0 ||
     Number(form.shelf_life_months) <= 0
 
+  const kpiAssigned = batches.filter((batch) => batch.status === 'assigned').length
+  const kpiReady = batches.filter((batch) => batch.status === 'ready_to_start').length
+  const kpiActive = batches.filter((batch) => batch.status === 'in_production').length
+
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">СОП-409 / ЗПС / BMR</p>
-          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-slate-950">Запуск производственной серии</h1>
+          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-slate-950">Реестр производственных серий</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Номер серии присваивается до начала производства, ЗПС выдаёт ДОК, старт блокируется до готовности помещения,
-            оборудования, весов, материалов и line clearance.
+            Журнал серий по ЛС: номер, дата производства, срок годности, проверка ДКК/ДОК, ЗПС и начало выпуска.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          <RefreshCw size={15} />
-          Обновить
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <RefreshCw size={15} />
+            Обновить
+          </button>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              <Plus size={16} />
+              Новая серия
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <Notice tone="error" text={error} />}
       {success && <Notice tone="success" text={success} />}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]">
-        <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-[16px] font-semibold text-slate-950">Новая серия</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Формат СОП-409: XXNYYMMZZZ</p>
-              </div>
-              <Plus size={18} className="text-slate-400" />
-            </div>
-            <div className="space-y-3">
-              <div className="grid grid-cols-[88px_1fr] gap-2">
-                <Field label="Код продукта">
-                  <input className="input font-mono" maxLength={2} value={form.product_code} onChange={(e) => setForm({ ...form, product_code: e.target.value.replace(/\D/g, '').slice(0, 2) })} />
-                </Field>
-                <Field label="Наименование">
-                  <input className="input" value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
-                </Field>
-              </div>
-              <Field label="Лекарственная форма / дозировка">
-                <input className="input" value={form.dosage_form} onChange={(e) => setForm({ ...form, dosage_form: e.target.value })} />
-              </Field>
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Дата производства">
-                  <input type="date" className="input" value={form.production_date} onChange={(e) => setForm({ ...form, production_date: e.target.value })} />
-                </Field>
-                <Field label="Срок годности, мес.">
-                  <input type="number" min={1} className="input" value={form.shelf_life_months} onChange={(e) => setForm({ ...form, shelf_life_months: e.target.value })} />
-                </Field>
-              </div>
-              <div className="grid grid-cols-[1fr_92px] gap-2">
-                <Field label="Размер серии">
-                  <input type="number" min={0} className="input" value={form.batch_size} onChange={(e) => setForm({ ...form, batch_size: e.target.value })} />
-                </Field>
-                <Field label="Ед.">
-                  <input className="input" value={form.batch_size_unit} onChange={(e) => setForm({ ...form, batch_size_unit: e.target.value })} />
-                </Field>
-              </div>
-              <Field label="Примечание">
-                <textarea rows={2} className="input min-h-[70px] py-2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-              </Field>
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Предпросмотр</div>
-                <div className="mt-1 flex items-center justify-between gap-3">
-                  <span className="font-mono text-lg font-semibold text-slate-950">{preview?.batch_no ?? '—'}</span>
-                  <span className="text-xs text-slate-500">Годен до: {formatDate(preview?.expiry_date ?? null)}</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={createInvalid || isLoading}
-                onClick={() => void handleCreate()}
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <ShieldCheck size={16} />
-                Присвоить серию
-              </button>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <KpiCard label="Ожидают проверки номера" value={kpiAssigned} />
+        <KpiCard label="Готовы к старту" value={kpiReady} />
+        <KpiCard label="В производстве" value={kpiActive} />
+      </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">Журнал серий</div>
-            <div className="max-h-[520px] overflow-auto p-2">
-              {batches.length === 0 ? (
-                <div className="p-6 text-center text-sm text-slate-500">{isLoading ? 'Загрузка...' : 'Серии пока не зарегистрированы'}</div>
-              ) : (
-                batches.map((batch) => (
-                  <button
-                    key={batch.id}
-                    type="button"
-                    onClick={() => setSelectedId(batch.id)}
-                    className={`mb-2 w-full rounded-md border p-3 text-left transition ${
-                      selected?.id === batch.id ? 'border-blue-300 bg-blue-50/60' : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-sm font-semibold text-slate-950">{batch.batch_no}</span>
-                      <StatusBadge status={batch.status} />
-                    </div>
-                    <div className="mt-1 truncate text-sm text-slate-700">{batch.product_name}</div>
-                    <div className="mt-1 text-xs text-slate-500">{formatDate(batch.production_date)} → {formatDate(batch.expiry_date)}</div>
-                  </button>
-                ))
-              )}
-            </div>
+      <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-3">
+          <div className="relative min-w-[260px] flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Поиск по серии, ЛС, коду продукта или ЗПС..."
+              className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/70"
+            />
+          </div>
+          <div className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
+            <ListFilter size={15} className="mx-1 text-slate-400" />
+            {STATUS_FILTERS.map((status) => (
+              <button
+                key={status || 'all'}
+                type="button"
+                onClick={() => setStatusFilter(status)}
+                className={`h-8 rounded px-2.5 text-xs font-medium ${
+                  statusFilter === status ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-950'
+                }`}
+              >
+                {status ? STATUS_LABEL[status] : 'Все'}
+              </button>
+            ))}
           </div>
         </div>
 
-        {selected ? (
-          <BatchDetail
-            batch={selected}
-            canExecute={canExecute}
-            canIssueBmr={canIssueBmr}
-            bmrNo={bmrNo}
-            bmrPassword={bmrPassword}
-            startPassword={startPassword}
-            startReason={startReason}
-            onBmrNo={setBmrNo}
-            onBmrPassword={setBmrPassword}
-            onStartPassword={setStartPassword}
-            onStartReason={setStartReason}
-            onChecklist={(key, value) => void patchChecklist(selected, key, value)}
-            onIssueBmr={() => void handleIssueBmr(selected)}
-            onStart={() => void handleStart(selected)}
-            isLoading={isLoading}
-          />
-        ) : (
-          <div className="rounded-lg border border-slate-200 bg-white p-12 text-center text-sm text-slate-500 shadow-sm">
-            Выберите или создайте серию.
-          </div>
-        )}
+        <div className="overflow-x-auto">
+          <table className="min-w-[1120px] w-full text-left text-sm">
+            <thead className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-[0.08em] text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Номер серии</th>
+                <th className="px-4 py-3">ЛС</th>
+                <th className="px-4 py-3">Размер</th>
+                <th className="px-4 py-3">Дата произв.</th>
+                <th className="px-4 py-3">Срок годности</th>
+                <th className="px-4 py-3">Статус</th>
+                <th className="px-4 py-3">ЗПС/BMR</th>
+                <th className="px-4 py-3">Начало</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredBatches.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-500">
+                    {isLoading ? 'Загрузка...' : 'Серии не найдены.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredBatches.map((batch) => (
+                  <tr
+                    key={batch.id}
+                    onClick={() => setSelectedId(batch.id)}
+                    className={`cursor-pointer border-b border-slate-100 hover:bg-slate-50 ${
+                      selected?.id === batch.id ? 'bg-blue-50/60' : 'bg-white'
+                    }`}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-mono font-semibold text-slate-950">{batch.batch_no}</div>
+                      <div className="text-xs text-slate-500">код {batch.product_code} · № {String(batch.serial_no).padStart(3, '0')}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-900">{batch.product_name}</div>
+                      <div className="text-xs text-slate-500">{batch.dosage_form || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-slate-700">{batch.batch_size} {batch.batch_size_unit}</td>
+                    <td className="px-4 py-3 font-mono text-slate-700">{formatDate(batch.production_date)}</td>
+                    <td className="px-4 py-3 font-mono text-slate-700">{formatDate(batch.expiry_date)}</td>
+                    <td className="px-4 py-3"><StatusBadge status={batch.status} /></td>
+                    <td className="px-4 py-3 font-mono text-slate-700">{batch.bmr_no || '-'}</td>
+                    <td className="px-4 py-3 font-mono text-slate-700">{formatDate(batch.started_at)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {selected ? (
+        <BatchDetail
+          batch={selected}
+          canCheckNumber={canCheckNumber}
+          canExecute={canExecute}
+          canIssueBmr={canIssueBmr}
+          checkPassword={checkPassword}
+          bmrNo={bmrNo}
+          bmrPassword={bmrPassword}
+          startPassword={startPassword}
+          startReason={startReason}
+          onCheckPassword={setCheckPassword}
+          onBmrNo={setBmrNo}
+          onBmrPassword={setBmrPassword}
+          onStartPassword={setStartPassword}
+          onStartReason={setStartReason}
+          onCheckNumber={() => void handleCheckNumber(selected)}
+          onChecklist={(key, value) => void patchChecklist(selected, key, value)}
+          onIssueBmr={() => void handleIssueBmr(selected)}
+          onStart={() => void handleStart(selected)}
+          isLoading={isLoading}
+        />
+      ) : (
+        <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
+          Выберите серию из реестра или создайте новую.
+        </div>
+      )}
+
+      {showCreate && (
+        <CreateBatchModal
+          form={form}
+          preview={preview}
+          lastForProduct={lastForProduct}
+          createInvalid={createInvalid}
+          isLoading={isLoading}
+          onChange={setForm}
+          onClose={() => setShowCreate(false)}
+          onCreate={() => void handleCreate()}
+        />
+      )}
     </section>
   )
 }
 
 function BatchDetail({
   batch,
+  canCheckNumber,
   canExecute,
   canIssueBmr,
+  checkPassword,
   bmrNo,
   bmrPassword,
   startPassword,
   startReason,
+  onCheckPassword,
   onBmrNo,
   onBmrPassword,
   onStartPassword,
   onStartReason,
+  onCheckNumber,
   onChecklist,
   onIssueBmr,
   onStart,
   isLoading,
 }: {
   batch: ProductionBatchItem
+  canCheckNumber: boolean
   canExecute: boolean
   canIssueBmr: boolean
+  checkPassword: string
   bmrNo: string
   bmrPassword: string
   startPassword: string
   startReason: string
+  onCheckPassword: (value: string) => void
   onBmrNo: (value: string) => void
   onBmrPassword: (value: string) => void
   onStartPassword: (value: string) => void
   onStartReason: (value: string) => void
+  onCheckNumber: () => void
   onChecklist: (key: CheckKey, value: boolean) => void
   onIssueBmr: () => void
   onStart: () => void
@@ -384,21 +485,47 @@ function BatchDetail({
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-mono text-[24px] font-semibold tracking-tight text-slate-950">{batch.batch_no}</h2>
               <StatusBadge status={batch.status} />
             </div>
             <p className="mt-1 text-sm text-slate-600">{batch.product_name}{batch.dosage_form ? ` · ${batch.dosage_form}` : ''}</p>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-right text-xs">
+          <div className="grid grid-cols-2 gap-2 text-right text-xs lg:grid-cols-4">
             <Info label="Размер" value={`${batch.batch_size} ${batch.batch_size_unit}`} />
             <Info label="Дата произв." value={formatDate(batch.production_date)} />
             <Info label="Годен до" value={formatDate(batch.expiry_date)} />
+            <Info label="ЗПС" value={batch.bmr_no || '-'} />
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <SectionTitle icon={ShieldCheck} title="Проверка номера серии" sub="Контроль по СОП-409" />
+          {batch.number_checked_at ? (
+            <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              Номер проверен: {formatDate(batch.number_checked_at)}
+            </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm text-slate-600">ДКК/ДОК подтверждает, что номер серии присвоен корректно перед выдачей ЗПС.</p>
+              <Field label="Пароль электронной подписи">
+                <input type="password" className="input" value={checkPassword} onChange={(event) => onCheckPassword(event.target.value)} disabled={!canCheckNumber} />
+              </Field>
+              <button
+                type="button"
+                disabled={!canCheckNumber || !checkPassword || isLoading}
+                onClick={onCheckNumber}
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ShieldCheck size={16} />
+                Проверить номер
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <SectionTitle icon={FileSignature} title="Выдача ЗПС / BMR" sub="СОП-436 п.6.2.10" />
           {batch.bmr_issued_at ? (
@@ -407,15 +534,20 @@ function BatchDetail({
             </div>
           ) : (
             <div className="mt-4 space-y-3">
+              {!batch.number_checked_at && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Сначала нужна проверка номера серии.
+                </p>
+              )}
               <Field label="Номер ЗПС/BMR">
-                <input className="input font-mono" value={bmrNo || `BMR-${batch.batch_no}`} onChange={(e) => onBmrNo(e.target.value)} disabled={!canIssueBmr} />
+                <input className="input font-mono" value={bmrNo || `BMR-${batch.batch_no}`} onChange={(e) => onBmrNo(e.target.value)} disabled={!canIssueBmr || !batch.number_checked_at} />
               </Field>
               <Field label="Пароль электронной подписи ДОК">
-                <input type="password" className="input" value={bmrPassword} onChange={(e) => onBmrPassword(e.target.value)} disabled={!canIssueBmr} />
+                <input type="password" className="input" value={bmrPassword} onChange={(e) => onBmrPassword(e.target.value)} disabled={!canIssueBmr || !batch.number_checked_at} />
               </Field>
               <button
                 type="button"
-                disabled={!canIssueBmr || !bmrPassword || isLoading}
+                disabled={!canIssueBmr || !batch.number_checked_at || !bmrPassword || isLoading}
                 onClick={onIssueBmr}
                 className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -469,10 +601,121 @@ function BatchDetail({
         </div>
         {!canStart && batch.status !== 'in_production' && (
           <p className="mt-3 text-xs text-amber-700">
-            Нужно: ЗПС/BMR от ДОК и все пункты готовности. Это защита от запуска серии без контролируемого допуска.
+            Нужно: проверенный номер серии, выданная ЗПС/BMR и все пункты готовности.
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+function CreateBatchModal({
+  form,
+  preview,
+  lastForProduct,
+  createInvalid,
+  isLoading,
+  onChange,
+  onClose,
+  onCreate,
+}: {
+  form: ReturnType<typeof makeInitialForm>
+  preview: { batch_no: string; expiry_date: string; serial_no: number } | null
+  lastForProduct: ProductionBatchItem | null
+  createInvalid: boolean
+  isLoading: boolean
+  onChange: (form: ReturnType<typeof makeInitialForm>) => void
+  onClose: () => void
+  onCreate: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+          <div>
+            <h2 className="text-[18px] font-semibold text-slate-950">Новая производственная серия</h2>
+            <p className="text-xs text-slate-500">Система предлагает следующий номер по выбранному коду ЛС.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="grid grid-cols-[110px_1fr] gap-3">
+            <Field label="Код продукта">
+              <input className="input font-mono" maxLength={2} value={form.product_code} onChange={(e) => onChange({ ...form, product_code: e.target.value.replace(/\D/g, '').slice(0, 2) })} />
+            </Field>
+            <Field label="Наименование ЛС">
+              <input className="input" value={form.product_name} onChange={(e) => onChange({ ...form, product_name: e.target.value })} />
+            </Field>
+          </div>
+          <Field label="Лекарственная форма / дозировка">
+            <input className="input" value={form.dosage_form} onChange={(e) => onChange({ ...form, dosage_form: e.target.value })} />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Дата производства">
+              <input type="date" className="input" value={form.production_date} onChange={(e) => onChange({ ...form, production_date: e.target.value })} />
+            </Field>
+            <Field label="Срок годности, мес.">
+              <input type="number" min={1} className="input" value={form.shelf_life_months} onChange={(e) => onChange({ ...form, shelf_life_months: e.target.value })} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-[1fr_120px] gap-3">
+            <Field label="Размер серии">
+              <input type="number" min={0} className="input" value={form.batch_size} onChange={(e) => onChange({ ...form, batch_size: e.target.value })} />
+            </Field>
+            <Field label="Ед.">
+              <input className="input" value={form.batch_size_unit} onChange={(e) => onChange({ ...form, batch_size_unit: e.target.value })} />
+            </Field>
+          </div>
+          <Field label="Примечание">
+            <textarea rows={2} className="input min-h-[70px] py-2" value={form.notes} onChange={(e) => onChange({ ...form, notes: e.target.value })} />
+          </Field>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Последняя серия по этому ЛС</div>
+              <div className="mt-1 font-mono text-lg font-semibold text-slate-950">{lastForProduct?.batch_no ?? '-'}</div>
+              <div className="mt-1 text-xs text-slate-500">
+                {lastForProduct ? `${lastForProduct.product_name} · № ${String(lastForProduct.serial_no).padStart(3, '0')}` : 'В базе пока нет серий по этому коду'}
+              </div>
+            </div>
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-3">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-blue-600">Предлагаемый номер</div>
+              <div className="mt-1 font-mono text-lg font-semibold text-blue-950">{preview?.batch_no ?? '-'}</div>
+              <div className="mt-1 text-xs text-blue-700">Годен до: {formatDate(preview?.expiry_date ?? null)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4">
+          <p className="text-xs text-slate-500">Свободная ручная правка номера не даётся: номер берётся из журнала серий.</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              Отмена
+            </button>
+            <button
+              type="button"
+              disabled={createInvalid || isLoading}
+              onClick={onCreate}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ShieldCheck size={16} />
+              Присвоить серию
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function KpiCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className="mt-1 font-mono text-2xl font-semibold text-slate-950">{value}</div>
     </div>
   )
 }
@@ -497,7 +740,7 @@ function Info({ label, value }: { label: string; value: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[status] ?? STATUS_STYLE.assigned}`}>
+    <span className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[status] ?? STATUS_STYLE.assigned}`}>
       {STATUS_LABEL[status] ?? status}
     </span>
   )

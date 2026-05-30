@@ -13,6 +13,7 @@ from app.schemas.production import (
     ProductionBatchBmrIssueRequest,
     ProductionBatchChecklistUpdate,
     ProductionBatchCreate,
+    ProductionBatchNumberCheckRequest,
     ProductionBatchPreviewRequest,
     ProductionBatchStartRequest,
 )
@@ -66,6 +67,19 @@ def _all_start_checks(batch: ProductionBatch) -> bool:
             batch.qa_line_clearance,
         )
     )
+
+
+def _update_status_from_gates(batch: ProductionBatch) -> None:
+    if batch.status == "in_production":
+        return
+    if batch.bmr_issued_at and _all_start_checks(batch):
+        batch.status = "ready_to_start"
+    elif batch.bmr_issued_at:
+        batch.status = "bmr_issued"
+    elif batch.number_checked_at:
+        batch.status = "number_checked"
+    else:
+        batch.status = "assigned"
 
 
 def preview_batch_number(db: Session, user: CurrentUser, payload: ProductionBatchPreviewRequest) -> dict:
@@ -133,15 +147,17 @@ def get_batch(db: Session, user: CurrentUser, batch_id) -> ProductionBatch:
 
 
 def issue_bmr(db: Session, user: CurrentUser, batch_id, payload: ProductionBatchBmrIssueRequest) -> ProductionBatch:
-    _require_any_permission(user, ("QA_DECISION", "VIEW_AUDIT"))
+    _require_any_permission(user, ("QA_DECISION",))
     batch = get_batch(db, user, batch_id)
     if batch.bmr_issued_at:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR already issued")
+    if not batch.number_checked_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batch number must be checked before BMR issue")
     validate_signature(db, user, payload, "ISSUE_BMR", "production_batch", str(batch.id))
     batch.bmr_no = (payload.bmr_no or f"BMR-{batch.batch_no}").strip()
     batch.bmr_issued_by = user.id
     batch.bmr_issued_at = now_utc()
-    batch.status = "ready_to_start" if _all_start_checks(batch) else "bmr_issued"
+    _update_status_from_gates(batch)
     write_audit(
         db,
         user,
@@ -149,6 +165,29 @@ def issue_bmr(db: Session, user: CurrentUser, batch_id, payload: ProductionBatch
         object_id=str(batch.id),
         action_type="ISSUE_BMR",
         new_value={"bmr_no": batch.bmr_no, "status": batch.status, "sop": "SOP-436"},
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(batch)
+    return batch
+
+
+def check_batch_number(db: Session, user: CurrentUser, batch_id, payload: ProductionBatchNumberCheckRequest) -> ProductionBatch:
+    _require_any_permission(user, ("ENTER_QC_RESULT", "QA_DECISION"))
+    batch = get_batch(db, user, batch_id)
+    if batch.number_checked_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batch number already checked")
+    validate_signature(db, user, payload, "CHECK_PRODUCTION_BATCH_NUMBER", "production_batch", str(batch.id))
+    batch.number_checked_by = user.id
+    batch.number_checked_at = now_utc()
+    _update_status_from_gates(batch)
+    write_audit(
+        db,
+        user,
+        object_type="production_batch",
+        object_id=str(batch.id),
+        action_type="CHECK_PRODUCTION_BATCH_NUMBER",
+        new_value={"batch_no": batch.batch_no, "status": batch.status, "sop": "SOP-409"},
         reason=payload.reason,
     )
     db.commit()
@@ -165,10 +204,7 @@ def update_checklist(db: Session, user: CurrentUser, batch_id, payload: Producti
         setattr(batch, field, getattr(payload, field))
     batch.checklist_updated_by = user.id
     batch.checklist_updated_at = now_utc()
-    if batch.bmr_issued_at and _all_start_checks(batch):
-        batch.status = "ready_to_start"
-    elif batch.bmr_issued_at:
-        batch.status = "bmr_issued"
+    _update_status_from_gates(batch)
     write_audit(
         db,
         user,

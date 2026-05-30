@@ -447,6 +447,8 @@ class ProductionBatch(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
     shelf_life_months: Mapped[int] = mapped_column(Integer, nullable=False)
     bmr_no: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    number_checked_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    number_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     bmr_issued_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     bmr_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     room_ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

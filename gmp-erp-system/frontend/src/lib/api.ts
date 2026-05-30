@@ -74,6 +74,7 @@ import type {
   ProductionBatchChecklistUpdate,
   ProductionBatchCreate,
   ProductionBatchItem,
+  ProductionBatchNumberCheckRequest,
   ProductionBatchPreview,
   ProductionBatchPreviewRequest,
   ProductionBatchesResponse,
@@ -1035,6 +1036,10 @@ export function listProductionBatches(token: string, status?: string): Promise<P
 
 export function issueProductionBmr(token: string, id: string, payload: ProductionBatchBmrIssueRequest): Promise<ProductionBatchItem> {
   return request<ProductionBatchItem>(`/api/production/batches/${id}/issue-bmr`, 'POST', { token, body: payload })
+}
+
+export function checkProductionBatchNumber(token: string, id: string, payload: ProductionBatchNumberCheckRequest): Promise<ProductionBatchItem> {
+  return request<ProductionBatchItem>(`/api/production/batches/${id}/check-number`, 'POST', { token, body: payload })
 }
 
 export function updateProductionBatchChecklist(token: string, id: string, payload: ProductionBatchChecklistUpdate): Promise<ProductionBatchItem> {

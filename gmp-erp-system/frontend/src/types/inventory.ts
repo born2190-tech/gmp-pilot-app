@@ -1098,6 +1098,7 @@ export interface ProductionBatchItem {
   expiry_date: string
   shelf_life_months: number
   bmr_no: string | null
+  number_checked_at: string | null
   bmr_issued_at: string | null
   room_ready: boolean
   equipment_ready: boolean
@@ -1144,6 +1145,10 @@ export interface ProductionBatchChecklistUpdate {
 
 export interface ProductionBatchBmrIssueRequest extends SignatureRequest {
   bmr_no?: string | null
+}
+
+export interface ProductionBatchNumberCheckRequest extends SignatureRequest {
+  reason?: string
 }
 
 export interface ProductionBatchStartRequest extends SignatureRequest {

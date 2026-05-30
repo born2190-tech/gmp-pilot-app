@@ -11,6 +11,7 @@ from app.schemas.production import (
     ProductionBatchChecklistUpdate,
     ProductionBatchCreate,
     ProductionBatchItem,
+    ProductionBatchNumberCheckRequest,
     ProductionBatchPreview,
     ProductionBatchPreviewRequest,
     ProductionBatchesResponse,
@@ -18,6 +19,7 @@ from app.schemas.production import (
 )
 from app.services.production_batches import (
     create_batch,
+    check_batch_number,
     get_batch,
     issue_bmr,
     list_batches,
@@ -76,6 +78,16 @@ def issue_bmr_route(
     user: CurrentUser = Depends(get_current_user),
 ) -> ProductionBatchItem:
     return ProductionBatchItem.model_validate(issue_bmr(db, user, batch_id, payload))
+
+
+@router.post("/{batch_id}/check-number", response_model=ProductionBatchItem)
+def check_number_route(
+    batch_id: UUID,
+    payload: ProductionBatchNumberCheckRequest,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProductionBatchItem:
+    return ProductionBatchItem.model_validate(check_batch_number(db, user, batch_id, payload))
 
 
 @router.patch("/{batch_id}/checklist", response_model=ProductionBatchItem)
