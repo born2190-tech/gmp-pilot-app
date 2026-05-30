@@ -87,6 +87,7 @@ import type {
   BmrTemplatesResponse,
   BmrTemplateItem,
   BmrTemplateInput,
+  BmrBatchInstanceResponse,
   ProductionBatchStartRequest,
   SamplingActCreate,
   SamplingActItem,
@@ -1090,6 +1091,10 @@ export function duplicateBmrTemplate(token: string, id: string): Promise<BmrTemp
 
 export function approveBmrTemplate(token: string, id: string, effectiveDate: string | null): Promise<BmrTemplateItem> {
   return request<BmrTemplateItem>(`/api/bmr/templates/${id}/approve`, 'POST', { token, body: { effective_date: effectiveDate } })
+}
+
+export function getBatchBmrInstance(token: string, batchId: string): Promise<BmrBatchInstanceResponse> {
+  return request<BmrBatchInstanceResponse>(`/api/production/batches/${batchId}/bmr`, 'GET', { token })
 }
 
 export function issueProductionBmr(token: string, id: string, payload: ProductionBatchBmrIssueRequest): Promise<ProductionBatchItem> {

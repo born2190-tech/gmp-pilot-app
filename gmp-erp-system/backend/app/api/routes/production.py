@@ -150,6 +150,19 @@ def batch_requisitions_route(
     return {"requisitions": [RequisitionItem.model_validate(build_requisition_item(db, r)) for r in reqs]}
 
 
+@router.get("/{batch_id}/bmr")
+def batch_bmr_instance_route(
+    batch_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Экземпляр электронного BMR, привязанный к серии (или null)."""
+    from app.services.bmr import get_instance_for_batch
+
+    get_batch(db, user, batch_id)
+    return {"instance": get_instance_for_batch(db, user, batch_id)}
+
+
 @router.get("/{batch_id}/audit", response_model=ProductionBatchAuditResponse)
 def batch_audit_route(
     batch_id: UUID,

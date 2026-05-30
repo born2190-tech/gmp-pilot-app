@@ -14,13 +14,21 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Ban, Boxes, History, Package } from 'lucide-react'
+import { Ban, Boxes, FileText, History, Package } from 'lucide-react'
+
+const BMR_INSTANCE_STATUS: Record<string, string> = {
+  issued: 'Создан (ожидает заполнения)',
+  in_progress: 'Заполняется',
+  completed: 'Заполнен',
+  reviewed: 'Проверен',
+}
 import {
   assignProductionBatch,
   cancelProductionBatch,
   completeProductionBatch,
   createProduct,
   createProductionBatch,
+  getBatchBmrInstance,
   getProductionBatchAudit,
   getProductionBatchRequisitions,
   listProductionBatches,
@@ -32,7 +40,7 @@ import {
   updateProductionBatchChecklist,
 } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
-import type { ProductionBatchAuditItem, ProductionBatchItem, ProductItem, RequisitionItem } from '../../types/inventory'
+import type { BmrInstanceItem, ProductionBatchAuditItem, ProductionBatchItem, ProductItem, RequisitionItem } from '../../types/inventory'
 
 const REQ_STATUS_LABEL: Record<string, string> = {
   draft: 'Черновик',
@@ -162,6 +170,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const [cancelReason, setCancelReason] = useState('')
   const [audit, setAudit] = useState<ProductionBatchAuditItem[]>([])
   const [linkedReqs, setLinkedReqs] = useState<RequisitionItem[]>([])
+  const [bmrInstance, setBmrInstance] = useState<BmrInstanceItem | null>(null)
 
   const selected = useMemo(
     () => batches.find((batch) => batch.id === selectedId) ?? batches[0] ?? null,
@@ -219,15 +228,16 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   useEffect(() => {
     let ignore = false
     async function loadAudit() {
-      if (!selectedAuditId) { setAudit([]); setLinkedReqs([]); return }
+      if (!selectedAuditId) { setAudit([]); setLinkedReqs([]); setBmrInstance(null); return }
       try {
-        const [auditResp, reqResp] = await Promise.all([
+        const [auditResp, reqResp, bmrResp] = await Promise.all([
           getProductionBatchAudit(token, selectedAuditId),
           getProductionBatchRequisitions(token, selectedAuditId).catch(() => ({ requisitions: [] as RequisitionItem[] })),
+          getBatchBmrInstance(token, selectedAuditId).catch(() => ({ instance: null })),
         ])
-        if (!ignore) { setAudit(auditResp.events); setLinkedReqs(reqResp.requisitions) }
+        if (!ignore) { setAudit(auditResp.events); setLinkedReqs(reqResp.requisitions); setBmrInstance(bmrResp.instance) }
       } catch {
-        if (!ignore) { setAudit([]); setLinkedReqs([]) }
+        if (!ignore) { setAudit([]); setLinkedReqs([]); setBmrInstance(null) }
       }
     }
     void loadAudit()
@@ -527,6 +537,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           batch={selected}
           audit={audit}
           linkedReqs={linkedReqs}
+          bmrInstance={bmrInstance}
           canRequestBmr={canRequestBmr}
           canExecute={canExecute}
           canManage={canCreate}
@@ -587,6 +598,7 @@ function BatchDetail({
   batch,
   audit,
   linkedReqs,
+  bmrInstance,
   canRequestBmr,
   canExecute,
   canManage,
@@ -614,6 +626,7 @@ function BatchDetail({
   batch: ProductionBatchItem
   audit: ProductionBatchAuditItem[]
   linkedReqs: RequisitionItem[]
+  bmrInstance: BmrInstanceItem | null
   canRequestBmr: boolean
   canExecute: boolean
   canManage: boolean
@@ -824,6 +837,30 @@ function BatchDetail({
           </div>
         </div>
       )}
+
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <SectionTitle icon={FileText} title="Электронный BMR" sub="Заполнение на планшете по стадиям — СОП-11" />
+        {bmrInstance ? (
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{BMR_INSTANCE_STATUS[bmrInstance.status] ?? bmrInstance.status}</span>
+              <span className="text-sm text-slate-600">{bmrInstance.title} · шаблон v{bmrInstance.template_version} · {bmrInstance.sections.length} секций</span>
+            </div>
+            <ol className="divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
+              {bmrInstance.sections.map((s) => (
+                <li key={s.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-slate-100 font-mono text-[11px] text-slate-600">{s.ordinal}</span>
+                  <span className="font-medium text-slate-900">{s.title}</span>
+                  <span className="ml-auto text-[11px] text-slate-400">{(s.config?.fields ?? []).length} полей</span>
+                </li>
+              ))}
+            </ol>
+            <p className="text-xs text-slate-500">Пошаговое заполнение оператором и подпись ДОК — на планшете (готовится).</p>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-slate-500">Электронный BMR будет создан при выдаче ЗПС, если у продукта есть утверждённый шаблон BMR.</p>
+        )}
+      </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <SectionTitle icon={Boxes} title="Связанные требования (FEFO-выдача)" sub="Материалы в производство по этой серии — СОП-415" />

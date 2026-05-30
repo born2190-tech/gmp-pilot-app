@@ -542,3 +542,42 @@ class BmrSection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     template: Mapped[BmrTemplate] = relationship(back_populates="sections")
+
+
+class BmrInstance(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Экземпляр электронного BMR на конкретную серию. Создаётся при выдаче
+    ЗПС (СОП-11): снимок утверждённого шаблона, который заполняется на планшете."""
+
+    __tablename__ = "bmr_instances"
+
+    production_batch_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("production_batches.id"), nullable=False)
+    template_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("bmr_templates.id"), nullable=True)
+    template_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    # issued | in_progress | completed | reviewed
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="issued")
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    started_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    sections: Mapped[list["BmrInstanceSection"]] = relationship(
+        back_populates="instance", cascade="all, delete-orphan", order_by="BmrInstanceSection.ordinal"
+    )
+
+
+class BmrInstanceSection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Снимок секции шаблона в экземпляре BMR (неизменяемая структура)."""
+
+    __tablename__ = "bmr_instance_sections"
+
+    instance_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bmr_instances.id"), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    section_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    instance: Mapped[BmrInstance] = relationship(back_populates="sections")

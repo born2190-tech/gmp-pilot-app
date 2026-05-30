@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.schemas.bmr import (
+    BmrInstanceItem,
     BmrTemplateApproveRequest,
     BmrTemplateCreate,
     BmrTemplateItem,
@@ -18,12 +19,19 @@ from app.services.bmr import (
     approve_template,
     create_template,
     duplicate_template,
+    get_instance,
     get_template,
     list_templates,
     update_template,
 )
 
 router = APIRouter(prefix="/api/bmr/templates", tags=["bmr"])
+instances_router = APIRouter(prefix="/api/bmr/instances", tags=["bmr"])
+
+
+@instances_router.get("/{instance_id}", response_model=BmrInstanceItem)
+def get_instance_route(instance_id: UUID, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrInstanceItem:
+    return BmrInstanceItem.model_validate(get_instance(db, user, instance_id))
 
 
 @router.get("", response_model=BmrTemplatesResponse)

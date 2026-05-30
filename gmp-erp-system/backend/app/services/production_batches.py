@@ -328,6 +328,9 @@ def issue_bmr(db: Session, user: CurrentUser, batch_id, payload: ProductionBatch
         new_value={"bmr_no": batch.bmr_no, "status": batch.status, "sop": "SOP-436"},
         reason=payload.reason,
     )
+    # Создаём экземпляр электронного BMR из утверждённого шаблона продукта (СОП-11).
+    from app.services.bmr import create_instance_for_batch
+    create_instance_for_batch(db, user, batch)
     db.commit()
     db.refresh(batch)
     return batch

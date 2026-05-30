@@ -1210,6 +1210,24 @@ export interface BmrTemplateInput {
   sections: { section_type: string; title: string; config: Record<string, unknown> }[]
 }
 
+export interface BmrInstanceItem {
+  id: string
+  production_batch_id: string
+  batch_no: string | null
+  template_id: string | null
+  template_version: number
+  title: string
+  status: string
+  started_at: string | null
+  completed_at: string | null
+  reviewed_at: string | null
+  sections: BmrSectionItem[]
+}
+
+export interface BmrBatchInstanceResponse {
+  instance: BmrInstanceItem | null
+}
+
 export interface BmrQueueItem {
   id: string
   batch_no: string

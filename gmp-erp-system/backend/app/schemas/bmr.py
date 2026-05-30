@@ -92,3 +92,30 @@ class BmrTemplateItem(BaseModel):
 
 class BmrTemplatesResponse(BaseModel):
     templates: list[BmrTemplateListItem]
+
+
+# --- BMR instance (per batch) ------------------------------------------------
+class BmrInstanceSectionItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    ordinal: int
+    section_type: str
+    title: str
+    config: dict
+
+
+class BmrInstanceItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    production_batch_id: UUID
+    batch_no: str | None = None
+    template_id: UUID | None
+    template_version: int
+    title: str
+    status: str
+    started_at: datetime | None
+    completed_at: datetime | None
+    reviewed_at: datetime | None
+    sections: list[BmrInstanceSectionItem]

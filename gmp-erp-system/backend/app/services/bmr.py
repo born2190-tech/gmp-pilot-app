@@ -9,7 +9,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
-from app.models.inventory import BmrSection, BmrTemplate, Product
+from app.models.inventory import (
+    BmrInstance,
+    BmrInstanceSection,
+    BmrSection,
+    BmrTemplate,
+    ProductionBatch,
+    Product,
+)
 from app.schemas.bmr import BmrTemplateApproveRequest, BmrTemplateCreate, BmrTemplateUpdate
 from app.services.audit import write_audit
 
@@ -192,3 +199,86 @@ def approve_template(db: Session, user: CurrentUser, template_id: UUID, payload:
     db.commit()
     db.refresh(t)
     return t
+
+
+# ---------------------------------------------------------------------------
+# BMR instance (per batch) — Phase B
+# ---------------------------------------------------------------------------
+
+def _approved_template_for_product(db: Session, product_id: UUID) -> BmrTemplate | None:
+    return (
+        db.query(BmrTemplate)
+        .filter(BmrTemplate.product_id == product_id, BmrTemplate.status == "approved")
+        .order_by(BmrTemplate.version.desc())
+        .first()
+    )
+
+
+def create_instance_for_batch(db: Session, user: CurrentUser, batch: ProductionBatch) -> BmrInstance | None:
+    """При выдаче ЗПС создаёт экземпляр BMR из утверждённого шаблона продукта.
+
+    Идемпотентно: если экземпляр уже есть для серии — возвращает его. Если у
+    продукта нет approved-шаблона — возвращает None (бумажный BMR / шаблон не
+    готов). Коммит делает вызывающая транзакция (issue_bmr)."""
+    existing = db.query(BmrInstance).filter(BmrInstance.production_batch_id == batch.id).first()
+    if existing:
+        return existing
+    template = _approved_template_for_product(db, batch.product_id) if batch.product_id else None
+    if not template:
+        return None
+    instance = BmrInstance(
+        production_batch_id=batch.id,
+        template_id=template.id,
+        template_version=template.version,
+        title=template.title,
+        status="issued",
+        created_by=user.id,
+    )
+    db.add(instance)
+    db.flush()
+    for s in template.sections:
+        db.add(BmrInstanceSection(
+            instance_id=instance.id, ordinal=s.ordinal,
+            section_type=s.section_type, title=s.title, config=s.config or {},
+        ))
+    write_audit(
+        db, user, object_type="bmr_instance", object_id=str(instance.id),
+        action_type="CREATE_BMR_INSTANCE",
+        new_value={"batch_no": batch.batch_no, "template_version": template.version, "sop": "SOP-11"},
+    )
+    db.flush()
+    return instance
+
+
+def _instance_dict(db: Session, instance: BmrInstance) -> dict:
+    batch = db.get(ProductionBatch, instance.production_batch_id)
+    return {
+        "id": instance.id,
+        "production_batch_id": instance.production_batch_id,
+        "batch_no": batch.batch_no if batch else None,
+        "template_id": instance.template_id,
+        "template_version": instance.template_version,
+        "title": instance.title,
+        "status": instance.status,
+        "started_at": instance.started_at,
+        "completed_at": instance.completed_at,
+        "reviewed_at": instance.reviewed_at,
+        "sections": [
+            {"id": s.id, "ordinal": s.ordinal, "section_type": s.section_type, "title": s.title, "config": s.config or {}}
+            for s in instance.sections
+        ],
+    }
+
+
+def get_instance(db: Session, user: CurrentUser, instance_id: UUID) -> dict:
+    _require_any(user, _VIEW + ("EXECUTE_BMR",))
+    inst = db.get(BmrInstance, instance_id)
+    if not inst:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BMR instance not found")
+    return _instance_dict(db, inst)
+
+
+def get_instance_for_batch(db: Session, user: CurrentUser, batch_id: UUID) -> dict | None:
+    _require_any(user, _VIEW + ("EXECUTE_BMR",))
+    inst = db.query(BmrInstance).filter(BmrInstance.production_batch_id == batch_id).first()
+    return _instance_dict(db, inst) if inst else None
