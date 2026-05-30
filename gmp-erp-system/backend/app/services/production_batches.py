@@ -163,6 +163,33 @@ def create_batch(db: Session, user: CurrentUser, payload: ProductionBatchCreate)
     return batch
 
 
+def list_batch_audit(db: Session, user: CurrentUser, batch_id) -> list[dict]:
+    """Журнал серии: события аудита по серии (timeline + audit trail)."""
+    _require_any_permission(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION", "EXECUTE_BMR", "VIEW_QA", "QA_DECISION"))
+    batch = get_batch(db, user, batch_id)
+    from app.models.audit import AuditEvent
+    from app.models.identity import User
+
+    rows = (
+        db.query(AuditEvent, User.full_name)
+        .outerjoin(User, User.id == AuditEvent.user_id)
+        .filter(AuditEvent.object_type == "production_batch", AuditEvent.object_id == str(batch.id))
+        .order_by(AuditEvent.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": ev.id,
+            "action_type": ev.action_type,
+            "user_name": full_name,
+            "role_code": ev.role_code,
+            "reason": ev.reason,
+            "created_at": ev.created_at,
+        }
+        for ev, full_name in rows
+    ]
+
+
 def assign_batch(db: Session, user: CurrentUser, batch_id) -> ProductionBatch:
     """Финализация черновика: draft → assigned (официальное присвоение номера)."""
     _require_any_permission(user, ("MANAGE_PRODUCTION",))

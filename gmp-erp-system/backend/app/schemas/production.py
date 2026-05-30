@@ -136,3 +136,18 @@ class ProductionBatchItem(BaseModel):
 
 class ProductionBatchesResponse(BaseModel):
     batches: list[ProductionBatchItem]
+
+
+class ProductionBatchAuditItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    action_type: str
+    user_name: str | None
+    role_code: str | None
+    reason: str | None
+    created_at: datetime
+
+
+class ProductionBatchAuditResponse(BaseModel):
+    events: list[ProductionBatchAuditItem]

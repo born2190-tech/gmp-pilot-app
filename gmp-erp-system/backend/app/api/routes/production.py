@@ -11,6 +11,8 @@ from app.schemas.production import (
     ProductItem,
     ProductUpdate,
     ProductsResponse,
+    ProductionBatchAuditItem,
+    ProductionBatchAuditResponse,
     ProductionBatchBmrIssueRequest,
     ProductionBatchCancelRequest,
     ProductionBatchChecklistUpdate,
@@ -31,6 +33,7 @@ from app.services.production_batches import (
     complete_batch,
     get_batch,
     issue_bmr,
+    list_batch_audit,
     list_batches,
     preview_batch_number,
     start_batch,
@@ -120,6 +123,17 @@ def issue_bmr_route(
     user: CurrentUser = Depends(get_current_user),
 ) -> ProductionBatchItem:
     return ProductionBatchItem.model_validate(issue_bmr(db, user, batch_id, payload))
+
+
+@router.get("/{batch_id}/audit", response_model=ProductionBatchAuditResponse)
+def batch_audit_route(
+    batch_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> ProductionBatchAuditResponse:
+    return ProductionBatchAuditResponse(
+        events=[ProductionBatchAuditItem.model_validate(e) for e in list_batch_audit(db, user, batch_id)]
+    )
 
 
 @router.post("/{batch_id}/assign", response_model=ProductionBatchItem)

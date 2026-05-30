@@ -79,6 +79,7 @@ import type {
   ProductionBatchNumberCheckRequest,
   ProductionBatchPreview,
   ProductionBatchPreviewRequest,
+  ProductionBatchAuditResponse,
   ProductionBatchesResponse,
   ProductItem,
   ProductInput,
@@ -1049,6 +1050,10 @@ export function createProductionBatch(token: string, payload: ProductionBatchCre
 
 export function listProductionBatches(token: string, status?: string): Promise<ProductionBatchesResponse> {
   return request<ProductionBatchesResponse>('/api/production/batches', 'GET', { token, query: status ? { status } : undefined })
+}
+
+export function getProductionBatchAudit(token: string, id: string): Promise<ProductionBatchAuditResponse> {
+  return request<ProductionBatchAuditResponse>(`/api/production/batches/${id}/audit`, 'GET', { token })
 }
 
 export function issueProductionBmr(token: string, id: string, payload: ProductionBatchBmrIssueRequest): Promise<ProductionBatchItem> {

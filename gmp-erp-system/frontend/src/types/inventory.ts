@@ -1144,6 +1144,19 @@ export interface ProductionBatchesResponse {
   batches: ProductionBatchItem[]
 }
 
+export interface ProductionBatchAuditItem {
+  id: string
+  action_type: string
+  user_name: string | null
+  role_code: string | null
+  reason: string | null
+  created_at: string
+}
+
+export interface ProductionBatchAuditResponse {
+  events: ProductionBatchAuditItem[]
+}
+
 export interface ProductionBatchPreviewRequest {
   product_id: string
   production_date: string

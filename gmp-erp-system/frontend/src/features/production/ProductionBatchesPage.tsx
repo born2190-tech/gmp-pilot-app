@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Ban, Package } from 'lucide-react'
+import { Ban, History, Package } from 'lucide-react'
 import {
   assignProductionBatch,
   cancelProductionBatch,
@@ -22,6 +22,7 @@ import {
   completeProductionBatch,
   createProduct,
   createProductionBatch,
+  getProductionBatchAudit,
   issueProductionBmr,
   listProductionBatches,
   listProducts,
@@ -31,7 +32,18 @@ import {
   updateProductionBatchChecklist,
 } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
-import type { ProductionBatchItem, ProductItem } from '../../types/inventory'
+import type { ProductionBatchAuditItem, ProductionBatchItem, ProductItem } from '../../types/inventory'
+
+const ACTION_LABEL: Record<string, string> = {
+  SAVE_DRAFT_BATCH: 'Сохранён черновик серии',
+  ASSIGN_BATCH_NO: 'Присвоен номер серии (СОП-409)',
+  CHECK_PRODUCTION_BATCH_NUMBER: 'Номер серии проверен (ДКК/ДОК)',
+  ISSUE_BMR: 'Выдана ЗПС/BMR',
+  UPDATE_START_CHECKLIST: 'Обновлён чек-лист готовности',
+  START_PRODUCTION_BATCH: 'Начат выпуск серии',
+  COMPLETE_PRODUCTION_BATCH: 'Завершён выпуск серии',
+  CANCEL_PRODUCTION_BATCH: 'Серия отменена',
+}
 
 interface ProductionBatchesPageProps {
   token: string
@@ -81,6 +93,11 @@ function formatDate(value: string | null): string {
   return new Intl.DateTimeFormat('ru-RU').format(new Date(value))
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return '-'
+  return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+}
+
 function makeInitialForm() {
   return {
     product_id: '',
@@ -127,6 +144,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const [completeReason, setCompleteReason] = useState('Производство серии завершено')
   const [cancelPassword, setCancelPassword] = useState('')
   const [cancelReason, setCancelReason] = useState('')
+  const [audit, setAudit] = useState<ProductionBatchAuditItem[]>([])
 
   const selected = useMemo(
     () => batches.find((batch) => batch.id === selectedId) ?? batches[0] ?? null,
@@ -179,6 +197,23 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
+
+  const selectedAuditId = selected?.id ?? null
+  useEffect(() => {
+    let ignore = false
+    async function loadAudit() {
+      if (!selectedAuditId) { setAudit([]); return }
+      try {
+        const resp = await getProductionBatchAudit(token, selectedAuditId)
+        if (!ignore) setAudit(resp.events)
+      } catch {
+        if (!ignore) setAudit([])
+      }
+    }
+    void loadAudit()
+    return () => { ignore = true }
+    // refetch when selection changes or batches reload after an action
+  }, [selectedAuditId, batches, token])
 
   useEffect(() => {
     let ignore = false
@@ -345,10 +380,11 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
 
   const kpiDraft = batches.filter((batch) => batch.status === 'draft').length
   const kpiAssigned = batches.filter((batch) => batch.status === 'assigned').length
-  const kpiReady = batches.filter((batch) => batch.status === 'ready_to_start').length
+  const kpiNumberChecked = batches.filter((batch) => batch.status === 'number_checked').length
   const kpiActive = batches.filter((batch) => batch.status === 'in_production').length
   const kpiCompleted = batches.filter((batch) => batch.status === 'completed').length
   const kpiCancelled = batches.filter((batch) => batch.status === 'cancelled').length
+  const toggleFilter = (s: string) => setStatusFilter((cur) => (cur === s ? '' : s))
 
   return (
     <section className="space-y-5">
@@ -396,12 +432,12 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       {success && <Notice tone="success" text={success} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard label="Черновики" value={kpiDraft} />
-        <KpiCard label="Ожидают проверки номера" value={kpiAssigned} />
-        <KpiCard label="Готовы к старту" value={kpiReady} />
-        <KpiCard label="В производстве" value={kpiActive} />
-        <KpiCard label="Завершены" value={kpiCompleted} />
-        <KpiCard label="Отменены" value={kpiCancelled} />
+        <KpiCard label="Черновики" value={kpiDraft} active={statusFilter === 'draft'} onClick={() => toggleFilter('draft')} />
+        <KpiCard label="Ждут проверки номера (ДКК)" value={kpiAssigned} active={statusFilter === 'assigned'} onClick={() => toggleFilter('assigned')} />
+        <KpiCard label="Ждут выдачи ЗПС (ДОК)" value={kpiNumberChecked} active={statusFilter === 'number_checked'} onClick={() => toggleFilter('number_checked')} />
+        <KpiCard label="В производстве" value={kpiActive} active={statusFilter === 'in_production'} onClick={() => toggleFilter('in_production')} />
+        <KpiCard label="Завершены" value={kpiCompleted} active={statusFilter === 'completed'} onClick={() => toggleFilter('completed')} />
+        <KpiCard label="Отменены" value={kpiCancelled} active={statusFilter === 'cancelled'} onClick={() => toggleFilter('cancelled')} />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -489,6 +525,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       {selected ? (
         <BatchDetail
           batch={selected}
+          audit={audit}
           canCheckNumber={canCheckNumber}
           canExecute={canExecute}
           canIssueBmr={canIssueBmr}
@@ -554,6 +591,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
 
 function BatchDetail({
   batch,
+  audit,
   canCheckNumber,
   canExecute,
   canIssueBmr,
@@ -586,6 +624,7 @@ function BatchDetail({
   isLoading,
 }: {
   batch: ProductionBatchItem
+  audit: ProductionBatchAuditItem[]
   canCheckNumber: boolean
   canExecute: boolean
   canIssueBmr: boolean
@@ -825,6 +864,31 @@ function BatchDetail({
           </div>
         </div>
       )}
+
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <SectionTitle icon={History} title="Журнал серии" sub="Кто и когда — audit trail по СОП-409 / GMP" />
+        {audit.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">Событий пока нет.</p>
+        ) : (
+          <ol className="mt-4 space-y-0">
+            {audit.map((ev, i) => (
+              <li key={ev.id} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-blue-500 bg-white" />
+                  {i < audit.length - 1 && <span className="w-px flex-1 bg-slate-200" />}
+                </div>
+                <div className="pb-4">
+                  <div className="text-sm font-medium text-slate-900">{ACTION_LABEL[ev.action_type] ?? ev.action_type}</div>
+                  <div className="text-xs text-slate-500">
+                    {formatDateTime(ev.created_at)} · {ev.user_name ?? '—'}{ev.role_code ? ` (${ev.role_code})` : ''}
+                  </div>
+                  {ev.reason && <div className="mt-0.5 text-xs italic text-slate-600">«{ev.reason}»</div>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
     </div>
   )
 }
@@ -1123,12 +1187,16 @@ function ProductsManagerModal({
   )
 }
 
-function KpiCard({ label, value }: { label: string; value: number }) {
+function KpiCard({ label, value, active, onClick }: { label: string; value: number; active?: boolean; onClick?: () => void }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border bg-white px-4 py-3 text-left shadow-sm transition ${active ? 'border-slate-900 ring-1 ring-slate-900/10' : 'border-slate-200 hover:border-slate-300'}`}
+    >
       <div className="text-xs font-medium text-slate-500">{label}</div>
       <div className="mt-1 font-mono text-2xl font-semibold text-slate-950">{value}</div>
-    </div>
+    </button>
   )
 }
 
