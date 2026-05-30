@@ -9,6 +9,8 @@ from app.schemas.inventory import SignatureRequest
 # --- Products (ЛС) reference -------------------------------------------------
 class ProductCreate(BaseModel):
     code: str = Field(min_length=2, max_length=8, pattern=r"^\d{2,8}$")
+    market_code: str = Field(default="UZ", min_length=2, max_length=16, pattern=r"^[A-Z_]{2,16}$")
+    market_name: str = Field(default="Узбекистан", min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     dosage_form: str | None = Field(default=None, max_length=128)
     default_shelf_life_months: int = Field(default=24, ge=1, le=120)
@@ -18,6 +20,8 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
+    market_code: str = Field(default="UZ", min_length=2, max_length=16, pattern=r"^[A-Z_]{2,16}$")
+    market_name: str = Field(default="Узбекистан", min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     dosage_form: str | None = Field(default=None, max_length=128)
     default_shelf_life_months: int = Field(default=24, ge=1, le=120)
@@ -31,6 +35,8 @@ class ProductItem(BaseModel):
 
     id: UUID
     code: str
+    market_code: str
+    market_name: str
     name: str
     dosage_form: str | None
     default_shelf_life_months: int

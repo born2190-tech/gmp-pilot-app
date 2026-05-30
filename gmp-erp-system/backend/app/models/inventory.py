@@ -437,12 +437,14 @@ class RequisitionAllocationLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class Product(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Справочник продуктов (ЛС) для производства — источник кода и формата
-    номера серии по СОП-409. Код (2 знака) уникален; серия нумеруется отдельно
-    по каждому продукту."""
+    номера серии по СОП-409. Один код может иметь разные торговые названия
+    по рынкам; серия нумеруется отдельно по каждому продукту/рынку."""
 
     __tablename__ = "products"
 
-    code: Mapped[str] = mapped_column(String(8), nullable=False, unique=True)
+    code: Mapped[str] = mapped_column(String(8), nullable=False)
+    market_code: Mapped[str] = mapped_column(String(16), nullable=False, default="UZ")
+    market_name: Mapped[str] = mapped_column(String(64), nullable=False, default="Узбекистан")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     dosage_form: Mapped[str | None] = mapped_column(String(128), nullable=True)
     default_shelf_life_months: Mapped[int] = mapped_column(Integer, nullable=False, default=24)

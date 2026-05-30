@@ -954,7 +954,9 @@ function CreateBatchModal({
               <select className="input" value={form.product_id} onChange={(e) => selectProduct(e.target.value)}>
                 <option value="">— выберите ЛС —</option>
                 {activeProducts.map((p) => (
-                  <option key={p.id} value={p.id}>{p.code} · {p.name}{p.dosage_form ? ` · ${p.dosage_form}` : ''}</option>
+                  <option key={p.id} value={p.id}>
+                    {p.code} · {p.market_code} · {p.name}{p.dosage_form ? ` · ${p.dosage_form}` : ''}
+                  </option>
                 ))}
               </select>
             </Field>
@@ -993,7 +995,7 @@ function CreateBatchModal({
               <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Последняя серия по этому ЛС</div>
               <div className="mt-1 font-mono text-lg font-semibold text-slate-950">{lastForProduct?.batch_no ?? '-'}</div>
               <div className="mt-1 text-xs text-slate-500">
-                {lastForProduct ? `${lastForProduct.product_name} · № ${String(lastForProduct.serial_no).padStart(3, '0')}` : 'В базе пока нет серий по этому ЛС'}
+                {lastForProduct ? `${lastForProduct.product_name} · № ${String(lastForProduct.serial_no).padStart(3, '0')}` : 'В базе пока нет серий по этому ЛС/рынку'}
               </div>
             </div>
             <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-3">
@@ -1064,26 +1066,30 @@ function ProductsManagerModal({
 }: {
   products: ProductItem[]
   isLoading: boolean
-  onSave: (input: { code?: string; name: string; dosage_form: string | null; default_shelf_life_months: number; batch_format: string | null; is_active: boolean; notes: string | null }, id: string | null) => void
+  onSave: (input: { code?: string; market_code: string; market_name: string; name: string; dosage_form: string | null; default_shelf_life_months: number; batch_format: string | null; is_active: boolean; notes: string | null }, id: string | null) => void
   onClose: () => void
 }) {
   const [editId, setEditId] = useState<string | null>(null)
   const [code, setCode] = useState('')
+  const [marketCode, setMarketCode] = useState('UZ')
+  const [marketName, setMarketName] = useState('Узбекистан')
   const [name, setName] = useState('')
   const [dosageForm, setDosageForm] = useState('')
   const [shelfLife, setShelfLife] = useState('24')
   const [isActive, setIsActive] = useState(true)
 
   function reset() {
-    setEditId(null); setCode(''); setName(''); setDosageForm(''); setShelfLife('24'); setIsActive(true)
+    setEditId(null); setCode(''); setMarketCode('UZ'); setMarketName('Узбекистан'); setName(''); setDosageForm(''); setShelfLife('24'); setIsActive(true)
   }
   function startEdit(p: ProductItem) {
-    setEditId(p.id); setCode(p.code); setName(p.name); setDosageForm(p.dosage_form ?? '')
+    setEditId(p.id); setCode(p.code); setMarketCode(p.market_code); setMarketName(p.market_name); setName(p.name); setDosageForm(p.dosage_form ?? '')
     setShelfLife(String(p.default_shelf_life_months)); setIsActive(p.is_active)
   }
   function submit() {
     onSave({
       code: editId ? undefined : code.trim(),
+      market_code: marketCode.trim().toUpperCase(),
+      market_name: marketName.trim(),
       name: name.trim(),
       dosage_form: dosageForm.trim() || null,
       default_shelf_life_months: Number(shelfLife) || 24,
@@ -1093,7 +1099,7 @@ function ProductsManagerModal({
     }, editId)
     reset()
   }
-  const invalid = (!editId && !/^\d{2,8}$/.test(code.trim())) || !name.trim()
+  const invalid = (!editId && !/^\d{2,8}$/.test(code.trim())) || !/^[A-Z_]{2,16}$/.test(marketCode.trim().toUpperCase()) || !marketName.trim() || !name.trim()
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
@@ -1101,7 +1107,7 @@ function ProductsManagerModal({
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <h2 className="text-[18px] font-semibold text-slate-950">Справочник продуктов (ЛС)</h2>
-            <p className="text-xs text-slate-500">Код по СОП-409 (3 знака). Нумерация серий ведётся отдельно по каждому ЛС.</p>
+            <p className="text-xs text-slate-500">Код по СОП-409 + рынок. Нумерация серий ведётся отдельно по каждому ЛС/рынку.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
             <X size={18} />
@@ -1109,9 +1115,15 @@ function ProductsManagerModal({
         </div>
 
         <div className="space-y-4 p-5">
-          <div className="grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-[110px_1fr_140px]">
+          <div className="grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-[110px_120px_1fr_140px]">
             <Field label="Код">
               <input className="input font-mono disabled:bg-slate-100" maxLength={8} value={code} disabled={!!editId} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} />
+            </Field>
+            <Field label="Рынок">
+              <input className="input font-mono uppercase" maxLength={16} value={marketCode} onChange={(e) => setMarketCode(e.target.value.toUpperCase().replace(/[^A-Z_]/g, '').slice(0, 16))} />
+            </Field>
+            <Field label="Название рынка">
+              <input className="input" value={marketName} onChange={(e) => setMarketName(e.target.value)} />
             </Field>
             <Field label="Наименование ЛС">
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
@@ -1146,6 +1158,7 @@ function ProductsManagerModal({
               <thead className="bg-slate-50 text-[11px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Код</th>
+                  <th className="px-3 py-2">Рынок</th>
                   <th className="px-3 py-2">Наименование</th>
                   <th className="px-3 py-2">Форма</th>
                   <th className="px-3 py-2">Срок хр.</th>
@@ -1155,11 +1168,17 @@ function ProductsManagerModal({
               </thead>
               <tbody>
                 {products.length === 0 ? (
-                  <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">Справочник пуст.</td></tr>
+                  <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">Справочник пуст.</td></tr>
                 ) : (
                   products.map((p) => (
                     <tr key={p.id} className="border-t border-slate-100">
                       <td className="px-3 py-2 font-mono font-semibold text-slate-900">{p.code}</td>
+                      <td className="px-3 py-2">
+                        <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                          {p.market_code}
+                        </span>
+                        <div className="mt-0.5 text-[11px] text-slate-500">{p.market_name}</div>
+                      </td>
                       <td className="px-3 py-2 text-slate-800">{p.name}</td>
                       <td className="px-3 py-2 text-slate-600">{p.dosage_form || '-'}</td>
                       <td className="px-3 py-2 font-mono text-slate-600">{p.default_shelf_life_months} мес.</td>

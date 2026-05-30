@@ -22,7 +22,7 @@ def _require_any(user: CurrentUser, codes: tuple[str, ...]) -> None:
 
 def list_products(db: Session, user: CurrentUser) -> list[Product]:
     _require_any(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION", "EXECUTE_BMR", "VIEW_QA", "QA_DECISION"))
-    return db.query(Product).order_by(Product.code).all()
+    return db.query(Product).order_by(Product.code, Product.market_code).all()
 
 
 def get_product(db: Session, product_id: UUID) -> Product:
@@ -35,10 +35,16 @@ def get_product(db: Session, product_id: UUID) -> Product:
 def create_product(db: Session, user: CurrentUser, payload: ProductCreate) -> Product:
     _require_any(user, ("MANAGE_PRODUCTION",))
     code = payload.code.strip()
-    if db.query(Product).filter(Product.code == code).first():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Продукт с кодом {code} уже существует")
+    market_code = payload.market_code.strip().upper()
+    if db.query(Product).filter(Product.code == code, Product.market_code == market_code).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Продукт с кодом {code} для рынка {market_code} уже существует",
+        )
     product = Product(
         code=code,
+        market_code=market_code,
+        market_name=payload.market_name.strip(),
         name=payload.name.strip(),
         dosage_form=(payload.dosage_form or "").strip() or None,
         default_shelf_life_months=payload.default_shelf_life_months,
@@ -61,6 +67,19 @@ def create_product(db: Session, user: CurrentUser, payload: ProductCreate) -> Pr
 def update_product(db: Session, user: CurrentUser, product_id: UUID, payload: ProductUpdate) -> Product:
     _require_any(user, ("MANAGE_PRODUCTION",))
     product = get_product(db, product_id)
+    market_code = payload.market_code.strip().upper()
+    duplicate = (
+        db.query(Product)
+        .filter(Product.code == product.code, Product.market_code == market_code, Product.id != product.id)
+        .first()
+    )
+    if duplicate:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Продукт с кодом {product.code} для рынка {market_code} уже существует",
+        )
+    product.market_code = market_code
+    product.market_name = payload.market_name.strip()
     product.name = payload.name.strip()
     product.dosage_form = (payload.dosage_form or "").strip() or None
     product.default_shelf_life_months = payload.default_shelf_life_months

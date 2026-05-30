@@ -5,7 +5,7 @@ from app.models.identity import Department, Permission, Role, User
 from app.models.inventory import Product
 from app.models.master_data import InventoryAccount, Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import MaterialSpecification, SpecificationParameter
-from app.services.products_catalog import PRODUCTS
+from app.services.products_catalog import MARKET_PRODUCT_VARIANTS, PRODUCTS
 from app.services.reagents import seed_reagents
 
 
@@ -255,15 +255,43 @@ def seed_foundation_data(db: Session) -> None:
 
 def seed_products(db: Session) -> None:
     """Идемпотентно наполняет справочник продуктов (ЛС) каталогом NOVUGEN
-    (коды по СОП-409, 3 знака). Существующие коды не трогаем — ручные правки
-    в справочнике сохраняются."""
-    existing = {p.code for p in db.query(Product.code).all()}
+    (коды по СОП-409, 3 знака) и рыночными вариантами торговых названий."""
+    existing = {(p.code, p.market_code) for p in db.query(Product.code, Product.market_code).all()}
     for code, name, dosage_form, afi in PRODUCTS:
-        if code in existing:
+        key = (code, "UZ")
+        if key in existing:
+            row = db.query(Product).filter(Product.code == code, Product.market_code == "UZ").first()
+            if row:
+                row.market_name = "Узбекистан"
+                row.name = name
+                row.dosage_form = dosage_form or None
+                row.notes = f"АФИ: {afi}" if afi else None
             continue
         db.add(
             Product(
                 code=code,
+                market_code="UZ",
+                market_name="Узбекистан",
+                name=name,
+                dosage_form=dosage_form or None,
+                default_shelf_life_months=24,
+                is_active=True,
+                notes=f"АФИ: {afi}" if afi else None,
+            )
+        )
+    for code, market_code, market_name, name, dosage_form, afi in MARKET_PRODUCT_VARIANTS:
+        row = db.query(Product).filter(Product.code == code, Product.market_code == market_code).first()
+        if row:
+            row.market_name = market_name
+            row.name = name
+            row.dosage_form = dosage_form or None
+            row.notes = f"АФИ: {afi}" if afi else None
+            continue
+        db.add(
+            Product(
+                code=code,
+                market_code=market_code,
+                market_name=market_name,
                 name=name,
                 dosage_form=dosage_form or None,
                 default_shelf_life_months=24,

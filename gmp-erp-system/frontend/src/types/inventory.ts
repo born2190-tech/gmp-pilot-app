@@ -1090,6 +1090,8 @@ export interface IssueRequisitionRequest extends SignatureRequest {
 export interface ProductItem {
   id: string
   code: string
+  market_code: string
+  market_name: string
   name: string
   dosage_form: string | null
   default_shelf_life_months: number
@@ -1104,6 +1106,8 @@ export interface ProductsResponse {
 
 export interface ProductInput {
   code?: string
+  market_code?: string
+  market_name?: string
   name: string
   dosage_form?: string | null
   default_shelf_life_months: number
