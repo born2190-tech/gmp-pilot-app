@@ -9,7 +9,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
+from app.models.identity import User
 from app.models.inventory import (
+    BmrEntry,
     BmrInstance,
     BmrInstanceSection,
     BmrSection,
@@ -17,8 +19,16 @@ from app.models.inventory import (
     ProductionBatch,
     Product,
 )
-from app.schemas.bmr import BmrTemplateApproveRequest, BmrTemplateCreate, BmrTemplateUpdate
+from app.schemas.bmr import (
+    BmrEntriesSaveRequest,
+    BmrInstanceActionRequest,
+    BmrSignRequest,
+    BmrTemplateApproveRequest,
+    BmrTemplateCreate,
+    BmrTemplateUpdate,
+)
 from app.services.audit import write_audit
+from app.services.signature import validate_signature
 
 
 def now_utc() -> datetime:
@@ -252,6 +262,12 @@ def create_instance_for_batch(db: Session, user: CurrentUser, batch: ProductionB
 
 def _instance_dict(db: Session, instance: BmrInstance) -> dict:
     batch = db.get(ProductionBatch, instance.production_batch_id)
+    rows = (
+        db.query(BmrEntry, User.full_name)
+        .outerjoin(User, User.id == BmrEntry.filled_by)
+        .filter(BmrEntry.instance_id == instance.id)
+        .all()
+    )
     return {
         "id": instance.id,
         "production_batch_id": instance.production_batch_id,
@@ -267,7 +283,136 @@ def _instance_dict(db: Session, instance: BmrInstance) -> dict:
             {"id": s.id, "ordinal": s.ordinal, "section_type": s.section_type, "title": s.title, "config": s.config or {}}
             for s in instance.sections
         ],
+        "entries": [
+            {"section_id": e.section_id, "field_index": e.field_index, "value": e.value,
+             "filled_by_name": name, "filled_at": e.filled_at}
+            for e, name in rows
+        ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Fill / sign / complete / review — Phase C
+# ---------------------------------------------------------------------------
+
+_FILL = ("EXECUTE_BMR", "MANAGE_PRODUCTION")
+
+
+def _get_instance(db: Session, instance_id: UUID) -> BmrInstance:
+    inst = db.get(BmrInstance, instance_id)
+    if not inst:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BMR instance not found")
+    return inst
+
+
+def _mark_started(inst: BmrInstance, user: CurrentUser) -> None:
+    if inst.status == "issued":
+        inst.status = "in_progress"
+        inst.started_by = user.id
+        inst.started_at = now_utc()
+
+
+def save_entries(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrEntriesSaveRequest) -> dict:
+    _require_any(user, _FILL)
+    inst = _get_instance(db, instance_id)
+    if inst.status in ("completed", "reviewed"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR закрыт — правка запрещена")
+    section_ids = {s.id for s in inst.sections}
+    for item in payload.entries:
+        if item.section_id not in section_ids:
+            continue
+        entry = (
+            db.query(BmrEntry)
+            .filter(BmrEntry.section_id == item.section_id, BmrEntry.field_index == item.field_index)
+            .first()
+        )
+        if entry is None:
+            entry = BmrEntry(instance_id=inst.id, section_id=item.section_id, field_index=item.field_index)
+            db.add(entry)
+        entry.value = {"v": item.value}
+        entry.filled_by = user.id
+        entry.filled_at = now_utc()
+    _mark_started(inst, user)
+    db.commit()
+    db.refresh(inst)
+    return _instance_dict(db, inst)
+
+
+def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSignRequest) -> dict:
+    inst = _get_instance(db, instance_id)
+    if inst.status in ("completed", "reviewed"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR закрыт — подпись запрещена")
+    section = next((s for s in inst.sections if s.id == payload.section_id), None)
+    if not section:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Секция не найдена")
+    fields = (section.config or {}).get("fields", [])
+    if payload.field_index < 0 or payload.field_index >= len(fields):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Поле не найдено")
+    ftype = fields[payload.field_index].get("type")
+    if ftype == "signature_qa":
+        _require_any(user, ("QA_DECISION",))
+        role = "qa"
+    elif ftype == "signature_operator":
+        _require_any(user, _FILL)
+        role = "operator"
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Это поле не является подписью")
+    validate_signature(db, user, payload, "SIGN_BMR_FIELD", "bmr_instance", str(inst.id))
+    signer = db.query(User).filter(User.username == payload.username).first()
+    entry = (
+        db.query(BmrEntry)
+        .filter(BmrEntry.section_id == payload.section_id, BmrEntry.field_index == payload.field_index)
+        .first()
+    )
+    if entry is None:
+        entry = BmrEntry(instance_id=inst.id, section_id=payload.section_id, field_index=payload.field_index)
+        db.add(entry)
+    entry.value = {"signed_by": signer.full_name if signer else payload.username, "role": role, "signed_at": now_utc().isoformat()}
+    entry.filled_by = user.id
+    entry.filled_at = now_utc()
+    _mark_started(inst, user)
+    write_audit(
+        db, user, object_type="bmr_instance", object_id=str(inst.id),
+        action_type="SIGN_BMR_FIELD",
+        new_value={"section": section.title, "role": role}, reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(inst)
+    return _instance_dict(db, inst)
+
+
+def complete_instance(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrInstanceActionRequest) -> dict:
+    """Производство фиксирует, что BMR заполнен (СОП-11 п.5.2.7.14)."""
+    _require_any(user, _FILL)
+    inst = _get_instance(db, instance_id)
+    if inst.status not in ("in_progress", "issued"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR уже завершён или проверен")
+    validate_signature(db, user, payload, "COMPLETE_BMR", "bmr_instance", str(inst.id))
+    inst.status = "completed"
+    inst.completed_by = user.id
+    inst.completed_at = now_utc()
+    write_audit(db, user, object_type="bmr_instance", object_id=str(inst.id),
+                action_type="COMPLETE_BMR", new_value={"status": inst.status}, reason=payload.reason)
+    db.commit()
+    db.refresh(inst)
+    return _instance_dict(db, inst)
+
+
+def review_instance(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrInstanceActionRequest) -> dict:
+    """ДОК рассматривает заполненный BMR (СОП-11 п.5.2.7.14)."""
+    _require_any(user, ("QA_DECISION",))
+    inst = _get_instance(db, instance_id)
+    if inst.status != "completed":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Проверить можно только завершённый BMR")
+    validate_signature(db, user, payload, "REVIEW_BMR", "bmr_instance", str(inst.id))
+    inst.status = "reviewed"
+    inst.reviewed_by = user.id
+    inst.reviewed_at = now_utc()
+    write_audit(db, user, object_type="bmr_instance", object_id=str(inst.id),
+                action_type="REVIEW_BMR", new_value={"status": inst.status}, reason=payload.reason)
+    db.commit()
+    db.refresh(inst)
+    return _instance_dict(db, inst)
 
 
 def get_instance(db: Session, user: CurrentUser, instance_id: UUID) -> dict:

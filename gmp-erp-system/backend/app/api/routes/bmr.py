@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.schemas.bmr import (
+    BmrEntriesSaveRequest,
+    BmrInstanceActionRequest,
     BmrInstanceItem,
+    BmrSignRequest,
     BmrTemplateApproveRequest,
     BmrTemplateCreate,
     BmrTemplateItem,
@@ -17,11 +20,15 @@ from app.schemas.bmr import (
 )
 from app.services.bmr import (
     approve_template,
+    complete_instance,
     create_template,
     duplicate_template,
     get_instance,
     get_template,
     list_templates,
+    review_instance,
+    save_entries,
+    sign_field,
     update_template,
 )
 
@@ -32,6 +39,26 @@ instances_router = APIRouter(prefix="/api/bmr/instances", tags=["bmr"])
 @instances_router.get("/{instance_id}", response_model=BmrInstanceItem)
 def get_instance_route(instance_id: UUID, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrInstanceItem:
     return BmrInstanceItem.model_validate(get_instance(db, user, instance_id))
+
+
+@instances_router.post("/{instance_id}/entries", response_model=BmrInstanceItem)
+def save_entries_route(instance_id: UUID, payload: BmrEntriesSaveRequest, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrInstanceItem:
+    return BmrInstanceItem.model_validate(save_entries(db, user, instance_id, payload))
+
+
+@instances_router.post("/{instance_id}/sign", response_model=BmrInstanceItem)
+def sign_route(instance_id: UUID, payload: BmrSignRequest, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrInstanceItem:
+    return BmrInstanceItem.model_validate(sign_field(db, user, instance_id, payload))
+
+
+@instances_router.post("/{instance_id}/complete", response_model=BmrInstanceItem)
+def complete_route(instance_id: UUID, payload: BmrInstanceActionRequest, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrInstanceItem:
+    return BmrInstanceItem.model_validate(complete_instance(db, user, instance_id, payload))
+
+
+@instances_router.post("/{instance_id}/review", response_model=BmrInstanceItem)
+def review_route(instance_id: UUID, payload: BmrInstanceActionRequest, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrInstanceItem:
+    return BmrInstanceItem.model_validate(review_instance(db, user, instance_id, payload))
 
 
 @router.get("", response_model=BmrTemplatesResponse)

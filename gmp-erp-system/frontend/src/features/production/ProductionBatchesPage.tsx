@@ -41,6 +41,7 @@ import {
 } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
 import type { BmrInstanceItem, ProductionBatchAuditItem, ProductionBatchItem, ProductItem, RequisitionItem } from '../../types/inventory'
+import { BmrFillModal } from './BmrFillModal'
 
 const REQ_STATUS_LABEL: Record<string, string> = {
   draft: 'Черновик',
@@ -171,6 +172,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const [audit, setAudit] = useState<ProductionBatchAuditItem[]>([])
   const [linkedReqs, setLinkedReqs] = useState<RequisitionItem[]>([])
   const [bmrInstance, setBmrInstance] = useState<BmrInstanceItem | null>(null)
+  const [fillInstanceId, setFillInstanceId] = useState<string | null>(null)
 
   const selected = useMemo(
     () => batches.find((batch) => batch.id === selectedId) ?? batches[0] ?? null,
@@ -538,6 +540,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           audit={audit}
           linkedReqs={linkedReqs}
           bmrInstance={bmrInstance}
+          onOpenBmr={(id) => setFillInstanceId(id)}
           canRequestBmr={canRequestBmr}
           canExecute={canExecute}
           canManage={canCreate}
@@ -590,6 +593,16 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           onClose={() => setShowProducts(false)}
         />
       )}
+
+      {fillInstanceId && (
+        <BmrFillModal
+          token={token}
+          user={{ username: user.username, permissions: user.permissions, role: user.role }}
+          instanceId={fillInstanceId}
+          onClose={() => setFillInstanceId(null)}
+          onChanged={() => void load()}
+        />
+      )}
     </section>
   )
 }
@@ -599,6 +612,7 @@ function BatchDetail({
   audit,
   linkedReqs,
   bmrInstance,
+  onOpenBmr,
   canRequestBmr,
   canExecute,
   canManage,
@@ -627,6 +641,7 @@ function BatchDetail({
   audit: ProductionBatchAuditItem[]
   linkedReqs: RequisitionItem[]
   bmrInstance: BmrInstanceItem | null
+  onOpenBmr: (id: string) => void
   canRequestBmr: boolean
   canExecute: boolean
   canManage: boolean
@@ -845,6 +860,7 @@ function BatchDetail({
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{BMR_INSTANCE_STATUS[bmrInstance.status] ?? bmrInstance.status}</span>
               <span className="text-sm text-slate-600">{bmrInstance.title} · шаблон v{bmrInstance.template_version} · {bmrInstance.sections.length} секций</span>
+              <button type="button" onClick={() => onOpenBmr(bmrInstance.id)} className="ml-auto inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700"><FileText size={15} />Открыть BMR</button>
             </div>
             <ol className="divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
               {bmrInstance.sections.map((s) => (

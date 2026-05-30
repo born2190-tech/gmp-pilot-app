@@ -581,3 +581,17 @@ class BmrInstanceSection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     instance: Mapped[BmrInstance] = relationship(back_populates="sections")
+
+
+class BmrEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Заполненное значение поля экземпляра BMR (планшет). Для подписей в value
+    хранится {signed_by, role, signed_at}. ALCOA+: filled_by/filled_at."""
+
+    __tablename__ = "bmr_entries"
+
+    instance_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bmr_instances.id"), nullable=False)
+    section_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bmr_instance_sections.id"), nullable=False)
+    field_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    filled_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

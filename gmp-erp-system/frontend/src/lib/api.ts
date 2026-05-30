@@ -88,6 +88,7 @@ import type {
   BmrTemplateItem,
   BmrTemplateInput,
   BmrBatchInstanceResponse,
+  BmrInstanceItem,
   ProductionBatchStartRequest,
   SamplingActCreate,
   SamplingActItem,
@@ -1095,6 +1096,26 @@ export function approveBmrTemplate(token: string, id: string, effectiveDate: str
 
 export function getBatchBmrInstance(token: string, batchId: string): Promise<BmrBatchInstanceResponse> {
   return request<BmrBatchInstanceResponse>(`/api/production/batches/${batchId}/bmr`, 'GET', { token })
+}
+
+export function getBmrInstance(token: string, id: string): Promise<BmrInstanceItem> {
+  return request<BmrInstanceItem>(`/api/bmr/instances/${id}`, 'GET', { token })
+}
+
+export function saveBmrEntries(token: string, id: string, entries: { section_id: string; field_index: number; value: unknown }[]): Promise<BmrInstanceItem> {
+  return request<BmrInstanceItem>(`/api/bmr/instances/${id}/entries`, 'POST', { token, body: { entries } })
+}
+
+export function signBmrField(token: string, id: string, payload: { section_id: string; field_index: number; username: string; password: string; meaning: string; reason: string }): Promise<BmrInstanceItem> {
+  return request<BmrInstanceItem>(`/api/bmr/instances/${id}/sign`, 'POST', { token, body: payload })
+}
+
+export function completeBmrInstance(token: string, id: string, payload: { username: string; password: string; meaning: string; reason: string }): Promise<BmrInstanceItem> {
+  return request<BmrInstanceItem>(`/api/bmr/instances/${id}/complete`, 'POST', { token, body: payload })
+}
+
+export function reviewBmrInstance(token: string, id: string, payload: { username: string; password: string; meaning: string; reason: string }): Promise<BmrInstanceItem> {
+  return request<BmrInstanceItem>(`/api/bmr/instances/${id}/review`, 'POST', { token, body: payload })
 }
 
 export function issueProductionBmr(token: string, id: string, payload: ProductionBatchBmrIssueRequest): Promise<ProductionBatchItem> {

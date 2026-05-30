@@ -1,7 +1,10 @@
 from datetime import date, datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.inventory import SignatureRequest
 
 
 # Допустимые типы секций конструктора BMR (СОП-11).
@@ -105,6 +108,14 @@ class BmrInstanceSectionItem(BaseModel):
     config: dict
 
 
+class BmrEntryItem(BaseModel):
+    section_id: UUID
+    field_index: int
+    value: Any = None
+    filled_by_name: str | None = None
+    filled_at: datetime | None = None
+
+
 class BmrInstanceItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -119,3 +130,23 @@ class BmrInstanceItem(BaseModel):
     completed_at: datetime | None
     reviewed_at: datetime | None
     sections: list[BmrInstanceSectionItem]
+    entries: list[BmrEntryItem] = Field(default_factory=list)
+
+
+class BmrEntrySave(BaseModel):
+    section_id: UUID
+    field_index: int
+    value: Any = None
+
+
+class BmrEntriesSaveRequest(BaseModel):
+    entries: list[BmrEntrySave]
+
+
+class BmrSignRequest(SignatureRequest):
+    section_id: UUID
+    field_index: int
+
+
+class BmrInstanceActionRequest(SignatureRequest):
+    pass
