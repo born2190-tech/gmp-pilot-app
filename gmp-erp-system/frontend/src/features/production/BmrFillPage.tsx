@@ -1123,41 +1123,45 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     groups.forEach((g, gi) => {
       rows.push(
         <tr key={`g-${gi}`} className="border-b border-slate-200 bg-slate-100/70">
-          <td colSpan={6} className="px-3 py-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-slate-600">{g.title}</td>
+          <td colSpan={8} className="px-3 py-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-slate-600">{g.title}</td>
         </tr>
       )
       g.items.forEach((it, ii) => {
         const b = base
-        base += 4
-        const whE = entries[key(sid, b + 1)]; const dpE = entries[key(sid, b + 2)]; const dokE = entries[key(sid, b + 3)]
+        base += 6
+        const whE = entries[key(sid, b + 3)]; const dpE = entries[key(sid, b + 4)]; const dokE = entries[key(sid, b + 5)]
         const whSigned = !!(whE?.value && whE.value.signed_by)
         const dpSigned = !!(dpE?.value && dpE.value.signed_by)
-        const uWh = fieldUnlocked(allSections, entries, draft, sid, b + 1)
-        const uDp = fieldUnlocked(allSections, entries, draft, sid, b + 2)
-        const uDok = fieldUnlocked(allSections, entries, draft, sid, b + 3)
+        const uWh = fieldUnlocked(allSections, entries, draft, sid, b + 3)
+        const uDp = fieldUnlocked(allSections, entries, draft, sid, b + 4)
+        const uDok = fieldUnlocked(allSections, entries, draft, sid, b + 5)
         rows.push(
           <tr key={`i-${gi}-${ii}`} className="border-b border-slate-100 align-middle">
             <td className="px-3 py-2 text-[13px] text-slate-800">{it.name}{it.spec ? <span className="mono ml-1 text-[10.5px] text-slate-400">{it.spec}</span> : null}</td>
             <td className="mono px-3 py-2 text-[12px] text-slate-500">{it.qty || '—'}</td>
-            <td className="px-3 py-2">{inputFor(b + 0, 'number', 'кг')}</td>
-            <td className="px-3 py-2"><SignCell role="wh" state={sigState(whE, false, 'wh', uWh)} who={whE?.value?.signed_by} at={fmtTime(whE?.value?.signed_at)} onSign={(canWh || canDp) && !closed && uWh ? () => onSign(b + 1, 'wh', `${it.name} · выдача`) : undefined} /></td>
-            <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && whSigned && uDp ? () => onSign(b + 2, 'dp', `${it.name} · проверка ДП`) : undefined} /></td>
-            <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(b + 3, 'dok', `${it.name} · проверка ДОК`) : undefined} /></td>
+            <td className="px-3 py-2">{inputFor(b + 0, 'text')}</td>
+            <td className="px-3 py-2">{inputFor(b + 1, 'text')}</td>
+            <td className="px-3 py-2">{inputFor(b + 2, 'number', 'кг')}</td>
+            <td className="px-3 py-2"><SignCell role="wh" state={sigState(whE, false, 'wh', uWh)} who={whE?.value?.signed_by} at={fmtTime(whE?.value?.signed_at)} onSign={(canWh || canDp) && !closed && uWh ? () => onSign(b + 3, 'wh', `${it.name} · выдача`) : undefined} /></td>
+            <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && whSigned && uDp ? () => onSign(b + 4, 'dp', `${it.name} · проверка ДП`) : undefined} /></td>
+            <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(b + 5, 'dok', `${it.name} · проверка ДОК`) : undefined} /></td>
           </tr>
         )
       })
     })
     return wrap(
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px]">
+        <table className="w-full min-w-[1040px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
               <th className="px-3 py-2">Наименование ингредиента</th>
-              <th className="w-[120px] px-3 py-2">Кол-во на серию, кг</th>
-              <th className="w-[150px] px-3 py-2">Вес нетто</th>
-              <th className="w-[160px] px-3 py-2">Выдал · Склад</th>
-              <th className="w-[160px] px-3 py-2">Проверил · ДП</th>
-              <th className="w-[160px] px-3 py-2">Проверил · ДОК</th>
+              <th className="w-[110px] px-3 py-2">Кол-во на серию, кг</th>
+              <th className="w-[140px] px-3 py-2">№ серии сырья</th>
+              <th className="w-[140px] px-3 py-2">№ аналит. листа</th>
+              <th className="w-[130px] px-3 py-2">Вес нетто</th>
+              <th className="w-[150px] px-3 py-2">Выдал · Склад</th>
+              <th className="w-[150px] px-3 py-2">Проверил · ДП</th>
+              <th className="w-[150px] px-3 py-2">Проверил · ДОК</th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>

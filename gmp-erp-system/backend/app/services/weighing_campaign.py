@@ -44,8 +44,10 @@ _ROLE_PERMS = {
     "dp": (("EXECUTE_BMR", "MANAGE_PRODUCTION"), "operator"),
     "qa": (("QA_DECISION",), "qa"),
 }
-# Смещение поля подписи в distribution_list относительно базы ингредиента.
-_SIGN_OFFSET = {"warehouse": 1, "dp": 2, "qa": 3}
+# Раскладка полей одного ингредиента в distribution_list (6 полей по порядку):
+# 0 № серии сырья, 1 № аналит. листа, 2 вес нетто, 3 Склад, 4 ДП, 5 ДОК.
+_NET_OFFSET = 2
+_SIGN_OFFSET = {"warehouse": 3, "dp": 4, "qa": 5}
 # Роль запроса → ключ подписи в ячейке ведомости (wh/dp/qa).
 _CELL_KEY = {"warehouse": "wh", "dp": "dp", "qa": "qa"}
 
@@ -95,7 +97,7 @@ def _ingredients(section: BmrInstanceSection) -> list[dict]:
                 "section_id": str(section.id),
                 "field_base": base,
             })
-            base += 4
+            base += 6
     return out
 
 
@@ -294,7 +296,7 @@ def save_net(db: Session, user: CurrentUser, campaign_id: UUID, payload: Weighin
     cell["net"] = payload.net
     instance_id = _instance_for_batch(db, str(payload.batch_id))
     if instance_id and cell.get("section_id"):
-        entry = _bmr_entry(db, instance_id, UUID(cell["section_id"]), int(cell["field_base"]))
+        entry = _bmr_entry(db, instance_id, UUID(cell["section_id"]), int(cell["field_base"]) + _NET_OFFSET)
         entry.value = {"v": payload.net, "source": "weighing_campaign"}
         entry.filled_by = user.id
         entry.filled_at = now_utc()

@@ -158,12 +158,16 @@ def _ipc(title: str, room: str, params: list[dict], phases: list[dict]) -> dict:
 
 
 def _distribution_list(title: str, room: str, groups: list[dict]) -> dict:
-    """Лист распределения сырья. На каждый ингредиент 4 поля по порядку:
-    вес нетто (число) → подпись Склад «Выдал» → подпись ДП → подпись ДОК."""
+    """Лист распределения сырья. На каждый ингредиент 6 полей по порядку:
+    № серии сырья → № аналит. листа → вес нетто (число) → подпись Склад «Выдал»
+    → подпись ДП → подпись ДОК. (№ серии/аналит. листа подставляются из выданной
+    накладной, можно поправить — task связки требование→BMR.)"""
     fields: list[dict] = []
     for group in groups:
         for item in group["items"]:
             name = item["name"]
+            fields.append({"label": f"{name} · № серии сырья", "type": "text"})
+            fields.append({"label": f"{name} · № аналит. листа", "type": "text"})
             fields.append({"label": f"{name} · вес нетто", "type": "number", "unit": "кг"})
             fields.append({"label": f"{name} · Выдал (Склад)", "type": "signature_warehouse"})
             fields.append({"label": f"{name} · Проверил (ДП)", "type": "signature_operator"})
