@@ -10,6 +10,7 @@ from app.schemas.inventory import SignatureRequest
 # Допустимые типы секций конструктора BMR (СОП-11).
 SECTION_TYPES = (
     "product_header",
+    "process_header",
     "production_formula",
     "distribution_list",
     "stage",

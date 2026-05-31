@@ -252,6 +252,9 @@ def seed_foundation_data(db: Session) -> None:
 
     db.commit()
 
+    from app.services.seed_bmr import seed_bmr_etalon
+    seed_bmr_etalon(db)
+
 
 def seed_products(db: Session) -> None:
     """Идемпотентно наполняет справочник продуктов (ЛС) каталогом NOVUGEN

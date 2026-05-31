@@ -1153,12 +1153,29 @@ export interface ProductionBatchesResponse {
 }
 
 // --- Electronic BMR template constructor (СОП-11) --------------------------
+export interface BmrChecklistStep { no?: string; text: string }
+export interface BmrEnvParam { name: string; unit?: string; limit?: string }
+export interface BmrEquipmentRow { name: string; model?: string; serial?: string; sop?: string; calib?: string }
+
+export interface BmrSectionConfig {
+  fields?: BmrFieldDef[]
+  note?: string
+  kind?: string
+  room?: string
+  process?: string
+  room_no?: string
+  sop?: string
+  steps?: BmrChecklistStep[]
+  params?: BmrEnvParam[]
+  rows?: BmrEquipmentRow[]
+}
+
 export interface BmrSectionItem {
   id?: string
   ordinal?: number
   section_type: string
   title: string
-  config: { fields?: BmrFieldDef[]; note?: string }
+  config: BmrSectionConfig
 }
 
 export interface BmrFieldDef {
