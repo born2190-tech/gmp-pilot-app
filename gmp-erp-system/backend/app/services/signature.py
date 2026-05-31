@@ -8,6 +8,54 @@ from app.models.identity import User
 from app.schemas.inventory import SignatureRequest
 
 
+def validate_independent_signature(
+    db: Session,
+    actor: CurrentUser,
+    signature: SignatureRequest,
+    action_type: str,
+    object_type: str,
+    object_id: str,
+    required_permissions: tuple[str, ...],
+) -> User:
+    """Независимая e-подпись: подписывает НЕ обязательно тот, кто залогинен на
+    планшете (общий планшет комнаты, на нём работают и оператор, и контролёр).
+
+    Подписант сам вводит свой логин+пароль/PIN; проверяем именно его учётку и его
+    роль (анти-подмена: оператор не подпишет ячейку ДОК и наоборот). Возвращает
+    пользователя-подписанта. Событие подписи логируется в любом случае."""
+    signer = db.query(User).filter(User.username == signature.username).first()
+    result = "failed"
+    role_code = signer.role.code if signer else None
+    user_id = signer.id if signer else None
+    try:
+        if not signer or not signer.is_active or not verify_password(signature.password, signer.password_hash):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Неверные учётные данные подписи")
+        signer_perms = {p.code for p in signer.role.permissions}
+        if not any(code in signer_perms for code in required_permissions):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="У подписанта нет права на эту подпись (роль не соответствует ячейке)",
+            )
+        result = "success"
+        return signer
+    finally:
+        db.add(
+            SignatureEvent(
+                user_id=user_id,
+                username=signature.username,
+                role_code=role_code,
+                workstation_id=actor.workstation_id,
+                object_type=object_type,
+                object_id=object_id,
+                action_type=action_type,
+                meaning=signature.meaning,
+                reason=signature.reason,
+                result=result,
+            )
+        )
+        db.flush()
+
+
 def validate_signature(
     db: Session,
     actor: CurrentUser,

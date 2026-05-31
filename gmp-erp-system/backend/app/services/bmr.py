@@ -29,7 +29,7 @@ from app.schemas.bmr import (
     BmrTemplateUpdate,
 )
 from app.services.audit import write_audit
-from app.services.signature import validate_signature
+from app.services.signature import validate_independent_signature, validate_signature
 
 
 def now_utc() -> datetime:
@@ -587,15 +587,19 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
     completed = _completion_map(db, inst.id)
     _ensure_previous_complete(inst, user, section_map, payload.section_id, payload.field_index, completed)
     if ftype == "signature_qa":
-        _require_any(user, ("QA_DECISION",))
+        required = ("QA_DECISION",)
         role = "qa"
     elif ftype == "signature_operator":
-        _require_any(user, _FILL)
+        required = _FILL
         role = "operator"
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Это поле не является подписью")
-    validate_signature(db, user, payload, "SIGN_BMR_FIELD", "bmr_instance", str(inst.id))
-    signer = db.query(User).filter(User.username == payload.username).first()
+    # Подпись = независимая e-аутентификация подписанта (один планшет на комнату, на
+    # нём работают и оператор, и контролёр). Подписант вводит СВОИ креды; гейт по
+    # роли ячейки делает подмену невозможной (оператор не подпишет ДОК и наоборот).
+    signer = validate_independent_signature(
+        db, user, payload, "SIGN_BMR_FIELD", "bmr_instance", str(inst.id), required,
+    )
     entry = (
         db.query(BmrEntry)
         .filter(BmrEntry.section_id == payload.section_id, BmrEntry.field_index == payload.field_index)
@@ -604,8 +608,8 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
     if entry is None:
         entry = BmrEntry(instance_id=inst.id, section_id=payload.section_id, field_index=payload.field_index)
         db.add(entry)
-    entry.value = {"signed_by": signer.full_name if signer else payload.username, "role": role, "signed_at": now_utc().isoformat()}
-    entry.filled_by = user.id
+    entry.value = {"signed_by": signer.full_name, "role": role, "signed_at": now_utc().isoformat()}
+    entry.filled_by = signer.id
     entry.filled_at = now_utc()
     _mark_started(inst, user)
     write_audit(

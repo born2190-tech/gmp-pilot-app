@@ -193,6 +193,8 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   const [dock, setDock] = useState<{ sectionId: string; fieldIndex: number; role: 'dp' | 'dok'; label: string } | null>(null)
   const [action, setAction] = useState<null | 'complete' | 'review'>(null)
   const [pwd, setPwd] = useState('')
+  // Подписант вводит СВОИ креды на каждую подпись (общий планшет; не запоминаем сессию).
+  const [signer, setSigner] = useState('')
 
   const perms = user?.permissions || []
   const isSupervisor = perms.includes('MANAGE_PRODUCTION') || perms.includes('QA_DECISION')
@@ -238,15 +240,15 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   }
 
   async function confirmSign() {
-    if (!inst || !dock || !user) return
+    if (!inst || !dock || !signer.trim() || !pwd) return
     setBusy(true); setError(null)
     try {
       const updated = await signBmrField(token, inst.id, {
         section_id: dock.sectionId, field_index: dock.fieldIndex,
-        username: user.username, password: pwd,
+        username: signer.trim(), password: pwd,
         meaning: dock.role === 'dok' ? 'Проверено ДОК' : 'Выполнено ДП', reason: dock.label,
       })
-      setInst(updated); setDock(null); setPwd('')
+      setInst(updated); setDock(null); setPwd(''); setSigner('')
     } catch (e) { setError(e instanceof Error ? e.message : 'Подпись не принята') }
     finally { setBusy(false) }
   }
@@ -330,7 +332,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
           ) : visibleSections.map((s) => (
             <SectionBlock key={s.id} section={s} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed}
               canDp={canDp} canDok={canDok} onSetVal={setVal}
-              onSign={(fi, role, label) => setDock({ sectionId: String(s.id), fieldIndex: fi, role, label })} />
+              onSign={(fi, role, label) => { setSigner(''); setPwd(''); setDock({ sectionId: String(s.id), fieldIndex: fi, role, label }) }} />
           ))}
           {finalEndFields.length > 0 && (
             <ProcessClosureBlock fields={finalEndFields} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed} onSetVal={setVal} />
@@ -349,10 +351,12 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
         </div>
       </div>
 
-      {/* sign dock (slide-up, password e-signature) */}
+      {/* sign dock (slide-up): подписант вводит СВОИ логин+PIN на каждую подпись */}
       {dock && (
         <SignDock role={dock.role} label={dock.label} pwd={pwd} setPwd={setPwd} busy={busy}
-          who={user?.full_name || user?.username || ''} onCancel={() => { setDock(null); setPwd('') }} onConfirm={() => void confirmSign()} />
+          signerName={signer} setSignerName={setSigner}
+          who={dock.role === 'dok' ? 'подписывает любой контролёр (ДОК)' : 'подписывает назначенный оператор (ДП)'}
+          onCancel={() => { setDock(null); setPwd(''); setSigner('') }} onConfirm={() => void confirmSign()} />
       )}
       {action && (
         <SignDock role={action === 'review' ? 'dok' : 'dp'} label={action === 'review' ? 'Проверка и закрытие BMR (ДОК)' : 'Завершение заполнения BMR (ДП)'}
@@ -434,8 +438,10 @@ function StageRail({
 }
 
 /* ---- Sign dock ---- */
-function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm }: { role: 'dp' | 'dok'; label: string; pwd: string; setPwd: (v: string) => void; busy: boolean; who: string; onCancel: () => void; onConfirm: () => void }) {
+function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, signerName, setSignerName }: { role: 'dp' | 'dok'; label: string; pwd: string; setPwd: (v: string) => void; busy: boolean; who: string; onCancel: () => void; onConfirm: () => void; signerName?: string; setSignerName?: (v: string) => void }) {
   const dok = role === 'dok'
+  const needsSigner = !!setSignerName
+  const ready = pwd.length > 0 && (!needsSigner || (signerName || '').trim().length > 0)
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-4">
       <div className="mx-auto max-w-3xl overflow-hidden rounded-xl border bg-white shadow-2xl ring-1" style={{ borderColor: dok ? '#0f172a' : '#2563eb' }}>
@@ -444,11 +450,15 @@ function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm }: 
           <span className="ml-auto mono text-[11px] opacity-80">{who}</span>
         </div>
         <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-          <div className="flex-1 min-w-[200px] text-[12px] text-slate-600">Подтверждаю {dok ? 'проверку' : 'выполнение'} лично и достоверность записи (ALCOA+).</div>
-          <input type="password" autoFocus value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="Пароль / PIN"
-            onKeyDown={(e) => { if (e.key === 'Enter' && pwd) onConfirm() }}
+          <div className="flex-1 min-w-[180px] text-[12px] text-slate-600">Подписант подтверждает {dok ? 'проверку' : 'выполнение'} лично своими данными (ALCOA+).</div>
+          {needsSigner && (
+            <input autoFocus value={signerName || ''} onChange={(e) => setSignerName!(e.target.value)} placeholder="Логин подписанта" autoComplete="off"
+              className="h-11 w-44 rounded-lg border border-slate-300 px-3 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+          )}
+          <input type="password" autoFocus={!needsSigner} value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="Пароль / PIN" autoComplete="off"
+            onKeyDown={(e) => { if (e.key === 'Enter' && ready) onConfirm() }}
             className="h-11 w-44 rounded-lg border border-slate-300 px-3 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-          <button disabled={busy || !pwd} onClick={onConfirm} className={`inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 ${dok ? 'bg-slate-900' : 'bg-blue-600'}`}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Подтвердить</button>
+          <button disabled={busy || !ready} onClick={onConfirm} className={`inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 ${dok ? 'bg-slate-900' : 'bg-blue-600'}`}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Подтвердить</button>
           <button onClick={onCancel} className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-600"><X size={15} /></button>
         </div>
       </div>
