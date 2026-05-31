@@ -67,6 +67,11 @@ function sectionIcon(kind: string) {
   return <Layers size={15} />
 }
 
+function sectionSpanClass(section: BmrSectionItem): string {
+  const kind = sectionKind(section)
+  return kind === 'process_header' || kind === 'equipment' ? '' : '2xl:col-span-2'
+}
+
 /* ============================ PAGE ============================ */
 export function BmrFillPage({ token, user }: Props) {
   const [list, setList] = useState<{ batchId: string; instanceId: string; batchNo: string | null; title: string; status: string; room: string | null }[]>([])
@@ -245,14 +250,14 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   }, { done: 0, total: 0 })
 
   return (
-    <div className="min-h-screen bg-[#eef1f5] pb-36">
+    <div className="min-h-screen bg-[#eef1f5] pb-28">
       {/* OS strip */}
-      <div className="flex items-center justify-between bg-slate-900 px-4 py-1.5 text-[11px] text-slate-300">
+      <div className="flex items-center justify-between bg-slate-900 px-4 py-1 text-[11px] text-slate-300">
         <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-1.5 py-0.5 font-semibold text-white"><DoorOpen size={12} /> {myRoom || 'Рабочее место'}</span>
         <span className="inline-flex items-center gap-1.5 text-emerald-300"><Wifi size={13} /> онлайн</span>
       </div>
       {/* batch bar */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
         <button onClick={onBack} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50"><ArrowRight size={14} className="rotate-180" /> Наряды</button>
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-[10px] font-bold text-white">B21</span>
         <div className="min-w-0">
@@ -274,7 +279,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
         </div>
       )}
 
-      <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 xl:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="mx-auto grid max-w-[1680px] grid-cols-1 gap-3 p-3 xl:grid-cols-[280px_minmax(0,1fr)]">
         <StageRail
           sections={visibleSections}
           entries={entries}
@@ -284,23 +289,25 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
           progress={progressTotal}
           status={inst.status}
         />
-        <main className="min-w-0 space-y-4">
-          {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
+        <main className="grid min-w-0 auto-rows-min grid-cols-1 gap-3 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700 2xl:col-span-2">{error}</div>}
           {visibleSections.length === 0 ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-[13px] text-amber-800">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-[13px] text-amber-800 2xl:col-span-2">
               Для рабочего места {myRoom || user?.workstation_id || 'не определено'} в этой серии нет назначенной стадии.
             </div>
           ) : visibleSections.map((s) => (
-            <SectionBlock key={s.id} section={s} entries={entries} draft={draft} closed={!!closed}
-              canDp={canDp} canDok={canDok} onSetVal={setVal}
-              onSign={(fi, role, label) => setDock({ sectionId: String(s.id), fieldIndex: fi, role, label })} />
+            <div key={s.id} className={sectionSpanClass(s)}>
+              <SectionBlock section={s} entries={entries} draft={draft} closed={!!closed}
+                canDp={canDp} canDok={canDok} onSetVal={setVal}
+                onSign={(fi, role, label) => setDock({ sectionId: String(s.id), fieldIndex: fi, role, label })} />
+            </div>
           ))}
         </main>
       </div>
 
       {/* footer action bar */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] items-center gap-2">
+        <div className="mx-auto flex max-w-[1680px] items-center gap-2">
           {!closed && <button disabled={busy} onClick={() => void saveAll()} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Save size={16} /> Сохранить</button>}
           {!closed && canComplete && (inst.status === 'in_progress' || inst.status === 'issued') && <button disabled={busy} onClick={() => { setAction('complete'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Check size={16} /> Завершить (ДП)</button>}
           {inst.status === 'completed' && canDok && <button disabled={busy} onClick={() => { setAction('review'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><ShieldCheck size={16} /> Проверить (ДОК)</button>}
@@ -342,8 +349,8 @@ function StageRail({
 }) {
   const percent = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
   return (
-    <aside className="self-start rounded-xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-4">
-      <div className="border-b border-slate-200 px-4 py-3">
+    <aside className="self-start rounded-lg border border-slate-200 bg-white shadow-sm xl:sticky xl:top-3">
+      <div className="border-b border-slate-200 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Маршрут серии</div>
@@ -351,7 +358,7 @@ function StageRail({
           </div>
           <StatusChip status={status} />
         </div>
-        <div className="mt-3">
+        <div className="mt-2.5">
           <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
             <span>Заполнено</span>
             <span className="mono">{progress.done}/{progress.total || 0}</span>
@@ -361,7 +368,7 @@ function StageRail({
           </div>
         </div>
       </div>
-      <nav className="max-h-[calc(100vh-230px)] space-y-1 overflow-y-auto p-2">
+      <nav className="max-h-[calc(100vh-190px)] space-y-1 overflow-y-auto p-2">
         {sections.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-200 px-3 py-6 text-center text-[12px] text-slate-400">Нет доступных стадий</div>
         ) : sections.map((section) => {
@@ -373,9 +380,9 @@ function StageRail({
             <a
               key={section.id}
               href={`#bmr-section-${section.id}`}
-              className={`flex gap-3 rounded-lg border px-3 py-2.5 text-left transition ${done ? 'border-emerald-200 bg-emerald-50/70' : active ? 'border-blue-200 bg-blue-50/70' : 'border-transparent hover:border-slate-200 hover:bg-slate-50'}`}
+              className={`flex gap-2.5 rounded-lg border px-2.5 py-2 text-left transition ${done ? 'border-emerald-200 bg-emerald-50/70' : active ? 'border-blue-200 bg-blue-50/70' : 'border-transparent hover:border-slate-200 hover:bg-slate-50'}`}
             >
-              <span className={`mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-md text-white ${done ? 'bg-emerald-600' : active ? 'bg-blue-600' : 'bg-slate-300'}`}>
+              <span className={`mt-0.5 inline-flex h-7 w-7 flex-none items-center justify-center rounded-md text-white ${done ? 'bg-emerald-600' : active ? 'bg-blue-600' : 'bg-slate-300'}`}>
                 {done ? <Check size={15} /> : sectionIcon(kind)}
               </span>
               <span className="min-w-0 flex-1">
@@ -420,13 +427,13 @@ function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm }: 
 function SignCell({ role, state, who, at, onSign }: { role: 'dp' | 'dok'; state: 'locked' | 'ready' | 'signed'; who?: string; at?: string; onSign?: () => void }) {
   const dok = role === 'dok'
   if (state === 'signed') return (
-    <div className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 ${dok ? 'border-emerald-200 bg-emerald-50' : 'border-indigo-200 bg-indigo-50'}`}>
-      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-white ${dok ? 'bg-emerald-600' : 'bg-indigo-600'}`}><Check size={13} /></span>
+    <div className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 ${dok ? 'border-emerald-200 bg-emerald-50' : 'border-indigo-200 bg-indigo-50'}`}>
+      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-white ${dok ? 'bg-emerald-600' : 'bg-indigo-600'}`}><Check size={12} /></span>
       <div className="leading-tight"><div className={`text-[12px] font-semibold ${dok ? 'text-emerald-900' : 'text-indigo-900'}`}>{who}</div><div className={`mono text-[10px] ${dok ? 'text-emerald-700/80' : 'text-indigo-700/80'}`}>{dok ? 'ДОК' : 'ДП'} · {at}</div></div>
     </div>
   )
-  if (state === 'locked') return <div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2.5 py-2 text-[11px] font-medium text-slate-400"><Lock size={13} /> после ДП</div>
-  return <button onClick={onSign} className={`inline-flex h-10 items-center gap-2 rounded-lg px-3 text-[13px] font-semibold text-white shadow-sm active:scale-[0.98] ${dok ? 'bg-slate-900 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-700'}`}><Pen size={14} /> Подписать · {dok ? 'ДОК' : 'ДП'}</button>
+  if (state === 'locked') return <div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-400"><Lock size={13} /> после ДП</div>
+  return <button onClick={onSign} className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-semibold text-white shadow-sm active:scale-[0.98] ${dok ? 'bg-slate-900 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-700'}`}><Pen size={13} /> Подписать · {dok ? 'ДОК' : 'ДП'}</button>
 }
 
 function fmtTime(iso?: string): string {
@@ -448,13 +455,13 @@ function SectionBlock({ section, entries, draft, closed, canDp, canDok, onSetVal
   const sid = String(section.id)
   const kind = sectionKind(section)
   const Head = (
-    <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+    <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
       <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">{sectionIcon(kind)}</span>
       <h3 className="text-[14px] font-semibold text-slate-900">{section.ordinal}. {section.title}</h3>
       {section.config?.room && <span className="mono ml-auto text-[11px] text-slate-400">{section.config.room}{section.config.sop ? ` · ${section.config.sop}` : ''}</span>}
     </div>
   )
-  const wrap = (body: React.ReactNode) => <section id={`bmr-section-${section.id}`} className="scroll-mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">{Head}{body}</section>
+  const wrap = (body: React.ReactNode) => <section id={`bmr-section-${section.id}`} className="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">{Head}{body}</section>
 
   const inputFor = (fi: number, type: string, unit?: string) => {
     const v = draft[key(sid, fi)] ?? ''
@@ -472,7 +479,7 @@ function SectionBlock({ section, entries, draft, closed, canDp, canDok, onSetVal
   if (kind === 'process_header') {
     const fields = section.config?.fields || []
     return wrap(
-      <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-2">
         <Meta label="Процесс" value={section.config?.process || section.title} />
         <Meta label="Комната / №" value={`${section.config?.room || '—'}${section.config?.room_no ? ` / ${section.config.room_no}` : ''}`} />
         {fields.map((f, fi) => (
@@ -489,7 +496,7 @@ function SectionBlock({ section, entries, draft, closed, canDp, canDok, onSetVal
       <table className="w-full">
         <thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
           <th className="w-10 px-3 py-2 text-center">№</th><th className="px-3 py-2">Технологический этап</th>
-          <th className="w-[180px] px-3 py-2">Выполнено · ДП</th><th className="w-[180px] px-3 py-2">Проверено · ДОК</th>
+          <th className="w-[170px] px-3 py-2">Выполнено · ДП</th><th className="w-[170px] px-3 py-2">Проверено · ДОК</th>
         </tr></thead>
         <tbody>
           {steps.map((st, i) => {
@@ -497,10 +504,10 @@ function SectionBlock({ section, entries, draft, closed, canDp, canDok, onSetVal
             const dpSigned = !!(dpE?.value && dpE.value.signed_by)
             return (
               <tr key={i} className="border-b border-slate-100 align-middle">
-                <td className="px-3 py-2.5 text-center mono text-[12px] font-semibold text-slate-400">{st.no || i + 1}</td>
-                <td className="px-3 py-2.5 text-[13px] text-slate-800">{st.text}</td>
-                <td className="px-3 py-2.5"><SignCell role="dp" state={sigState(dpE, dpSigned, 'dp')} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed ? () => onSign(2 * i, 'dp', `этап ${st.no || i + 1}`) : undefined} /></td>
-                <td className="px-3 py-2.5"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok')} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned ? () => onSign(2 * i + 1, 'dok', `этап ${st.no || i + 1}`) : undefined} /></td>
+                <td className="px-3 py-2 text-center mono text-[12px] font-semibold text-slate-400">{st.no || i + 1}</td>
+                <td className="px-3 py-2 text-[13px] text-slate-800">{st.text}</td>
+                <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, dpSigned, 'dp')} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed ? () => onSign(2 * i, 'dp', `этап ${st.no || i + 1}`) : undefined} /></td>
+                <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok')} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned ? () => onSign(2 * i + 1, 'dok', `этап ${st.no || i + 1}`) : undefined} /></td>
               </tr>
             )
           })}
