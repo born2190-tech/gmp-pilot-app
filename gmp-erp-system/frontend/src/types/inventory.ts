@@ -1250,9 +1250,19 @@ export interface BmrInstanceItem {
   entries: BmrEntryItem[]
   assignments?: Record<string, string[]>
   stages?: BmrStageItem[]
+  participants?: BmrParticipantItem[]
 }
 
 export interface BmrStageItem { stage: string; title: string; room: string | null }
+export interface BmrParticipantItem {
+  full_name: string | null
+  username: string | null
+  role: string | null
+  duties: string[]
+  stages: string[]
+  assigned: boolean
+  signed: boolean
+}
 export interface BmrOperatorItem { id: string; username: string; full_name: string; role: string | null; is_operator: boolean }
 export interface BmrOperatorsResponse { operators: BmrOperatorItem[] }
 

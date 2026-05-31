@@ -376,6 +376,7 @@ def _instance_dict(db: Session, instance: BmrInstance, user: CurrentUser | None 
         ],
         "assignments": instance.assignments or {},
         "stages": _stages_of(instance),
+        "participants": _participants_of(db, instance),
     }
 
 
@@ -403,6 +404,70 @@ def _stages_of(instance: BmrInstance) -> list[dict]:
             "title": str(config.get("stage_title") or section.title),
             "room": _section_room(section),
         })
+    return out
+
+
+def _participants_of(db: Session, instance: BmrInstance) -> list[dict]:
+    """Журнал участников серии (task #13): назначенные начальником цеха операторы
+    по этапам + лица, фактически поставившие e-подпись (ДП/ДОК). Аналог бумажного
+    «Журнала подписи ЗПС» в шапке BMR — роли/ФИО/этапы/статус участия (ALCOA+)."""
+    stage_title = {s["stage"]: s["title"] for s in _stages_of(instance)}
+    section_stage = {section.id: _section_stage(section) for section in instance.sections}
+    assignments = instance.assignments or {}
+
+    acc: dict[str, dict] = {}
+
+    def _rec(key: str) -> dict:
+        return acc.setdefault(key, {
+            "full_name": None, "username": None, "role": None,
+            "duties": set(), "stages": set(), "assigned": False, "signed": False,
+        })
+
+    entries = db.query(BmrEntry).filter(BmrEntry.instance_id == instance.id).all()
+    needed_ids = {str(uid) for lst in assignments.values() for uid in (lst or [])}
+    needed_ids |= {str(e.filled_by) for e in entries if e.filled_by and (e.value or {}).get("signed_by")}
+    users: dict[str, User] = {}
+    if needed_ids:
+        for u in db.query(User).filter(User.id.in_(needed_ids)).all():
+            users[str(u.id)] = u
+
+    for stage, lst in assignments.items():
+        title = stage_title.get(stage, stage)
+        for uid in (lst or []):
+            rec = _rec(str(uid))
+            rec["assigned"] = True
+            rec["duties"].add("ДП")
+            rec["stages"].add(title)
+            u = users.get(str(uid))
+            if u:
+                rec["full_name"] = u.full_name
+                rec["username"] = u.username
+                rec["role"] = u.role.name if u.role else None
+
+    for e in entries:
+        value = e.value or {}
+        if not (value.get("signed_by") and e.filled_by):
+            continue
+        rec = _rec(str(e.filled_by))
+        rec["signed"] = True
+        rec["duties"].add("ДОК" if value.get("role") == "qa" else "ДП")
+        stage = section_stage.get(e.section_id)
+        if stage:
+            rec["stages"].add(stage_title.get(stage, stage))
+        u = users.get(str(e.filled_by))
+        if u:
+            rec["full_name"] = rec["full_name"] or u.full_name
+            rec["username"] = rec["username"] or u.username
+            rec["role"] = rec["role"] or (u.role.name if u.role else None)
+        if not rec["full_name"]:
+            rec["full_name"] = value.get("signed_by")
+
+    out = [{
+        "full_name": r["full_name"], "username": r["username"], "role": r["role"],
+        "duties": sorted(r["duties"]), "stages": sorted(r["stages"]),
+        "assigned": r["assigned"], "signed": r["signed"],
+    } for r in acc.values()]
+    out.sort(key=lambda x: (not x["assigned"], x["full_name"] or ""))
     return out
 
 

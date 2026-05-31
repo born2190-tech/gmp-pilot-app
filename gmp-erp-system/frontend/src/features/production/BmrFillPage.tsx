@@ -10,7 +10,7 @@ import {
   completeBmrInstance, reviewBmrInstance, downloadBmrInstancePdf,
 } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
-import type { BmrInstanceItem, BmrEntryItem, BmrSectionItem } from '../../types/inventory'
+import type { BmrInstanceItem, BmrEntryItem, BmrSectionItem, BmrParticipantItem } from '../../types/inventory'
 
 interface Props { token: string; user: CurrentUser | null }
 
@@ -331,6 +331,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
         />
         <main className="min-w-0 space-y-3">
           {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
+          <ParticipantsJournal participants={inst.participants || []} />
           {visibleSections.length === 0 ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-[13px] text-amber-800">
               Для рабочего места {myRoom || user?.workstation_id || 'не определено'} в этой серии нет назначенной стадии.
@@ -370,6 +371,80 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
           onCancel={() => { setAction(null); setPwd('') }} onConfirm={() => void confirmAction()} />
       )}
     </div>
+  )
+}
+
+/* ---- Журнал участников серии (task #13): роли/назначенные операторы этапов ---- */
+function dutyChipClass(duty: string): string {
+  if (duty === 'ДОК') return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+  if (duty === 'ДП') return 'bg-blue-50 text-blue-700 ring-blue-200'
+  return 'bg-slate-100 text-slate-600 ring-slate-200'
+}
+
+function ParticipantsJournal({ participants }: { participants: BmrParticipantItem[] }) {
+  const [open, setOpen] = useState(false)
+  const count = participants.length
+  return (
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-left"
+      >
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-white"><Users size={15} /></span>
+        <div>
+          <div className="text-[14px] font-semibold text-slate-900">Журнал участников серии</div>
+          <div className="text-[11px] text-slate-500">Роли и назначенные операторы этапов (СОП-11 · ALCOA+)</div>
+        </div>
+        <span className="ml-auto inline-flex items-center gap-2">
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">{count}</span>
+          <ChevronRight size={16} className={`text-slate-400 transition ${open ? 'rotate-90' : ''}`} />
+        </span>
+      </button>
+      {open && (
+        count === 0 ? (
+          <div className="px-3 py-6 text-center text-[12.5px] text-slate-400">
+            Участники появятся после назначения операторов начальником цеха и первых e-подписей.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px]">
+              <thead>
+                <tr className="border-b border-slate-200 bg-white text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2">Ф.И.О.</th>
+                  <th className="px-3 py-2">Должность</th>
+                  <th className="px-3 py-2">Роль</th>
+                  <th className="px-3 py-2">Этапы</th>
+                  <th className="px-3 py-2">Участие</th>
+                </tr>
+              </thead>
+              <tbody>
+                {participants.map((p, i) => (
+                  <tr key={i} className="border-b border-slate-100 align-top text-[12.5px] text-slate-700">
+                    <td className="px-3 py-2 font-medium text-slate-900">{p.full_name || '—'}</td>
+                    <td className="px-3 py-2 text-slate-500">{p.role || '—'}</td>
+                    <td className="px-3 py-2">
+                      <span className="flex flex-wrap gap-1">
+                        {(p.duties.length ? p.duties : ['—']).map((d) => (
+                          <span key={d} className={`rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold ring-1 ring-inset ${dutyChipClass(d)}`}>{d}</span>
+                        ))}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{p.stages.length ? p.stages.join(', ') : '—'}</td>
+                    <td className="px-3 py-2">
+                      <span className="flex flex-wrap gap-1">
+                        {p.assigned && <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10.5px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200">назначен</span>}
+                        {p.signed && <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">подписал</span>}
+                        {!p.assigned && !p.signed && <span className="text-slate-400">—</span>}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+    </section>
   )
 }
 

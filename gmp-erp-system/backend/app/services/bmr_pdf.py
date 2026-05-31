@@ -114,6 +114,35 @@ def render_bmr_pdf(data: dict) -> bytes:
     elements.append(meta)
     elements.append(Spacer(1, 3 * mm))
 
+    participants = data.get("participants") or []
+    if participants:
+        elements.append(Paragraph("Журнал участников серии", sec))
+        prows = [[Paragraph("Ф.И.О.", cell_b), Paragraph("Должность", cell_b),
+                  Paragraph("Роль", cell_b), Paragraph("Этапы", cell_b), Paragraph("Участие", cell_b)]]
+        for p in participants:
+            marks = []
+            if p.get("assigned"):
+                marks.append("назначен")
+            if p.get("signed"):
+                marks.append("подписал")
+            prows.append([
+                Paragraph(p.get("full_name") or "—", cell_l),
+                Paragraph(p.get("role") or "—", cell_l),
+                Paragraph(", ".join(p.get("duties") or []) or "—", cell_l),
+                Paragraph(", ".join(p.get("stages") or []) or "—", cell_l),
+                Paragraph(" · ".join(marks) or "—", cell_l),
+            ])
+        ptbl = Table(prows, colWidths=[44 * mm, 40 * mm, 18 * mm, 60 * mm, 24 * mm], repeatRows=1)
+        ptbl.setStyle(TableStyle([
+            ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
+            ("INNERGRID", (0, 0), (-1, -1), 0.3, _GRID),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e2e8f0")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]))
+        elements.append(ptbl)
+        elements.append(Spacer(1, 3 * mm))
+
     entries = {(str(e["section_id"]), e["field_index"]): e for e in data.get("entries", [])}
     for s in data.get("sections", []):
         elements.append(Spacer(1, 2 * mm))

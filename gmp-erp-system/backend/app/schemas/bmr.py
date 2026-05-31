@@ -139,6 +139,16 @@ class BmrAssignmentsRequest(BaseModel):
     assignments: dict[str, list[str]] = Field(default_factory=dict)
 
 
+class BmrParticipantItem(BaseModel):
+    full_name: str | None = None
+    username: str | None = None
+    role: str | None = None
+    duties: list[str] = Field(default_factory=list)
+    stages: list[str] = Field(default_factory=list)
+    assigned: bool = False
+    signed: bool = False
+
+
 class BmrInstanceItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -156,6 +166,7 @@ class BmrInstanceItem(BaseModel):
     entries: list[BmrEntryItem] = Field(default_factory=list)
     assignments: dict[str, list[str]] = Field(default_factory=dict)
     stages: list[BmrStageItem] = Field(default_factory=list)
+    participants: list[BmrParticipantItem] = Field(default_factory=list)
 
 
 class BmrEntrySave(BaseModel):
