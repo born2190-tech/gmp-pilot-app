@@ -28,8 +28,13 @@ def validate_independent_signature(
     role_code = signer.role.code if signer else None
     user_id = signer.id if signer else None
     try:
-        if not signer or not signer.is_active or not verify_password(signature.password, signer.password_hash):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Неверные учётные данные подписи")
+        # Построчная подпись принимает ЛИЧНЫЙ PIN ИЛИ пароль (на планшете в перчатках
+        # PIN удобнее; пароль остаётся резервом). PIN — короткий личный код подписанта.
+        secret = signature.password
+        pin_ok = bool(signer and signer.signing_pin_hash and verify_password(secret, signer.signing_pin_hash))
+        pwd_ok = bool(signer and verify_password(secret, signer.password_hash))
+        if not signer or not signer.is_active or not (pin_ok or pwd_ok):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Неверные учётные данные подписи (PIN/пароль)")
         signer_perms = {p.code for p in signer.role.permissions}
         if not any(code in signer_perms for code in required_permissions):
             raise HTTPException(

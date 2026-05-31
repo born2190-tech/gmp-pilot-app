@@ -254,6 +254,12 @@ def seed_foundation_data(db: Session) -> None:
         departments["ADMIN"],
     )
 
+    # Личные PIN-ы для построчных e-подписей BMR (пилот). Пароль — резерв.
+    for username, pin in (("oper_ivanov", "1111"), ("oper_sidorov", "2222"), ("head_qa", "3333"), ("shift_master", "4444")):
+        row = db.query(User).filter(User.username == username).first()
+        if row is not None:
+            row.signing_pin_hash = hash_password(pin)
+
     db.flush()
     seed_specifications(db)
     seed_inventory_accounts(db)

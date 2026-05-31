@@ -44,6 +44,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Личный PIN для построчных e-подписей на планшете (хэш). Пароль — резерв для
+    # критичных действий (завершение/закрытие BMR).
+    signing_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False)
     department_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True)
     warehouse_scope: Mapped[str | None] = mapped_column(String(64), nullable=True)
