@@ -28,6 +28,7 @@ import { login, logout, me } from './lib/api'
 import { getVisibleNavItems } from './lib/permissions'
 import type { CurrentUser, LoginRequest } from './types/auth'
 import { useI18n } from './i18n/I18nProvider'
+import { LogOut } from 'lucide-react'
 
 export function App() {
   const { t } = useI18n()
@@ -91,6 +92,31 @@ export function App() {
 
   if (!token || !user) {
     return <LoginPage error={error} isLoading={isLoading} onLogin={handleLogin} />
+  }
+
+  if (user.role === 'PRODUCTION_OPERATOR') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <div className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b border-slate-200 bg-white px-4">
+          <div className="rounded-full bg-blue-50 px-3 py-1 text-[12px] font-semibold text-blue-700">
+            Оператор производства · {user.workstation_id}
+          </div>
+          <div className="ml-auto text-right">
+            <div className="text-[13px] font-semibold text-slate-900">{user.full_name}</div>
+            <div className="text-[11px] text-slate-500">Только ЭЗПС / BMR</div>
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <LogOut size={15} />
+            Выйти
+          </button>
+        </div>
+        <BmrFillPage token={token} user={user} />
+      </div>
+    )
   }
 
   const visibleNav = getVisibleNavItems(user)
