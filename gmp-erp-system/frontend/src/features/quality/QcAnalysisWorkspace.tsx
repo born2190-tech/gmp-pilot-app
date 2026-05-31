@@ -141,6 +141,25 @@ export function evaluateCompliance(spec: string, result: string): boolean | null
 let keySeq = 0
 const newKey = () => `p${++keySeq}`
 
+/** Показывает blob в заранее открытой (синхронно) вкладке; если popup был
+ * заблокирован (tab === null) — запасной путь через download-ссылку. Решает
+ * проблему «просмотр скачивает файл / ничего не происходит» (в т.ч. Tailscale). */
+function presentBlob(tab: Window | null, blob: Blob): void {
+  const url = URL.createObjectURL(blob)
+  if (tab && !tab.closed) {
+    tab.location.href = url
+  } else {
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
 function blankPc(): ParamRow {
   return { key: newKey(), category: 'physicochemical', parameter_name: '', specification: '', result_value: '', unit: '', method_reference: '', complies: null }
 }
@@ -388,16 +407,15 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
   async function openPdf(print: boolean) {
     if (!draft) return
     setError(null)
+    // Окно открываем СИНХРОННО (в обработчике клика), иначе после await
+    // браузер блокирует popup или скачивает файл (в т.ч. через Tailscale).
+    const tab = print ? null : window.open('', '_blank')
     try {
       const blob = await downloadQcReportPdf(token, draft.id)
-      if (print) {
-        printBlob(blob)
-      } else {
-        const url = URL.createObjectURL(blob)
-        window.open(url, '_blank', 'noopener,noreferrer')
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-      }
+      if (print) { printBlob(blob); return }
+      presentBlob(tab, blob)
     } catch (err) {
+      if (tab) tab.close()
       setError(err instanceof Error ? err.message : t('quality.actionFailed'))
     }
   }
@@ -437,18 +455,16 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
 
   async function viewScan(print: boolean) {
     if (!draft) return
+    const tab = print ? null : window.open('', '_blank')
     try {
       const blob = await downloadQcReportScan(token, draft.id).catch(async () => {
         // запасной путь: только что загруженный скан недоступен по lot-эндпоинту в этой сессии
         throw new Error(t('quality.actionFailed'))
       })
-      if (print) printBlob(blob)
-      else {
-        const url = URL.createObjectURL(blob)
-        window.open(url, '_blank', 'noopener,noreferrer')
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-      }
+      if (print) { printBlob(blob); return }
+      presentBlob(tab, blob)
     } catch (err) {
+      if (tab) tab.close()
       setError(err instanceof Error ? err.message : t('quality.actionFailed'))
     }
   }

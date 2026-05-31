@@ -421,12 +421,18 @@ function VerifyModal({
         </div>
 
         <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[1.5fr_1fr]">
-          <div className="border-r border-slate-200 bg-slate-100">
+          <div className="flex flex-col border-r border-slate-200 bg-slate-100">
             {pdfUrl ? (
-              <iframe title="QC scan" src={pdfUrl} className="h-full min-h-[480px] w-full" />
+              <>
+                <div className="flex justify-end border-b border-slate-200 bg-white px-2 py-1">
+                  <button type="button" onClick={() => window.open(pdfUrl, '_blank', 'noopener')}
+                    className="text-[12px] font-medium text-blue-600 hover:underline">Открыть в новой вкладке</button>
+                </div>
+                <iframe title="QC scan" src={pdfUrl} className="h-full min-h-[440px] w-full" />
+              </>
             ) : (
-              <div className="flex h-full min-h-[480px] items-center justify-center text-sm text-slate-500">
-                <FileText className="mr-2" size={16} />
+              <div className="flex h-full min-h-[480px] items-center justify-center px-4 text-center text-sm text-slate-500">
+                <FileText className="mr-2 flex-none" size={16} />
                 {t('qcVerification.loadingPdf')}
               </div>
             )}
