@@ -192,7 +192,7 @@ export function BmrFillPage({ token, user }: Props) {
 }
 
 /* ============================ FILL VIEW (Каркас C) ============================ */
-function FillView({ token, user, instanceId, onBack }: { token: string; user: CurrentUser | null; instanceId: string; onBack: () => void }) {
+export function FillView({ token, user, instanceId, onBack, readOnly = false, backLabel = 'Наряды' }: { token: string; user: CurrentUser | null; instanceId: string; onBack: () => void; readOnly?: boolean; backLabel?: string }) {
   const [inst, setInst] = useState<BmrInstanceItem | null>(null)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -204,7 +204,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   // Подписант вводит СВОИ креды на каждую подпись (общий планшет; не запоминаем сессию).
   const [signer, setSigner] = useState('')
   const [assignOpen, setAssignOpen] = useState(false)
-  const [overview, setOverview] = useState(false)
+  const [overview, setOverview] = useState(readOnly)
 
   const perms = user?.permissions || []
   const isSupervisor = perms.includes('MANAGE_PRODUCTION') || perms.includes('QA_DECISION')
@@ -232,7 +232,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
     return m
   }, [inst])
 
-  const closed = inst?.status === 'completed' || inst?.status === 'reviewed'
+  const closed = readOnly || inst?.status === 'completed' || inst?.status === 'reviewed'
   const setVal = (sid: string, fi: number, v: string) => setDraft((p) => ({ ...p, [key(sid, fi)]: v }))
 
   async function saveAll() {
@@ -320,7 +320,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
       </div>
       {/* batch bar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
-        <button onClick={onBack} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50"><ArrowRight size={14} className="rotate-180" /> Наряды</button>
+        <button onClick={onBack} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50"><ArrowRight size={14} className="rotate-180" /> {backLabel}</button>
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-[10px] font-bold text-white">B21</span>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -390,9 +390,9 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
         <div className="mx-auto flex max-w-[1680px] items-center gap-2">
           {!closed && <button disabled={busy} onClick={() => void saveAll()} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Save size={16} /> Сохранить</button>}
           {!closed && canComplete && (inst.status === 'in_progress' || inst.status === 'issued') && <button disabled={busy} onClick={() => { setAction('complete'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Check size={16} /> Завершить (ДП)</button>}
-          {inst.status === 'completed' && canDok && <button disabled={busy} onClick={() => { setAction('review'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><ShieldCheck size={16} /> Проверить (ДОК)</button>}
+          {!readOnly && inst.status === 'completed' && canDok && <button disabled={busy} onClick={() => { setAction('review'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><ShieldCheck size={16} /> Проверить (ДОК)</button>}
           <button onClick={() => void openPdf()} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-[13px] font-medium text-slate-600 hover:bg-slate-50"><FileDown size={16} /> PDF</button>
-          <span className="ml-auto text-[11px] text-slate-400">{closed ? 'BMR закрыт — только просмотр' : 'черновик автосохраняется по «Сохранить»'}</span>
+          <span className="ml-auto text-[11px] text-slate-400">{readOnly ? 'Только просмотр (надзор) — заполнение и подписи на планшетах операторов' : closed ? 'BMR закрыт — только просмотр' : 'черновик автосохраняется по «Сохранить»'}</span>
         </div>
       </div>
 

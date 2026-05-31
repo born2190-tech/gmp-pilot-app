@@ -597,7 +597,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       {fillInstanceId && (
         <BmrFillModal
           token={token}
-          user={{ username: user.username, permissions: user.permissions, role: user.role }}
+          user={user}
           instanceId={fillInstanceId}
           onClose={() => setFillInstanceId(null)}
           onChanged={() => void load()}
