@@ -91,6 +91,7 @@ import type {
   BmrInstanceItem,
   WeighingCampaignItem,
   WeighingCampaignsResponse,
+  RequisitionPrefillResponse,
   BmrOperatorsResponse,
   ProductionBatchStartRequest,
   SamplingActCreate,
@@ -1012,6 +1013,10 @@ export async function downloadReagentCardPdf(token: string, reagentId: string): 
 
 export function createRequisition(token: string, payload: RequisitionCreate): Promise<RequisitionItem> {
   return request<RequisitionItem>('/api/requisitions', 'POST', { token, body: payload })
+}
+
+export function getRequisitionPrefill(token: string, batchId: string): Promise<RequisitionPrefillResponse> {
+  return request<RequisitionPrefillResponse>(`/api/requisitions/prefill/${batchId}`, 'GET', { token })
 }
 
 export function listRequisitions(token: string, status?: string): Promise<RequisitionsResponse> {

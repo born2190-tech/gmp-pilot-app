@@ -1326,6 +1326,23 @@ export interface WeighingCampaignListItem {
 }
 export interface WeighingCampaignsResponse { campaigns: WeighingCampaignListItem[] }
 
+export interface RequisitionPrefillLine {
+  material_id: string
+  material_name: string
+  material_code: string | null
+  requested_quantity: number
+  unit: string
+}
+export interface RequisitionPrefillResponse {
+  product_name: string
+  product_series: string | null
+  production_date: string | null
+  production_order_no: string | null
+  production_batch_id: string
+  has_template: boolean
+  lines: RequisitionPrefillLine[]
+}
+
 export interface BmrStageItem { stage: string; title: string; room: string | null }
 export interface BmrParticipantItem {
   full_name: string | null

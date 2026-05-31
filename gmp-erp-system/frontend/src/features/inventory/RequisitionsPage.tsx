@@ -23,6 +23,7 @@ import {
 import {
   allocateRequisition,
   createRequisition,
+  getRequisitionPrefill,
   downloadRequisitionPdf,
   issueRequisition,
   listLots,
@@ -1197,6 +1198,7 @@ function CreateView({
   const [productionBatchId, setProductionBatchId] = useState('')
   const [batches, setBatches] = useState<ProductionBatchItem[]>([])
   const [lines, setLines] = useState<CreateLine[]>([])
+  const [autofillNote, setAutofillNote] = useState<string | null>(null)
 
   useEffect(() => {
     let ignore = false
@@ -1206,13 +1208,30 @@ function CreateView({
     return () => { ignore = true }
   }, [token])
 
-  function selectBatch(id: string) {
+  async function selectBatch(id: string) {
     setProductionBatchId(id)
+    setAutofillNote(null)
     const b = batches.find((x) => x.id === id)
     if (b) {
       setProductName(b.product_name)
       setProductSeries(b.batch_no)
       setProductionDate(b.production_date.slice(0, 10))
+    }
+    if (!id) return
+    // Автозаполнение строк из листа распределения утверждённого BMR-шаблона.
+    try {
+      const pf = await getRequisitionPrefill(token, id)
+      if (pf.production_order_no) setProductionOrderNo(pf.production_order_no)
+      if (pf.lines.length) {
+        setLines(pf.lines.map((l) => ({ id: makeId(), material_id: l.material_id, requested_quantity: String(l.requested_quantity), unit: l.unit })))
+        setAutofillNote(`Строки подставлены из BMR-рецепта (${pf.lines.length}). Проверьте и при необходимости поправьте.`)
+      } else if (pf.has_template) {
+        setAutofillNote('У BMR-шаблона нет позиций листа распределения — добавьте строки вручную.')
+      } else {
+        setAutofillNote('Нет утверждённого BMR-шаблона продукта — заполните строки вручную.')
+      }
+    } catch {
+      setAutofillNote(null)
     }
   }
 
@@ -1276,7 +1295,7 @@ function CreateView({
           <FormField label="Производственная серия (СОП-409, опц.)">
             <select
               value={productionBatchId}
-              onChange={(event) => selectBatch(event.target.value)}
+              onChange={(event) => { void selectBatch(event.target.value) }}
               className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
             >
               <option value="">— без привязки к серии —</option>
@@ -1336,6 +1355,9 @@ function CreateView({
             {t('requisitions.addLine')}
           </button>
         </div>
+        {autofillNote && (
+          <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-700">{autofillNote}</div>
+        )}
 
         {lines.length === 0 ? (
           <div className="rounded-md border-2 border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
