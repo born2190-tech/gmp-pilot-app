@@ -159,6 +159,66 @@ def _recalculate_requisition_status(db: Session, req: ProductionRequisition) -> 
 # Create requisition (production side)
 # ---------------------------------------------------------------------------
 
+def _parse_qty(raw) -> float:
+    try:
+        return float(str(raw or "0").replace(" ", "").replace(" ", "").replace(",", ".") or 0)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def prefill_requisition(db: Session, user: CurrentUser, batch_id: uuid.UUID) -> dict:
+    """Автозаполнение требования по серии: реквизиты из production_batch + строки
+    материалов из листа распределения утверждённого BMR-шаблона продукта
+    (material_code → Material, кол-во/серию). Дубли материала суммируются.
+    Возвращает черновик (оператор проверяет/правит и отправляет обычным create)."""
+    _require_any_permission(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION"))
+    from app.models.inventory import BmrTemplate  # локально: избегаем цикла импорта
+
+    batch = _get_required(db, ProductionBatch, batch_id, "Production batch")
+    template = (
+        db.query(BmrTemplate)
+        .filter(BmrTemplate.product_id == batch.product_id, BmrTemplate.status == "approved")
+        .order_by(BmrTemplate.version.desc())
+        .first()
+        if batch.product_id else None
+    )
+    agg: dict[str, dict] = {}
+    order: list[str] = []
+    if template:
+        for section in template.sections:
+            config = section.config or {}
+            if config.get("kind") != "distribution_list" or config.get("stage") != "weighing":
+                continue
+            for group in config.get("groups", []):
+                for item in group.get("items", []):
+                    code = item.get("material_code")
+                    if not code or code == "UTIL-WATER":
+                        continue
+                    material = db.query(Material).filter(Material.code == code).first()
+                    if not material:
+                        continue
+                    key = str(material.id)
+                    if key not in agg:
+                        agg[key] = {
+                            "material_id": material.id,
+                            "material_name": material.name,
+                            "material_code": material.code,
+                            "requested_quantity": 0.0,
+                            "unit": material.default_unit or "kg",
+                        }
+                        order.append(key)
+                    agg[key]["requested_quantity"] += _parse_qty(item.get("qty"))
+    return {
+        "product_name": batch.product_name,
+        "product_series": batch.batch_no,
+        "production_date": batch.production_date,
+        "production_order_no": batch.bmr_no,
+        "production_batch_id": batch.id,
+        "has_template": template is not None,
+        "lines": [agg[k] for k in order],
+    }
+
+
 def create_requisition(db: Session, user: CurrentUser, payload: RequisitionCreate) -> ProductionRequisition:
     _require_any_permission(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION"))
 

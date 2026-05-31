@@ -526,6 +526,24 @@ class RequisitionCreate(BaseModel):
     lines: list[RequisitionLineCreate] = Field(min_length=1)
 
 
+class RequisitionPrefillLine(BaseModel):
+    material_id: UUID
+    material_name: str
+    material_code: str | None = None
+    requested_quantity: float
+    unit: str
+
+
+class RequisitionPrefillResponse(BaseModel):
+    product_name: str
+    product_series: str | None = None
+    production_date: date | None = None
+    production_order_no: str | None = None
+    production_batch_id: UUID
+    has_template: bool = False
+    lines: list[RequisitionPrefillLine] = Field(default_factory=list)
+
+
 class AllocationLineUpdate(BaseModel):
     """Frontend sends updated allocation lines for one warehouse."""
     id: UUID

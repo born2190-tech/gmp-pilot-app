@@ -32,7 +32,19 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.identity import User
-from app.models.inventory import BmrInstance, BmrSection, BmrTemplate, Product
+from app.models.inventory import BmrInstance, BmrSection, BmrTemplate, Material, Product
+
+# Материалы рецепта Дапиги (для привязки листа распределения к справочнику и
+# автозаполнения требования). code → (название, тип, ед.). Идемпотентно.
+_DAPIGA_MATERIALS = [
+    ("SUB-DAPA", "Дапаглифлозин (субстанция)", "raw_material", "kg"),
+    ("EXC-MCC", "Микрокристаллическая целлюлоза (PH-102)", "raw_material", "kg"),
+    ("EXC-LACTOSE", "Лактоза моногидрат (Flowlac 90)", "raw_material", "kg"),
+    ("EXC-CROSPOV", "Кросповидон (Kollidon CL)", "raw_material", "kg"),
+    ("EXC-AEROSIL", "Коллоидный диоксид кремния (Aerosil 200M)", "raw_material", "kg"),
+    ("EXC-MGST", "Стеарат магния", "raw_material", "kg"),
+    ("COAT-OPADRY", "Opadry 85F12273 Yellow", "raw_material", "kg"),
+]
 
 ETALON_MARKER = "__etalon_dapiga_opudrivanie__"
 ETALON_TITLE = "ЗПС Дапига 10 мг — роллер-компактор (полный маршрут стадий)"
@@ -286,19 +298,19 @@ def _stages() -> list[dict]:
                 ]),
                 _distribution_list("Лист распределения сырья", "Комн. 39", [
                     {"title": "Материалы для смешивания 1", "items": [
-                        {"name": "Дапаглифлозин", "spec": "Евр.Ф", "qty": "3,690"},
-                        {"name": "Микрокристаллическая целлюлоза (PH-102)", "spec": "Евр.Ф", "qty": "51,432"},
-                        {"name": "Лактоза моногидрат (Flowlac 90)", "spec": "Евр.Ф", "qty": "15,000"},
-                        {"name": "Кросповидон (Kollidon CL)", "spec": "Евр.Ф", "qty": "3,000"},
-                        {"name": "Коллоидный диоксид кремния (Aerosil 200M)", "spec": "Евр.Ф", "qty": "1,128"},
-                        {"name": "Стеарат магния", "spec": "Евр.Ф", "qty": "0,375"},
+                        {"name": "Дапаглифлозин", "spec": "Евр.Ф", "qty": "3,690", "material_code": "SUB-DAPA"},
+                        {"name": "Микрокристаллическая целлюлоза (PH-102)", "spec": "Евр.Ф", "qty": "51,432", "material_code": "EXC-MCC"},
+                        {"name": "Лактоза моногидрат (Flowlac 90)", "spec": "Евр.Ф", "qty": "15,000", "material_code": "EXC-LACTOSE"},
+                        {"name": "Кросповидон (Kollidon CL)", "spec": "Евр.Ф", "qty": "3,000", "material_code": "EXC-CROSPOV"},
+                        {"name": "Коллоидный диоксид кремния (Aerosil 200M)", "spec": "Евр.Ф", "qty": "1,128", "material_code": "EXC-AEROSIL"},
+                        {"name": "Стеарат магния", "spec": "Евр.Ф", "qty": "0,375", "material_code": "EXC-MGST"},
                     ]},
                     {"title": "Для опудривания", "items": [
-                        {"name": "Стеарат магния (опудривание)", "spec": "Евр.Ф", "qty": "0,375"},
+                        {"name": "Стеарат магния (опудривание)", "spec": "Евр.Ф", "qty": "0,375", "material_code": "EXC-MGST"},
                     ]},
                     {"title": "Для оболочки", "items": [
-                        {"name": "Opadry 85F12273 Yellow", "spec": "Внутренний", "qty": "2,250"},
-                        {"name": "Очищенная вода", "spec": "—", "qty": "22,500"},
+                        {"name": "Opadry 85F12273 Yellow", "spec": "Внутренний", "qty": "2,250", "material_code": "COAT-OPADRY"},
+                        {"name": "Очищенная вода", "spec": "—", "qty": "22,500", "material_code": "UTIL-WATER"},
                     ]},
                 ]),
                 _equipment("Оборудование / инструмент", "Комн. 39", [
@@ -540,6 +552,14 @@ def _etalon_sections() -> list[dict]:
 # Запись шаблона (идемпотентно).
 # ---------------------------------------------------------------------------
 
+def _ensure_materials(db: Session) -> None:
+    """Идемпотентно заводит материалы рецепта Дапиги в справочник (по коду)."""
+    for code, name, item_type, unit in _DAPIGA_MATERIALS:
+        if not db.query(Material).filter(Material.code == code).first():
+            db.add(Material(code=code, name=name, item_type=item_type, default_unit=unit))
+    db.flush()
+
+
 def _find_dapiga(db: Session) -> Product | None:
     return (
         db.query(Product)
@@ -572,6 +592,8 @@ def seed_bmr_etalon(db: Session) -> None:
     product = _find_dapiga(db)
     if not product:
         return
+
+    _ensure_materials(db)
 
     creator = db.query(User).filter(User.username == "sys_admin").first()
     approver = db.query(User).filter(User.username == "head_qa").first()

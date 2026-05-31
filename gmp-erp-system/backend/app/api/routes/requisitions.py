@@ -14,6 +14,7 @@ from app.schemas.inventory import (
     IssueRequisitionRequest,
     RequisitionCreate,
     RequisitionItem,
+    RequisitionPrefillResponse,
     RequisitionsResponse,
 )
 from app.services.internal_transfer_pdf import render_internal_transfer_pdf
@@ -24,6 +25,7 @@ from app.services.requisitions import (
     get_requisition,
     issue_requisition,
     list_requisitions,
+    prefill_requisition,
     update_allocation,
 )
 
@@ -38,6 +40,15 @@ def create(
 ) -> RequisitionItem:
     req = create_requisition(db, user, payload)
     return RequisitionItem.model_validate(build_requisition_item(db, req))
+
+
+@router.get("/prefill/{batch_id}", response_model=RequisitionPrefillResponse)
+def prefill(
+    batch_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> RequisitionPrefillResponse:
+    return RequisitionPrefillResponse.model_validate(prefill_requisition(db, user, batch_id))
 
 
 @router.get("", response_model=RequisitionsResponse)
