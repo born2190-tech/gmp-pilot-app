@@ -219,6 +219,81 @@ def prefill_requisition(db: Session, user: CurrentUser, batch_id: uuid.UUID) -> 
     }
 
 
+def _spill_distribution_to_bmr(db: Session, req: ProductionRequisition, alloc_lines: list, user: CurrentUser) -> None:
+    """Ф2: при выдаче накладной заполняет лист распределения BMR серии данными
+    выданных партий — № серии сырья (supplier_lot), № аналит. листа (report_no),
+    вес (план/серию) и подпись «Выдал (Склад)». Уже заполненные/подписанные
+    ячейки не перезаписываются."""
+    if not req.production_batch_id:
+        return
+    from app.models.inventory import BmrEntry, BmrInstance
+    from app.models.identity import User
+    from app.models.quality import QCReport
+
+    instance = db.query(BmrInstance).filter(BmrInstance.production_batch_id == req.production_batch_id).first()
+    if not instance:
+        return
+    section = next(
+        (s for s in instance.sections
+         if (s.config or {}).get("kind") == "distribution_list" and (s.config or {}).get("stage") == "weighing"),
+        None,
+    )
+    if not section:
+        return
+    # material_code → [(field_base, planned_qty)]
+    code_map: dict[str, list[tuple[int, str | None]]] = {}
+    base = 0
+    for group in (section.config or {}).get("groups", []):
+        for item in group.get("items", []):
+            code_map.setdefault(item.get("material_code"), []).append((base, item.get("qty")))
+            base += 6
+
+    signer = db.get(User, user.id)
+    signer_name = signer.full_name if signer else user.username
+    now = now_utc()
+
+    def _set(field_index: int, value: dict) -> None:
+        entry = (
+            db.query(BmrEntry)
+            .filter(BmrEntry.instance_id == instance.id, BmrEntry.section_id == section.id, BmrEntry.field_index == field_index)
+            .first()
+        )
+        if entry and entry.value and (entry.value.get("signed_by") or entry.value.get("v") not in (None, "")):
+            return  # уже заполнено/подписано — не трогаем
+        if entry is None:
+            entry = BmrEntry(instance_id=instance.id, section_id=section.id, field_index=field_index)
+            db.add(entry)
+        entry.value = value
+        entry.filled_by = user.id
+        entry.filled_at = now
+
+    for alloc in alloc_lines:
+        line = db.get(RequisitionLine, alloc.requisition_line_id)
+        material = db.get(Material, line.material_id) if line else None
+        if not material:
+            continue
+        targets = code_map.get(material.code)
+        if not targets:
+            continue
+        lot = db.get(Lot, alloc.lot_id)
+        supplier_lot = (lot.supplier_lot or lot.internal_lot) if lot else None
+        qc = (
+            db.query(QCReport).filter(QCReport.lot_id == alloc.lot_id).order_by(QCReport.created_at.desc()).first()
+            if lot else None
+        )
+        report_no = qc.report_no if qc else None
+        for field_base, planned in targets:
+            if supplier_lot:
+                _set(field_base + 0, {"v": supplier_lot, "source": "requisition"})
+            if report_no:
+                _set(field_base + 1, {"v": report_no, "source": "requisition"})
+            planned_qty = _parse_qty(planned)
+            if planned_qty:
+                _set(field_base + 2, {"v": planned_qty, "source": "requisition"})
+            _set(field_base + 3, {"signed_by": signer_name, "role": "warehouse", "signed_at": now.isoformat()})
+    db.flush()
+
+
 def create_requisition(db: Session, user: CurrentUser, payload: RequisitionCreate) -> ProductionRequisition:
     _require_any_permission(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION"))
 
@@ -488,6 +563,7 @@ def issue_requisition(db: Session, user: CurrentUser, requisition_id: uuid.UUID,
 
     db.flush()
     _recalculate_requisition_status(db, req)
+    _spill_distribution_to_bmr(db, req, alloc_lines, user)
 
     write_audit(
         db, user,
