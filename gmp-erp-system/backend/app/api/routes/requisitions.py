@@ -1,4 +1,5 @@
 """Production Requisition API routes."""
+import hashlib
 from urllib.parse import quote
 from uuid import UUID
 
@@ -119,7 +120,11 @@ def download_pdf(
     material_ids = {line.material_id for line in req.lines}
     materials = db.query(Material).filter(Material.id.in_(material_ids)).all() if material_ids else []
     materials_by_id = {m.id: m for m in materials}
-    pdf_bytes = render_internal_transfer_pdf(req, materials_by_id)
+    # КР-код (QR) накладной: подписанный payload для сканирования/прослеживаемости (Ф4).
+    from app.services.document_qr import make_document_qr_payload
+    state_hash = hashlib.sha256(f"{req.requisition_no}|{req.status}|{len(req.lines)}".encode("utf-8")).hexdigest()
+    qr_payload = make_document_qr_payload("requisition", req.id, state_hash)
+    pdf_bytes = render_internal_transfer_pdf(req, materials_by_id, qr_payload=qr_payload)
 
     filename = f"requisition-{req.requisition_no}.pdf"
     # RFC 5987 for non-ASCII filenames (Cyrillic safe).

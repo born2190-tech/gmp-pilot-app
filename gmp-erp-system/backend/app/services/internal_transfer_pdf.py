@@ -88,6 +88,7 @@ def _fmt_qty(value: float) -> str:
 def render_internal_transfer_pdf(
     req: ProductionRequisition,
     materials_by_id: dict,
+    qr_payload: str | None = None,
 ) -> bytes:
     body_font, bold_font = _register_fonts()
     buffer = io.BytesIO()
@@ -136,16 +137,26 @@ def render_internal_transfer_pdf(
             ParagraphStyle("logo", fontName=bold_font, fontSize=18, leading=22, alignment=1),
         )
 
+    from app.services.document_qr import make_qr_image
+    qr_image = make_qr_image(qr_payload, size_mm=17.0) if qr_payload else None
+    appendix_cell: object = Paragraph("Приложение Ф-3 к П-4<br/>Edition №5", sop_meta)
+    if qr_image is not None:
+        appendix_cell = [
+            Paragraph("Приложение Ф-3 к П-4 · Edition №5", sop_meta),
+            qr_image,
+            Paragraph("КР-код накладной", footer),
+        ]
+
     header = Table(
         [
             [
                 logo_cell,
                 Paragraph("FE LLC NOVUGEN PHARMA", org_name),
-                Paragraph("Приложение Ф-3 к П-4<br/>Edition №5", sop_meta),
+                appendix_cell,
             ],
         ],
         colWidths=[40 * mm, 100 * mm, 42 * mm],
-        rowHeights=[14 * mm],
+        rowHeights=[26 * mm if qr_image is not None else 14 * mm],
     )
     header.setStyle(
         TableStyle(
