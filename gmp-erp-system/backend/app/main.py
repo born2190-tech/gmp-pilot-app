@@ -14,6 +14,7 @@ from app.api.routes.bmr import router as bmr_router
 from app.api.routes.bmr import instances_router as bmr_instances_router
 from app.api.routes.reagents import router as reagents_router
 from app.api.routes.requisitions import router as requisitions_router
+from app.api.routes.weighing_campaign import router as weighing_campaign_router
 from app.core.database import SessionLocal
 from app.services.seed import seed_foundation_data
 
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
     app.include_router(requisitions_router)
     app.include_router(equipment_router)
     app.include_router(reagents_router)
+    app.include_router(weighing_campaign_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:

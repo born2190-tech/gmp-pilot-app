@@ -597,3 +597,30 @@ class BmrEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     filled_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WeighingCampaign(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Межсерийная кампания взвешивания (task #14). Начальник цеха собирает серии
+    дня (одно/разные ЛС) в кампанию; ведётся сводная ведомость материалов ПО
+    СЕРИЯМ, вес фиксируется отдельно по каждой серии, одна входящая партия
+    субстанции (FEFO) делится на несколько серий. Подписи Склад/ДП/ДОК растекаются
+    в секцию распределения каждого посерийного BMR (он остаётся полным для PDF).
+
+    Структура хранится в JSONB (в стиле BMR config), чтобы не плодить таблицы:
+    - batches: [{batch_id, bmr_instance_id, batch_no, product_name, product_code}]
+    - ledger:  [{key, ingredient, unit, lot_no, cells: {batch_id: {planned, net,
+                 section_id, field_base, wh:{by,at}, dp:{by,at}, qa:{by,at}}}}]
+    """
+
+    __tablename__ = "weighing_campaigns"
+
+    code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    campaign_date: Mapped[date] = mapped_column(Date, nullable=False)
+    room: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # draft | active | completed
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    batches: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    ledger: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
