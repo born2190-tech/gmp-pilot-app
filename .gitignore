@@ -23,5 +23,8 @@ Thumbs.db
 # Project runtime data
 gmp-pilot-app/data/
 
+# Design import drops (preview/mockups — не часть исходников)
+design-imports/
+
 # Docker local overrides
 *.local.yml
