@@ -621,6 +621,7 @@ class RequisitionItem(BaseModel):
     production_order_no: str | None
     notes: str | None
     submitted_at: datetime | None
+    scan_verified_at: datetime | None = None
     created_at: datetime
     lines: list[RequisitionLineItem]
 

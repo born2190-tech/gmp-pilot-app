@@ -219,6 +219,36 @@ def prefill_requisition(db: Session, user: CurrentUser, batch_id: uuid.UUID) -> 
     }
 
 
+def verify_requisition_scan(db: Session, user: CurrentUser, requisition_id: uuid.UUID, raw: bytes, mime_type: str | None) -> ProductionRequisition:
+    """Ф4: подтверждение передачи накладной сканом её КР-кода. Распознаёт QR из
+    загруженного скана, сверяет тип/идентификатор/хэш состояния с выданной
+    накладной и ставит отметку scan_verified."""
+    import hashlib
+    from app.services.document_qr import validate_scan_document_qr
+
+    _require_any_permission(user, ("POST_RECEIPT", "VIEW_PRODUCTION", "MANAGE_PRODUCTION"))
+    req = _get_required(db, ProductionRequisition, requisition_id, "Requisition")
+    if req.status not in ("issued", "partially_issued"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Сканировать накладную можно только после её выдачи складом")
+    state_hash = hashlib.sha256(f"{req.requisition_no}|{req.status}|{len(req.lines)}".encode("utf-8")).hexdigest()
+    validate_scan_document_qr(
+        raw=raw,
+        mime_type=mime_type,
+        expected_doc_type="requisition",
+        expected_document_id=req.id,
+        expected_state_hash=state_hash,
+    )
+    req.scan_verified_at = now_utc()
+    req.scan_verified_by = user.id
+    write_audit(
+        db, user, object_type="production_requisition", object_id=str(req.id),
+        action_type="VERIFY_REQUISITION_SCAN", new_value={"requisition_no": req.requisition_no},
+    )
+    db.commit()
+    db.refresh(req)
+    return req
+
+
 def _spill_distribution_to_bmr(db: Session, req: ProductionRequisition, alloc_lines: list, user: CurrentUser) -> None:
     """Ф2: при выдаче накладной заполняет лист распределения BMR серии данными
     выданных партий — № серии сырья (supplier_lot), № аналит. листа (report_no),
@@ -667,6 +697,7 @@ def build_requisition_item(db: Session, req: ProductionRequisition) -> dict:
         "production_order_no": req.production_order_no,
         "notes": req.notes,
         "submitted_at": req.submitted_at,
+        "scan_verified_at": req.scan_verified_at,
         "created_at": req.created_at,
         "lines": result_lines,
     }

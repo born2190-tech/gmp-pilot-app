@@ -3,7 +3,7 @@ import hashlib
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -28,6 +28,7 @@ from app.services.requisitions import (
     list_requisitions,
     prefill_requisition,
     update_allocation,
+    verify_requisition_scan,
 )
 
 router = APIRouter(prefix="/api/requisitions", tags=["requisitions"])
@@ -105,6 +106,18 @@ def issue(
 ) -> RequisitionItem:
     """Sign and issue all allocation lines for this warehouse. Creates InventoryMovements."""
     req = issue_requisition(db, user, requisition_id, payload)
+    return RequisitionItem.model_validate(build_requisition_item(db, req))
+
+
+@router.post("/{requisition_id}/verify-scan", response_model=RequisitionItem)
+async def verify_scan(
+    requisition_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> RequisitionItem:
+    raw = await file.read()
+    req = verify_requisition_scan(db, user, requisition_id, raw, file.content_type)
     return RequisitionItem.model_validate(build_requisition_item(db, req))
 
 

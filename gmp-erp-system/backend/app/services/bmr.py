@@ -554,7 +554,8 @@ def _stage_route(db: Session, instance: BmrInstance) -> list[dict]:
     return out
 
 
-def _requisition_issued_for_batch(db: Session, batch_id) -> bool:
+def _requisition_ready_for_batch(db: Session, batch_id) -> bool:
+    """Накладная серии выдана складом И подтверждена сканом КР-кода (Ф3+Ф4)."""
     if not batch_id:
         return False
     return (
@@ -562,6 +563,7 @@ def _requisition_issued_for_batch(db: Session, batch_id) -> bool:
         .filter(
             ProductionRequisition.production_batch_id == batch_id,
             ProductionRequisition.status.in_(("issued", "partially_issued")),
+            ProductionRequisition.scan_verified_at.isnot(None),
         )
         .first()
         is not None
@@ -569,14 +571,15 @@ def _requisition_issued_for_batch(db: Session, batch_id) -> bool:
 
 
 def _ensure_weighing_gate(db: Session, instance: BmrInstance, section: BmrInstanceSection) -> None:
-    """Ф3: стадию взвешивания нельзя заполнять/подписывать, пока накладная
-    (требование) на серию не выдана складом (FEFO)."""
+    """Ф3+Ф4: стадию взвешивания нельзя заполнять/подписывать, пока накладная
+    (требование) на серию не выдана складом (FEFO) и не подтверждена сканом
+    КР-кода."""
     if (section.config or {}).get("stage") != "weighing":
         return
-    if not _requisition_issued_for_batch(db, instance.production_batch_id):
+    if not _requisition_ready_for_batch(db, instance.production_batch_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Стадия взвешивания заблокирована: сначала производство формирует требование, а склад выдаёт накладную (FEFO).",
+            detail="Стадия взвешивания заблокирована: требование должно быть выдано складом (FEFO) и накладная подтверждена сканом КР-кода.",
         )
 
 

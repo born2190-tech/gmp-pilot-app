@@ -1041,6 +1041,7 @@ export interface RequisitionItem {
   production_order_no: string | null
   notes: string | null
   submitted_at: string | null
+  scan_verified_at?: string | null
   created_at: string
   lines: RequisitionLineItem[]
 }

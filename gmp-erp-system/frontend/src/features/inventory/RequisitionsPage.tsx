@@ -14,6 +14,7 @@ import {
   PenLine,
   Plus,
   Printer,
+  ScanLine,
   Search,
   ShieldCheck,
   Trash2,
@@ -24,6 +25,7 @@ import {
   allocateRequisition,
   createRequisition,
   getRequisitionPrefill,
+  verifyRequisitionScan,
   downloadRequisitionPdf,
   issueRequisition,
   listLots,
@@ -350,6 +352,8 @@ export function RequisitionsPage({ token, user }: RequisitionsPageProps) {
         onRemoveAlloc={handleRemoveAlloc}
         onAddLot={handleAddLot}
         onIssue={handleIssue}
+        onVerified={(r) => { setSelected(r); void loadData() }}
+        canVerifyScan={canIssue || canCreate}
       />
     )
   }
@@ -636,6 +640,8 @@ interface DetailViewProps {
   onRemoveAlloc: (allocId: string) => void
   onAddLot: (lineId: string, lotId: string, qty: number) => Promise<void>
   onIssue: (password: string, reason: string) => Promise<void>
+  onVerified: (req: RequisitionItem) => void
+  canVerifyScan: boolean
 }
 
 function DetailView({
@@ -656,7 +662,10 @@ function DetailView({
   onRemoveAlloc,
   onAddLot,
   onIssue,
+  onVerified,
+  canVerifyScan,
 }: DetailViewProps) {
+  const [scanErr, setScanErr] = useState<string | null>(null)
   const [expandedLines, setExpandedLines] = useState<string[]>(req.lines.map((l) => l.id))
   const [allocEdits, setAllocEdits] = useState<Record<string, string>>({})
   const [addingFor, setAddingFor] = useState<string | null>(null)
@@ -774,7 +783,30 @@ function DetailView({
               {t('requisitions.allocate')}
             </button>
           )}
+          {req.scan_verified_at ? (
+            <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-700" title="Накладная подтверждена сканом КР-кода">
+              <CheckCircle2 size={15} /> Скан подтверждён
+            </span>
+          ) : ['issued', 'partially_issued'].includes(req.status) && canVerifyScan ? (
+            <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-3 text-sm font-medium text-blue-700 hover:bg-blue-100" title="Загрузите скан печатной накладной с КР-кодом">
+              <ScanLine size={15} /> Подтвердить сканом
+              <input
+                type="file"
+                accept="application/pdf,image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!f) return
+                  setScanErr(null)
+                  try { onVerified(await verifyRequisitionScan(token, req.id, f)) }
+                  catch (err) { setScanErr(err instanceof Error ? err.message : 'Скан не принят') }
+                }}
+              />
+            </label>
+          ) : null}
         </div>
+        {scanErr && <div className="mt-1 rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-[12.5px] text-rose-700">{scanErr}</div>}
       </div>
 
       {error && (

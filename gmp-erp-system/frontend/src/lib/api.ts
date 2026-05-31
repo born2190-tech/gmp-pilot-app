@@ -1019,6 +1019,22 @@ export function getRequisitionPrefill(token: string, batchId: string): Promise<R
   return request<RequisitionPrefillResponse>(`/api/requisitions/prefill/${batchId}`, 'GET', { token })
 }
 
+export async function verifyRequisitionScan(token: string, requisitionId: string, file: File): Promise<RequisitionItem> {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  const response = await fetch(`/api/requisitions/${requisitionId}/verify-scan`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`
+    try { const p = await response.json(); if (typeof p.detail === 'string') detail = p.detail } catch { /* ignore */ }
+    throw new Error(detail)
+  }
+  return (await response.json()) as RequisitionItem
+}
+
 export function listRequisitions(token: string, status?: string): Promise<RequisitionsResponse> {
   return request<RequisitionsResponse>('/api/requisitions', 'GET', { token, query: status ? { status } : undefined })
 }
