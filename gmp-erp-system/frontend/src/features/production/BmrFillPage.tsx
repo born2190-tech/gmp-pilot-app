@@ -38,6 +38,35 @@ function roomFromWorkstation(ws?: string): string | null {
 type EntryMap = Record<string, BmrEntryItem>
 const key = (sid: string, fi: number) => `${sid}:${fi}`
 
+function sectionKind(section: BmrSectionItem): string {
+  return section.config?.kind || section.section_type
+}
+
+function fieldDone(entry: BmrEntryItem | undefined, draftValue: string | undefined): boolean {
+  if (entry?.value?.signed_by) return true
+  if (entry?.value && 'v' in entry.value && entry.value.v !== null && entry.value.v !== '') return true
+  return draftValue !== undefined && draftValue !== ''
+}
+
+function sectionProgress(section: BmrSectionItem, entries: EntryMap, draft: Record<string, string>): { done: number; total: number } {
+  const sid = String(section.id)
+  const fields = section.config?.fields || []
+  const total = fields.length
+  if (!total) return { done: 0, total: 0 }
+  let done = 0
+  for (let i = 0; i < fields.length; i += 1) {
+    if (fieldDone(entries[key(sid, i)], draft[key(sid, i)])) done += 1
+  }
+  return { done, total }
+}
+
+function sectionIcon(kind: string) {
+  if (kind === 'environment') return <Thermometer size={15} />
+  if (kind === 'equipment') return <Gauge size={15} />
+  if (kind === 'checklist') return <ClipboardCheck size={15} />
+  return <Layers size={15} />
+}
+
 /* ============================ PAGE ============================ */
 export function BmrFillPage({ token, user }: Props) {
   const [list, setList] = useState<{ batchId: string; instanceId: string; batchNo: string | null; title: string; status: string; room: string | null }[]>([])
@@ -70,14 +99,18 @@ export function BmrFillPage({ token, user }: Props) {
   if (openId) return <FillView token={token} user={user} instanceId={openId} onBack={() => { setOpenId(null); void loadList() }} />
 
   const myRoom = roomFromWorkstation(user?.workstation_id)
+  const isSupervisor = (user?.permissions || []).some((p) => p === 'MANAGE_PRODUCTION' || p === 'QA_DECISION')
   return (
-    <div className="mx-auto max-w-5xl p-6">
+    <div className="mx-auto max-w-6xl p-6">
       <div className="mb-5 flex items-center gap-3">
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white"><ClipboardCheck size={20} /></span>
         <div>
           <h1 className="text-[22px] font-bold tracking-tight text-slate-900">Заполнение BMR / ЗПС</h1>
           <p className="text-[13px] text-slate-500">Рабочее место цеха · электронный журнал записи производства серии (СОП-11){myRoom ? ` · ${myRoom}` : ''}</p>
         </div>
+        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${isSupervisor ? 'bg-slate-100 text-slate-700 ring-slate-200' : 'bg-blue-50 text-blue-700 ring-blue-200'}`}>
+          {isSupervisor ? 'Надзор: все стадии' : 'Оператор: только своя комната'}
+        </span>
         <button onClick={() => void loadList()} className="ml-auto inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-600 hover:bg-slate-50">Обновить</button>
       </div>
       {error && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
@@ -120,7 +153,9 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   const [pwd, setPwd] = useState('')
 
   const perms = user?.permissions || []
+  const isSupervisor = perms.includes('MANAGE_PRODUCTION') || perms.includes('QA_DECISION')
   const canDp = perms.includes('EXECUTE_BMR') || perms.includes('MANAGE_PRODUCTION')
+  const canComplete = perms.includes('MANAGE_PRODUCTION')
   const canDok = perms.includes('QA_DECISION')
 
   const load = useCallback(async () => {
@@ -197,11 +232,14 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   if (!inst) return <div className="flex items-center gap-2 p-10 text-slate-400"><Loader2 size={18} className="animate-spin" /> загрузка BMR…</div>
 
   const myRoom = roomFromWorkstation(user?.workstation_id)
-  const stageRoom = inst.sections.map((s) => s.config?.room).find(Boolean) || null
-  const roomMismatch = myRoom && stageRoom && myRoom !== stageRoom
+  const visibleSections = inst.sections
+  const progressTotal = visibleSections.reduce((acc, s) => {
+    const p = sectionProgress(s, entries, draft)
+    return { done: acc.done + p.done, total: acc.total + p.total }
+  }, { done: 0, total: 0 })
 
   return (
-    <div className="min-h-screen bg-[#eef1f5] pb-40">
+    <div className="min-h-screen bg-[#eef1f5] pb-36">
       {/* OS strip */}
       <div className="flex items-center justify-between bg-slate-900 px-4 py-1.5 text-[11px] text-slate-300">
         <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-1.5 py-0.5 font-semibold text-white"><DoorOpen size={12} /> {myRoom || 'Рабочее место'}</span>
@@ -224,26 +262,41 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
         </div>
       </div>
 
-      {roomMismatch && (
-        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12px] text-amber-700">
-          <Eye size={14} /> Стадия выполняется в {stageRoom}, ваше рабочее место — {myRoom}. Просмотр; редактирование — с планшета комнаты стадии.
+      {!isSupervisor && (
+        <div className="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2 text-[12px] text-blue-700">
+          <Eye size={14} /> Показаны только секции рабочего места {myRoom || user?.workstation_id || 'не определено'}; остальные стадии скрыты GMP-scope доступом.
         </div>
       )}
 
-      <div className="mx-auto max-w-5xl space-y-4 p-4">
-        {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
-        {inst.sections.map((s) => (
-          <SectionBlock key={s.id} section={s} entries={entries} draft={draft} closed={!!closed}
-            canDp={canDp} canDok={canDok} onSetVal={setVal}
-            onSign={(fi, role, label) => setDock({ sectionId: String(s.id), fieldIndex: fi, role, label })} />
-        ))}
+      <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 xl:grid-cols-[300px_minmax(0,1fr)]">
+        <StageRail
+          sections={visibleSections}
+          entries={entries}
+          draft={draft}
+          myRoom={myRoom}
+          isSupervisor={isSupervisor}
+          progress={progressTotal}
+          status={inst.status}
+        />
+        <main className="min-w-0 space-y-4">
+          {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
+          {visibleSections.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-[13px] text-amber-800">
+              Для рабочего места {myRoom || user?.workstation_id || 'не определено'} в этой серии нет назначенной стадии.
+            </div>
+          ) : visibleSections.map((s) => (
+            <SectionBlock key={s.id} section={s} entries={entries} draft={draft} closed={!!closed}
+              canDp={canDp} canDok={canDok} onSetVal={setVal}
+              onSign={(fi, role, label) => setDock({ sectionId: String(s.id), fieldIndex: fi, role, label })} />
+          ))}
+        </main>
       </div>
 
       {/* footer action bar */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center gap-2">
+        <div className="mx-auto flex max-w-[1400px] items-center gap-2">
           {!closed && <button disabled={busy} onClick={() => void saveAll()} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Save size={16} /> Сохранить</button>}
-          {!closed && canDp && (inst.status === 'in_progress' || inst.status === 'issued') && <button disabled={busy} onClick={() => { setAction('complete'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Check size={16} /> Завершить (ДП)</button>}
+          {!closed && canComplete && (inst.status === 'in_progress' || inst.status === 'issued') && <button disabled={busy} onClick={() => { setAction('complete'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Check size={16} /> Завершить (ДП)</button>}
           {inst.status === 'completed' && canDok && <button disabled={busy} onClick={() => { setAction('review'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><ShieldCheck size={16} /> Проверить (ДОК)</button>}
           <button onClick={() => void openPdf()} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-[13px] font-medium text-slate-600 hover:bg-slate-50"><FileDown size={16} /> PDF</button>
           <span className="ml-auto text-[11px] text-slate-400">{closed ? 'BMR закрыт — только просмотр' : 'черновик автосохраняется по «Сохранить»'}</span>
@@ -261,6 +314,76 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
           onCancel={() => { setAction(null); setPwd('') }} onConfirm={() => void confirmAction()} />
       )}
     </div>
+  )
+}
+
+function StageRail({
+  sections,
+  entries,
+  draft,
+  myRoom,
+  isSupervisor,
+  progress,
+  status,
+}: {
+  sections: BmrSectionItem[]
+  entries: EntryMap
+  draft: Record<string, string>
+  myRoom: string | null
+  isSupervisor: boolean
+  progress: { done: number; total: number }
+  status: string
+}) {
+  const percent = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
+  return (
+    <aside className="self-start rounded-xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-4">
+      <div className="border-b border-slate-200 px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Маршрут серии</div>
+            <div className="mt-1 text-[14px] font-semibold text-slate-900">{isSupervisor ? 'Обзор всех стадий' : myRoom || 'Комната не определена'}</div>
+          </div>
+          <StatusChip status={status} />
+        </div>
+        <div className="mt-3">
+          <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
+            <span>Заполнено</span>
+            <span className="mono">{progress.done}/{progress.total || 0}</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-blue-600" style={{ width: `${percent}%` }} />
+          </div>
+        </div>
+      </div>
+      <nav className="max-h-[calc(100vh-230px)] space-y-1 overflow-y-auto p-2">
+        {sections.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-6 text-center text-[12px] text-slate-400">Нет доступных стадий</div>
+        ) : sections.map((section) => {
+          const p = sectionProgress(section, entries, draft)
+          const done = p.total > 0 && p.done >= p.total
+          const active = p.done > 0 && !done
+          const kind = sectionKind(section)
+          return (
+            <a
+              key={section.id}
+              href={`#bmr-section-${section.id}`}
+              className={`flex gap-3 rounded-lg border px-3 py-2.5 text-left transition ${done ? 'border-emerald-200 bg-emerald-50/70' : active ? 'border-blue-200 bg-blue-50/70' : 'border-transparent hover:border-slate-200 hover:bg-slate-50'}`}
+            >
+              <span className={`mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-md text-white ${done ? 'bg-emerald-600' : active ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                {done ? <Check size={15} /> : sectionIcon(kind)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-semibold text-slate-900">{section.ordinal}. {section.title}</span>
+                <span className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  <span className="truncate">{section.config?.room || 'Общая секция'}</span>
+                  <span className="mono flex-none">{p.done}/{p.total || 0}</span>
+                </span>
+              </span>
+            </a>
+          )
+        })}
+      </nav>
+    </aside>
   )
 }
 
@@ -317,15 +440,15 @@ function SectionBlock({ section, entries, draft, closed, canDp, canDok, onSetVal
   onSign: (fi: number, role: 'dp' | 'dok', label: string) => void
 }) {
   const sid = String(section.id)
-  const kind = section.config?.kind || section.section_type
+  const kind = sectionKind(section)
   const Head = (
     <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-      <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">{kind === 'environment' ? <Thermometer size={15} /> : kind === 'equipment' ? <Gauge size={15} /> : kind === 'checklist' ? <ClipboardCheck size={15} /> : <Layers size={15} />}</span>
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">{sectionIcon(kind)}</span>
       <h3 className="text-[14px] font-semibold text-slate-900">{section.ordinal}. {section.title}</h3>
       {section.config?.room && <span className="mono ml-auto text-[11px] text-slate-400">{section.config.room}{section.config.sop ? ` · ${section.config.sop}` : ''}</span>}
     </div>
   )
-  const wrap = (body: React.ReactNode) => <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">{Head}{body}</div>
+  const wrap = (body: React.ReactNode) => <section id={`bmr-section-${section.id}`} className="scroll-mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">{Head}{body}</section>
 
   const inputFor = (fi: number, type: string, unit?: string) => {
     const v = draft[key(sid, fi)] ?? ''

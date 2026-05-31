@@ -235,6 +235,16 @@ def seed_foundation_data(db: Session) -> None:
         roles["SHIFT_MASTER"],
         departments["PRODUCTION"],
     )
+    # Личные операторские аккаунты (роль «Оператор производства» — только своя
+    # функция/комната, без надзора). Комната определяется рабочим местом при входе.
+    get_or_create_user(
+        db, "oper_ivanov", "Иванов Иван (оператор ДП)", "op123",
+        roles["PRODUCTION_OPERATOR"], departments["PRODUCTION"],
+    )
+    get_or_create_user(
+        db, "oper_sidorov", "Сидоров Сергей (оператор ДП)", "op123",
+        roles["PRODUCTION_OPERATOR"], departments["PRODUCTION"],
+    )
     get_or_create_user(
         db,
         "sys_admin",

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+import re
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -260,14 +261,20 @@ def create_instance_for_batch(db: Session, user: CurrentUser, batch: ProductionB
     return instance
 
 
-def _instance_dict(db: Session, instance: BmrInstance) -> dict:
+def _instance_dict(db: Session, instance: BmrInstance, user: CurrentUser | None = None) -> dict:
     batch = db.get(ProductionBatch, instance.production_batch_id)
-    rows = (
+    sections = _visible_sections(instance, user) if user else list(instance.sections)
+    section_ids = {s.id for s in sections}
+    rows = []
+    entries_query = (
         db.query(BmrEntry, User.full_name)
         .outerjoin(User, User.id == BmrEntry.filled_by)
         .filter(BmrEntry.instance_id == instance.id)
-        .all()
     )
+    if not user:
+        rows = entries_query.all()
+    elif section_ids:
+        rows = entries_query.filter(BmrEntry.section_id.in_(section_ids)).all()
     return {
         "id": instance.id,
         "production_batch_id": instance.production_batch_id,
@@ -281,7 +288,7 @@ def _instance_dict(db: Session, instance: BmrInstance) -> dict:
         "reviewed_at": instance.reviewed_at,
         "sections": [
             {"id": s.id, "ordinal": s.ordinal, "section_type": s.section_type, "title": s.title, "config": s.config or {}}
-            for s in instance.sections
+            for s in sections
         ],
         "entries": [
             {"section_id": e.section_id, "field_index": e.field_index, "value": e.value,
@@ -296,6 +303,66 @@ def _instance_dict(db: Session, instance: BmrInstance) -> dict:
 # ---------------------------------------------------------------------------
 
 _FILL = ("EXECUTE_BMR", "MANAGE_PRODUCTION")
+
+
+def _room_from_workstation(workstation_id: str | None) -> str | None:
+    if not workstation_id:
+        return None
+    match = re.search(r"(\d{2,3})$", workstation_id.strip())
+    return f"Комн. {match.group(1)}" if match else None
+
+
+def _is_bmr_supervisor(user: CurrentUser) -> bool:
+    return "MANAGE_PRODUCTION" in user.permissions or "QA_DECISION" in user.permissions
+
+
+def _section_room(section: BmrInstanceSection) -> str | None:
+    room = (section.config or {}).get("room")
+    return str(room).strip() if room else None
+
+
+def _section_visible_for_user(section: BmrInstanceSection, user: CurrentUser) -> bool:
+    if _is_bmr_supervisor(user):
+        return True
+    room = _section_room(section)
+    if not room:
+        return True
+    return room == _room_from_workstation(user.workstation_id)
+
+
+def _has_user_room_stage(instance: BmrInstance, user: CurrentUser) -> bool:
+    if _is_bmr_supervisor(user):
+        return True
+    user_room = _room_from_workstation(user.workstation_id)
+    if not user_room:
+        return False
+    return any(_section_room(section) == user_room for section in instance.sections)
+
+
+def _visible_sections(instance: BmrInstance, user: CurrentUser) -> list[BmrInstanceSection]:
+    if not _has_user_room_stage(instance, user):
+        return []
+    return [section for section in instance.sections if _section_visible_for_user(section, user)]
+
+
+def _ensure_section_access(section: BmrInstanceSection, user: CurrentUser) -> None:
+    if not _section_visible_for_user(section, user):
+        room = _section_room(section) or "общая секция"
+        user_room = _room_from_workstation(user.workstation_id) or user.workstation_id or "не определено"
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Секция относится к {room}; ваше рабочее место: {user_room}",
+        )
+
+
+def _ensure_instance_scope(instance: BmrInstance, user: CurrentUser) -> None:
+    if _has_user_room_stage(instance, user):
+        return
+    user_room = _room_from_workstation(user.workstation_id) or user.workstation_id or "не определено"
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"В этой серии нет стадии для вашего рабочего места: {user_room}",
+    )
 
 
 def _get_instance(db: Session, instance_id: UUID) -> BmrInstance:
@@ -317,10 +384,13 @@ def save_entries(db: Session, user: CurrentUser, instance_id: UUID, payload: Bmr
     inst = _get_instance(db, instance_id)
     if inst.status in ("completed", "reviewed"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR закрыт — правка запрещена")
-    section_ids = {s.id for s in inst.sections}
+    _ensure_instance_scope(inst, user)
+    section_map = {s.id: s for s in inst.sections}
     for item in payload.entries:
-        if item.section_id not in section_ids:
+        section = section_map.get(item.section_id)
+        if not section:
             continue
+        _ensure_section_access(section, user)
         entry = (
             db.query(BmrEntry)
             .filter(BmrEntry.section_id == item.section_id, BmrEntry.field_index == item.field_index)
@@ -335,16 +405,18 @@ def save_entries(db: Session, user: CurrentUser, instance_id: UUID, payload: Bmr
     _mark_started(inst, user)
     db.commit()
     db.refresh(inst)
-    return _instance_dict(db, inst)
+    return _instance_dict(db, inst, user)
 
 
 def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSignRequest) -> dict:
     inst = _get_instance(db, instance_id)
     if inst.status in ("completed", "reviewed"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR закрыт — подпись запрещена")
+    _ensure_instance_scope(inst, user)
     section = next((s for s in inst.sections if s.id == payload.section_id), None)
     if not section:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Секция не найдена")
+    _ensure_section_access(section, user)
     fields = (section.config or {}).get("fields", [])
     if payload.field_index < 0 or payload.field_index >= len(fields):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Поле не найдено")
@@ -378,12 +450,12 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
     )
     db.commit()
     db.refresh(inst)
-    return _instance_dict(db, inst)
+    return _instance_dict(db, inst, user)
 
 
 def complete_instance(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrInstanceActionRequest) -> dict:
     """Производство фиксирует, что BMR заполнен (СОП-11 п.5.2.7.14)."""
-    _require_any(user, _FILL)
+    _require_any(user, ("MANAGE_PRODUCTION",))
     inst = _get_instance(db, instance_id)
     if inst.status not in ("in_progress", "issued"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR уже завершён или проверен")
@@ -395,7 +467,7 @@ def complete_instance(db: Session, user: CurrentUser, instance_id: UUID, payload
                 action_type="COMPLETE_BMR", new_value={"status": inst.status}, reason=payload.reason)
     db.commit()
     db.refresh(inst)
-    return _instance_dict(db, inst)
+    return _instance_dict(db, inst, user)
 
 
 def review_instance(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrInstanceActionRequest) -> dict:
@@ -412,7 +484,7 @@ def review_instance(db: Session, user: CurrentUser, instance_id: UUID, payload: 
                 action_type="REVIEW_BMR", new_value={"status": inst.status}, reason=payload.reason)
     db.commit()
     db.refresh(inst)
-    return _instance_dict(db, inst)
+    return _instance_dict(db, inst, user)
 
 
 def get_instance(db: Session, user: CurrentUser, instance_id: UUID) -> dict:
@@ -420,10 +492,14 @@ def get_instance(db: Session, user: CurrentUser, instance_id: UUID) -> dict:
     inst = db.get(BmrInstance, instance_id)
     if not inst:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BMR instance not found")
-    return _instance_dict(db, inst)
+    return _instance_dict(db, inst, user)
 
 
 def get_instance_for_batch(db: Session, user: CurrentUser, batch_id: UUID) -> dict | None:
     _require_any(user, _VIEW + ("EXECUTE_BMR",))
     inst = db.query(BmrInstance).filter(BmrInstance.production_batch_id == batch_id).first()
-    return _instance_dict(db, inst) if inst else None
+    if not inst:
+        return None
+    if not _visible_sections(inst, user):
+        return None
+    return _instance_dict(db, inst, user)
