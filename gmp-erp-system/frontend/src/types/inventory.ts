@@ -1279,6 +1279,53 @@ export interface BmrRouteStageItem {
   who: string
 }
 
+export interface WeighingCampaignSig { by: string; at: string }
+export interface WeighingCampaignCell {
+  planned?: string | null
+  net?: number | null
+  section_id?: string
+  field_base?: number
+  wh?: WeighingCampaignSig | null
+  dp?: WeighingCampaignSig | null
+  qa?: WeighingCampaignSig | null
+}
+export interface WeighingCampaignBatchRef {
+  batch_id: string
+  bmr_instance_id: string | null
+  batch_no: string
+  product_name: string
+  product_code: string
+}
+export interface WeighingCampaignLedgerRow {
+  key: string
+  ingredient: string
+  unit: string
+  lot_no: string | null
+  cells: Record<string, WeighingCampaignCell>
+}
+export interface WeighingCampaignItem {
+  id: string
+  code: string
+  title: string
+  campaign_date: string
+  room: string | null
+  status: string
+  notes: string | null
+  batches: WeighingCampaignBatchRef[]
+  ledger: WeighingCampaignLedgerRow[]
+}
+export interface WeighingCampaignListItem {
+  id: string
+  code: string
+  title: string
+  campaign_date: string
+  room: string | null
+  status: string
+  series_count: number
+  updated_at: string | null
+}
+export interface WeighingCampaignsResponse { campaigns: WeighingCampaignListItem[] }
+
 export interface BmrStageItem { stage: string; title: string; room: string | null }
 export interface BmrParticipantItem {
   full_name: string | null

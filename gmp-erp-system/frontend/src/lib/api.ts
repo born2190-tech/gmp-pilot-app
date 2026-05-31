@@ -89,6 +89,8 @@ import type {
   BmrTemplateInput,
   BmrBatchInstanceResponse,
   BmrInstanceItem,
+  WeighingCampaignItem,
+  WeighingCampaignsResponse,
   BmrOperatorsResponse,
   ProductionBatchStartRequest,
   SamplingActCreate,
@@ -112,7 +114,7 @@ import type {
   ReagentsResponse,
 } from '../types/inventory'
 
-type Method = 'GET' | 'POST' | 'PATCH' | 'PUT'
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
 export type LotsQuery = Record<string, string | number | undefined> & {
   date_type?: 'arrival' | 'expiry'
@@ -1109,6 +1111,35 @@ export function listBmrOperators(token: string): Promise<BmrOperatorsResponse> {
 
 export function setBmrAssignments(token: string, id: string, assignments: Record<string, string[]>): Promise<BmrInstanceItem> {
   return request<BmrInstanceItem>(`/api/bmr/instances/${id}/assignments`, 'PUT', { token, body: { assignments } })
+}
+
+// ── Межсерийная кампания взвешивания (#14) ──────────────────────────────────
+export function listWeighingCampaigns(token: string): Promise<WeighingCampaignsResponse> {
+  return request<WeighingCampaignsResponse>('/api/weighing-campaigns', 'GET', { token })
+}
+export function createWeighingCampaign(token: string, body: { campaign_date: string; room?: string | null; title?: string | null; batch_ids: string[] }): Promise<WeighingCampaignItem> {
+  return request<WeighingCampaignItem>('/api/weighing-campaigns', 'POST', { token, body })
+}
+export function getWeighingCampaign(token: string, id: string): Promise<WeighingCampaignItem> {
+  return request<WeighingCampaignItem>(`/api/weighing-campaigns/${id}`, 'GET', { token })
+}
+export function addWeighingSeries(token: string, id: string, batch_ids: string[]): Promise<WeighingCampaignItem> {
+  return request<WeighingCampaignItem>(`/api/weighing-campaigns/${id}/series`, 'POST', { token, body: { batch_ids } })
+}
+export function removeWeighingSeries(token: string, id: string, batchId: string): Promise<WeighingCampaignItem> {
+  return request<WeighingCampaignItem>(`/api/weighing-campaigns/${id}/series/${batchId}`, 'DELETE', { token })
+}
+export function setWeighingLot(token: string, id: string, ingredient_key: string, lot_no: string | null): Promise<WeighingCampaignItem> {
+  return request<WeighingCampaignItem>(`/api/weighing-campaigns/${id}/lot`, 'PUT', { token, body: { ingredient_key, lot_no } })
+}
+export function saveWeighingNet(token: string, id: string, body: { ingredient_key: string; batch_id: string; net: number | null }): Promise<WeighingCampaignItem> {
+  return request<WeighingCampaignItem>(`/api/weighing-campaigns/${id}/net`, 'PUT', { token, body })
+}
+export function signWeighingCell(token: string, id: string, body: { ingredient_key: string; batch_id: string; role: 'warehouse' | 'dp' | 'qa'; username: string; password: string; meaning: string; reason: string }): Promise<WeighingCampaignItem> {
+  return request<WeighingCampaignItem>(`/api/weighing-campaigns/${id}/sign`, 'POST', { token, body })
+}
+export function setWeighingStatus(token: string, id: string, status: string): Promise<WeighingCampaignItem> {
+  return request<WeighingCampaignItem>(`/api/weighing-campaigns/${id}/status/${status}`, 'POST', { token })
 }
 
 export function saveBmrEntries(token: string, id: string, entries: { section_id: string; field_index: number; value: unknown }[]): Promise<BmrInstanceItem> {

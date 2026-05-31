@@ -23,6 +23,7 @@ import { ReagentsRegistryPage } from './features/quality/ReagentsRegistryPage'
 import { ProductionBatchesPage } from './features/production/ProductionBatchesPage'
 import { BmrTemplatesPage } from './features/production/BmrTemplatesPage'
 import { BmrFillPage } from './features/production/BmrFillPage'
+import { WeighingCampaignPage } from './features/production/WeighingCampaignPage'
 import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
 import { login, logout, me } from './lib/api'
 import { getVisibleNavItems } from './lib/permissions'
@@ -138,6 +139,8 @@ export function App() {
       <BmrTemplatesPage token={token} user={user} />
     ) : route === 'bmr' ? (
       <BmrFillPage token={token} user={user} />
+    ) : route === 'weighing-campaigns' ? (
+      <WeighingCampaignPage token={token} user={user} />
     ) : route === 'requisitions' ? (
       <RequisitionsPage token={token} user={user} />
     ) : route === 'fg-shipments' ? (

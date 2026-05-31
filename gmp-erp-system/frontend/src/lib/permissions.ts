@@ -5,6 +5,7 @@ import {
   BookMarked,
   ClipboardList,
   ClipboardSignature,
+  Scale,
   Coins,
   Database,
   Factory,
@@ -70,6 +71,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.bmrTemplates',         section: 'production', permission: 'MANAGE_BMR_TEMPLATES', route: 'bmr-templates',   icon: FileText },
   { labelKey: 'nav.requisitions',         section: 'production', permission: 'VIEW_PRODUCTION', route: 'requisitions',         icon: Send },
   { labelKey: 'nav.bmr',                  section: 'production', permission: 'EXECUTE_BMR',     route: 'bmr',                  icon: ClipboardSignature },
+  { labelKey: 'nav.weighingCampaigns',    section: 'production', permission: 'MANAGE_PRODUCTION', route: 'weighing-campaigns', icon: Scale },
 
   // ─── Качество (общесистемное) ─────────────────────────────────────────
   { labelKey: 'nav.audit',                section: 'quality',    permission: 'VIEW_AUDIT',      route: 'audit',                icon: History },
