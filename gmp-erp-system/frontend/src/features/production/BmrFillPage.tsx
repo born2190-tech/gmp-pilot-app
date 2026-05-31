@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronRight, ClipboardCheck, Clock,
-  DoorOpen, Droplet, Eye, FileDown, Gauge, Layers, Loader2, Lock, Pen, Save, ShieldCheck,
+  DoorOpen, Droplet, Eye, FileDown, Gauge, Layers, Loader2, Lock, Map, Pen, Save, ShieldCheck,
   Thermometer, Users, Wifi, X,
 } from 'lucide-react'
 import { BmrAssignDialog } from './BmrAssignDialog'
@@ -10,7 +10,7 @@ import {
   completeBmrInstance, reviewBmrInstance, downloadBmrInstancePdf,
 } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
-import type { BmrInstanceItem, BmrEntryItem, BmrSectionItem, BmrParticipantItem } from '../../types/inventory'
+import type { BmrInstanceItem, BmrEntryItem, BmrSectionItem, BmrParticipantItem, BmrRouteStageItem } from '../../types/inventory'
 
 interface Props { token: string; user: CurrentUser | null }
 
@@ -41,6 +41,10 @@ const key = (sid: string, fi: number) => `${sid}:${fi}`
 
 function sectionKind(section: BmrSectionItem): string {
   return section.config?.kind || section.section_type
+}
+
+function stageCodeOf(section: BmrSectionItem): string {
+  return section.config?.stage || section.config?.room || String(section.id)
 }
 
 function fieldDone(entry: BmrEntryItem | undefined, draftValue: string | undefined): boolean {
@@ -197,6 +201,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   // Подписант вводит СВОИ креды на каждую подпись (общий планшет; не запоминаем сессию).
   const [signer, setSigner] = useState('')
   const [assignOpen, setAssignOpen] = useState(false)
+  const [overview, setOverview] = useState(false)
 
   const perms = user?.permissions || []
   const isSupervisor = perms.includes('MANAGE_PRODUCTION') || perms.includes('QA_DECISION')
@@ -285,6 +290,23 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
     return { done: acc.done + p.done, total: acc.total + p.total }
   }, { done: 0, total: 0 })
 
+  const route = inst.route || []
+  const currentStageCode = (() => {
+    if (!isSupervisor && myRoom) {
+      const mine = route.find((r) => r.room === myRoom)
+      if (mine) return mine.stage
+    }
+    const active = route.find((r) => r.status === 'in_progress' || r.status === 'completed')
+    if (active) return active.stage
+    const next = route.find((r) => r.status === 'issued')
+    return next ? next.stage : (route[route.length - 1]?.stage ?? null)
+  })()
+  const openStage = (code: string) => {
+    setOverview(false)
+    const sec = inst.sections.find((s) => stageCodeOf(s) === code)
+    if (sec) window.setTimeout(() => document.getElementById(`bmr-section-${sec.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+  }
+
   return (
     <div className="min-h-screen bg-[#eef1f5] pb-28">
       {/* OS strip */}
@@ -304,6 +326,12 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
           <div className="mono text-[10.5px] text-slate-400">BMR · v{inst.template_version} · СОП-11</div>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {isSupervisor && (
+            <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
+              <button onClick={() => setOverview(false)} className={`rounded-md px-2.5 py-1 text-[12px] font-semibold ${!overview ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Моя стадия</button>
+              <button onClick={() => setOverview(true)} className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-semibold ${overview ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}><Map size={13} /> Обзор серии</button>
+            </div>
+          )}
           {isSupervisor && !closed && (inst.stages?.length || 0) > 0 && (
             <button onClick={() => setAssignOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-2.5 text-[12px] font-semibold text-blue-700 hover:bg-blue-100"><Users size={14} /> Операторы по этапам</button>
           )}
@@ -319,33 +347,39 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
         </div>
       )}
 
-      <div className="mx-auto grid max-w-[1680px] grid-cols-1 gap-3 p-3 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <StageRail
-          sections={visibleSections}
-          entries={entries}
-          draft={draft}
-          myRoom={myRoom}
-          isSupervisor={isSupervisor}
-          progress={progressTotal}
-          status={inst.status}
-        />
-        <main className="min-w-0 space-y-3">
-          {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
-          <ParticipantsJournal participants={inst.participants || []} />
-          {visibleSections.length === 0 ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-[13px] text-amber-800">
-              Для рабочего места {myRoom || user?.workstation_id || 'не определено'} в этой серии нет назначенной стадии.
-            </div>
-          ) : visibleSections.map((s) => (
-            <SectionBlock key={s.id} section={s} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed}
-              canDp={canDp} canDok={canDok} onSetVal={setVal}
-              onSign={(fi, role, label) => { setSigner(''); setPwd(''); setDock({ sectionId: String(s.id), fieldIndex: fi, role, label }) }} />
-          ))}
-          {finalEndFields.length > 0 && (
-            <ProcessClosureBlock fields={finalEndFields} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed} onSetVal={setVal} />
-          )}
-        </main>
-      </div>
+      {!overview && route.length > 0 && <HandoffRibbon route={route} currentStage={currentStageCode} />}
+
+      {overview ? (
+        <SeriesOverview route={route} initialStage={currentStageCode} onOpenStage={openStage} />
+      ) : (
+        <div className="mx-auto grid max-w-[1680px] grid-cols-1 gap-3 p-3 xl:grid-cols-[280px_minmax(0,1fr)]">
+          <StageRail
+            sections={visibleSections}
+            entries={entries}
+            draft={draft}
+            myRoom={myRoom}
+            isSupervisor={isSupervisor}
+            progress={progressTotal}
+            status={inst.status}
+          />
+          <main className="min-w-0 space-y-3">
+            {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
+            <ParticipantsJournal participants={inst.participants || []} />
+            {visibleSections.length === 0 ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-[13px] text-amber-800">
+                Для рабочего места {myRoom || user?.workstation_id || 'не определено'} в этой серии нет назначенной стадии.
+              </div>
+            ) : visibleSections.map((s) => (
+              <SectionBlock key={s.id} section={s} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed}
+                canDp={canDp} canDok={canDok} onSetVal={setVal}
+                onSign={(fi, role, label) => { setSigner(''); setPwd(''); setDock({ sectionId: String(s.id), fieldIndex: fi, role, label }) }} />
+            ))}
+            {finalEndFields.length > 0 && (
+              <ProcessClosureBlock fields={finalEndFields} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed} onSetVal={setVal} />
+            )}
+          </main>
+        </div>
+      )}
 
       {/* footer action bar */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
@@ -370,6 +404,145 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
           pwd={pwd} setPwd={setPwd} busy={busy} who={user?.full_name || user?.username || ''}
           onCancel={() => { setAction(null); setPwd('') }} onConfirm={() => void confirmAction()} />
       )}
+    </div>
+  )
+}
+
+/* ---- HandoffRibbon (task #17): маршрут серии между комнатами ---- */
+function HandoffRibbon({ route, currentStage }: { route: BmrRouteStageItem[]; currentStage: string | null }) {
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50/70 px-4 py-2.5">
+      <span className="mr-1 flex-none text-[10px] font-semibold uppercase tracking-wider text-slate-400">Маршрут серии</span>
+      {route.map((r, i) => {
+        const me = r.stage === currentStage
+        return (
+          <div key={r.stage} className="flex flex-none items-center gap-2">
+            {i > 0 && <ArrowRight size={16} className="flex-none text-slate-300" />}
+            <div className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 ${me ? 'border-blue-300 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white'}`}>
+              <span className={`mono inline-flex h-8 w-8 flex-none items-center justify-center rounded-md text-[12px] font-bold ${me ? 'bg-blue-600 text-white' : r.status === 'reviewed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                {String(r.ordinal).padStart(2, '0')}
+              </span>
+              <div className="leading-tight">
+                <div className={`max-w-[160px] truncate text-[12.5px] font-semibold ${me ? 'text-blue-900' : 'text-slate-700'}`}>{r.title}</div>
+                <div className="mono text-[10px] text-slate-400">{r.room || '—'}{me ? ' · ВЫ' : ''}</div>
+              </div>
+              <StatusChip status={r.status} />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ---- Series overview / Каркас B (task #17): все стадии, прогресс, read-only детали ---- */
+function OverviewMini({ label, done, total }: { label: string; done: number; total: number }) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-[11.5px]">
+        <span className="text-slate-600">{label}</span>
+        <span className="mono text-slate-400">{done}/{total}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} /></div>
+    </div>
+  )
+}
+
+function OverviewCounter({ label, n, tone }: { label: string; n: number; tone: 'blue' | 'slate' | 'emerald' }) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-700 ring-blue-200',
+    slate: 'bg-slate-100 text-slate-700 ring-slate-200',
+    emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  }
+  return (
+    <div className={`rounded-lg px-2.5 py-1.5 text-center ring-1 ring-inset ${tones[tone]}`}>
+      <div className="mono text-[16px] font-bold leading-none">{n}</div>
+      <div className="mt-0.5 text-[9px] font-medium uppercase tracking-wide opacity-70">{label}</div>
+    </div>
+  )
+}
+
+function SeriesOverview({ route, initialStage, onOpenStage }: { route: BmrRouteStageItem[]; initialStage: string | null; onOpenStage: (code: string) => void }) {
+  const [selected, setSelected] = useState<string | null>(initialStage)
+  const totalStages = route.length
+  const reviewed = route.filter((r) => r.status === 'reviewed').length
+  const inProgress = route.filter((r) => r.status === 'in_progress' || r.status === 'completed').length
+  const pctReviewed = totalStages > 0 ? Math.round((reviewed / totalStages) * 100) : 0
+  const pctActive = totalStages > 0 ? Math.round((inProgress / totalStages) * 100) : 0
+  const dpLeft = route.reduce((a, r) => a + Math.max(0, r.dp_total - r.dp_done), 0)
+  const dokLeft = route.reduce((a, r) => a + Math.max(0, r.dok_total - r.dok_done), 0)
+  const sel = route.find((r) => r.stage === selected) || route[0]
+
+  if (totalStages === 0) {
+    return <div className="mx-auto max-w-[1680px] p-6 text-[13px] text-slate-400">У этой серии нет этапов для обзора.</div>
+  }
+
+  return (
+    <div className="mx-auto max-w-[1680px]">
+      {/* progress strip */}
+      <div className="flex flex-wrap items-center gap-4 border-b border-slate-200 bg-white px-4 py-3">
+        <div className="flex-1 min-w-[240px]">
+          <div className="mb-1 flex items-center justify-between text-[11px]">
+            <span className="font-semibold text-slate-600">Прогресс BMR · {reviewed} из {totalStages} стадий закрыто ДОК</span>
+            <span className="mono text-slate-400">{pctReviewed}%</span>
+          </div>
+          <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
+            <div className="flex h-full">
+              <div className="bg-emerald-500" style={{ width: `${pctReviewed}%` }} />
+              <div className="bg-blue-400" style={{ width: `${pctActive}%` }} />
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <OverviewCounter label="осталось ДП" n={dpLeft} tone="blue" />
+          <OverviewCounter label="осталось ДОК" n={dokLeft} tone="slate" />
+          <OverviewCounter label="закрыто" n={reviewed} tone="emerald" />
+        </div>
+      </div>
+      {/* split: stage list + detail */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="max-h-[calc(100vh-220px)] overflow-y-auto border-r border-slate-200 bg-white">
+          {route.map((s) => {
+            const active = s.stage === sel?.stage
+            return (
+              <button key={s.stage} onClick={() => setSelected(s.stage)}
+                className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left ${active ? 'bg-blue-50/60' : 'bg-white hover:bg-slate-50'}`}>
+                <span className={`mono inline-flex h-7 w-7 flex-none items-center justify-center rounded-md text-[12px] font-bold ${active ? 'bg-blue-600 text-white' : s.status === 'reviewed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>{String(s.ordinal).padStart(2, '0')}</span>
+                <div className="min-w-0 flex-1">
+                  <div className={`truncate text-[13px] font-semibold ${active ? 'text-blue-900' : 'text-slate-800'}`}>{s.title}</div>
+                  <div className="mono text-[10.5px] text-slate-400">{s.room || '—'}{s.who ? ` · ${s.who}` : ''}</div>
+                </div>
+                <span className="mono flex-none text-[11px] text-slate-400">{s.done}/{s.total}</span>
+                <StatusChip status={s.status} />
+                <ChevronRight size={15} className="flex-none text-slate-300" />
+              </button>
+            )
+          })}
+        </div>
+        {/* detail of selected stage (read-only) */}
+        <div className="bg-slate-50/40 p-4">
+          {sel && (
+            <>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Выбранная стадия</div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="mono inline-flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-[13px] font-bold text-white">{String(sel.ordinal).padStart(2, '0')}</span>
+                <div className="text-[14px] font-bold text-slate-900">{sel.title}</div>
+              </div>
+              <div className="mono mt-1 text-[11px] text-slate-400">{sel.room || '—'}{sel.who ? ` · ${sel.who}` : ''}</div>
+              <div className="mt-3"><StatusChip status={sel.status} /></div>
+              <div className="mt-4 space-y-2">
+                <OverviewMini label="Заполнено полей" done={sel.done} total={sel.total} />
+                <OverviewMini label="Подписи ДП" done={sel.dp_done} total={sel.dp_total} />
+                <OverviewMini label="Подписи ДОК" done={sel.dok_done} total={sel.dok_total} />
+              </div>
+              <button type="button" onClick={() => onOpenStage(sel.stage)}
+                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-[13px] font-medium text-slate-600 hover:bg-slate-50"><Eye size={15} /> Открыть (только просмотр)</button>
+              <p className="mt-2 text-[10.5px] leading-relaxed text-slate-400">Из обзора стадия открывается в режиме «Моя стадия». Редактировать можно только с планшета той комнаты, где идёт стадия.</p>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

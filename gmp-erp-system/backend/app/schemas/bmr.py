@@ -149,6 +149,21 @@ class BmrParticipantItem(BaseModel):
     signed: bool = False
 
 
+class BmrRouteStageItem(BaseModel):
+    stage: str
+    title: str
+    room: str | None = None
+    ordinal: int = 0
+    status: str = "issued"
+    done: int = 0
+    total: int = 0
+    dp_done: int = 0
+    dp_total: int = 0
+    dok_done: int = 0
+    dok_total: int = 0
+    who: str = ""
+
+
 class BmrInstanceItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -167,6 +182,7 @@ class BmrInstanceItem(BaseModel):
     assignments: dict[str, list[str]] = Field(default_factory=dict)
     stages: list[BmrStageItem] = Field(default_factory=list)
     participants: list[BmrParticipantItem] = Field(default_factory=list)
+    route: list[BmrRouteStageItem] = Field(default_factory=list)
 
 
 class BmrEntrySave(BaseModel):

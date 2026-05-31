@@ -377,6 +377,7 @@ def _instance_dict(db: Session, instance: BmrInstance, user: CurrentUser | None 
         "assignments": instance.assignments or {},
         "stages": _stages_of(instance),
         "participants": _participants_of(db, instance),
+        "route": _stage_route(db, instance),
     }
 
 
@@ -468,6 +469,87 @@ def _participants_of(db: Session, instance: BmrInstance) -> list[dict]:
         "assigned": r["assigned"], "signed": r["signed"],
     } for r in acc.values()]
     out.sort(key=lambda x: (not x["assigned"], x["full_name"] or ""))
+    return out
+
+
+def _stage_route(db: Session, instance: BmrInstance) -> list[dict]:
+    """Маршрут серии по комнатам (task #17): сводка по каждому этапу — комната,
+    статус, прогресс и счётчики оставшихся подписей ДП/ДОК. Только read-only
+    метаданные (без значений полей) — питает HandoffRibbon и «Обзор серии»
+    для всех ролей, включая операторов вне их комнаты (контекст передачи)."""
+    rows = db.query(BmrEntry).filter(BmrEntry.instance_id == instance.id).all()
+    entry_map = {(e.section_id, e.field_index): e for e in rows}
+    assignments = instance.assignments or {}
+    needed_ids = {str(uid) for lst in assignments.values() for uid in (lst or [])}
+    names: dict[str, str] = {}
+    if needed_ids:
+        for u in db.query(User).filter(User.id.in_(needed_ids)).all():
+            names[str(u.id)] = u.full_name
+
+    order: list[str] = []
+    groups: dict[str, list[BmrInstanceSection]] = {}
+    for section in instance.sections:
+        code = _section_stage(section)
+        if code not in groups:
+            groups[code] = []
+            order.append(code)
+        groups[code].append(section)
+
+    out: list[dict] = []
+    for ordinal, code in enumerate(order, start=1):
+        sections = groups[code]
+        config0 = sections[0].config or {}
+        total = done = dp_total = dp_done = dok_total = dok_done = 0
+        blocks: list[dict] = []
+        last_signer: str | None = None
+        last_at: str | None = None
+        for section in sections:
+            fields = (section.config or {}).get("fields", [])
+            block_done = 0
+            for field_index, field in enumerate(fields):
+                entry = entry_map.get((section.id, field_index))
+                complete = _entry_is_complete(entry)
+                ftype = str(field.get("type") or "")
+                if complete:
+                    block_done += 1
+                if ftype == "signature_operator":
+                    dp_total += 1
+                    dp_done += 1 if complete else 0
+                elif ftype == "signature_qa":
+                    dok_total += 1
+                    dok_done += 1 if complete else 0
+                value = (entry.value or {}) if entry else {}
+                if value.get("signed_by"):
+                    signed_at = value.get("signed_at")
+                    if signed_at and (last_at is None or signed_at > last_at):
+                        last_at, last_signer = signed_at, value.get("signed_by")
+            total += len(fields)
+            done += block_done
+            if fields:
+                blocks.append({"title": section.title, "done": block_done, "total": len(fields)})
+
+        if total > 0 and done >= total:
+            stage_status = "reviewed"
+        elif dp_total > 0 and dp_done >= dp_total and dok_done < dok_total:
+            stage_status = "completed"
+        elif done > 0:
+            stage_status = "in_progress"
+        else:
+            stage_status = "issued"
+
+        assigned_names = [names[uid] for uid in (assignments.get(code) or []) if names.get(uid)]
+        who = ", ".join(assigned_names) if assigned_names else (last_signer or "")
+        out.append({
+            "stage": code,
+            "title": str(config0.get("stage_title") or sections[0].title),
+            "room": _section_room(sections[0]),
+            "ordinal": ordinal,
+            "status": stage_status,
+            "done": done, "total": total,
+            "dp_done": dp_done, "dp_total": dp_total,
+            "dok_done": dok_done, "dok_total": dok_total,
+            "who": who,
+        })
     return out
 
 

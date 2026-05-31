@@ -1161,6 +1161,8 @@ export interface BmrSectionConfig {
   fields?: BmrFieldDef[]
   note?: string
   kind?: string
+  stage?: string
+  stage_title?: string
   room?: string
   process?: string
   room_no?: string
@@ -1251,6 +1253,22 @@ export interface BmrInstanceItem {
   assignments?: Record<string, string[]>
   stages?: BmrStageItem[]
   participants?: BmrParticipantItem[]
+  route?: BmrRouteStageItem[]
+}
+
+export interface BmrRouteStageItem {
+  stage: string
+  title: string
+  room: string | null
+  ordinal: number
+  status: string
+  done: number
+  total: number
+  dp_done: number
+  dp_total: number
+  dok_done: number
+  dok_total: number
+  who: string
 }
 
 export interface BmrStageItem { stage: string; title: string; room: string | null }
