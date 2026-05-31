@@ -67,7 +67,7 @@ def _value_str(field: dict, entry: dict | None) -> str:
         return "—"
     val = entry["value"]
     ftype = field.get("type")
-    if ftype in ("signature_operator", "signature_qa"):
+    if ftype in ("signature_operator", "signature_qa", "signature_warehouse"):
         if isinstance(val, dict) and val.get("signed_by"):
             return f"{val['signed_by']} · {_fmt_dt(val.get('signed_at'))}"
         return "—"

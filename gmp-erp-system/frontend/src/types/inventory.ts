@@ -1156,6 +1156,8 @@ export interface ProductionBatchesResponse {
 export interface BmrChecklistStep { no?: string; text: string }
 export interface BmrEnvParam { name: string; unit?: string; limit?: string }
 export interface BmrEquipmentRow { name: string; model?: string; serial?: string; sop?: string; calib?: string }
+export interface BmrDistItem { name: string; spec?: string; qty?: string }
+export interface BmrDistGroup { title: string; items: BmrDistItem[] }
 
 export interface BmrSectionConfig {
   fields?: BmrFieldDef[]
@@ -1170,6 +1172,7 @@ export interface BmrSectionConfig {
   steps?: BmrChecklistStep[]
   params?: BmrEnvParam[]
   rows?: BmrEquipmentRow[]
+  groups?: BmrDistGroup[]
 }
 
 export interface BmrSectionItem {

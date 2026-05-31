@@ -768,6 +768,11 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
     elif ftype == "signature_operator":
         required = _FILL
         role = "operator"
+    elif ftype == "signature_warehouse":
+        # Подпись «Выдал (Склад)» на листе распределения сырья: подписант — кладовщик
+        # (право POST_RECEIPT). Вводит свои креды на планшете комнаты взвешивания.
+        required = ("POST_RECEIPT",)
+        role = "warehouse"
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Это поле не является подписью")
     # Подпись = независимая e-аутентификация подписанта (один планшет на комнату, на

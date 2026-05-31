@@ -37,7 +37,10 @@ function roomFromWorkstation(ws?: string): string | null {
 }
 
 type EntryMap = Record<string, BmrEntryItem>
+type SignRole = 'dp' | 'dok' | 'wh'
 const key = (sid: string, fi: number) => `${sid}:${fi}`
+
+const SIGN_MEANING: Record<SignRole, string> = { dp: 'Выполнено ДП', dok: 'Проверено ДОК', wh: 'Выдано (Склад)' }
 
 function sectionKind(section: BmrSectionItem): string {
   return section.config?.kind || section.section_type
@@ -195,7 +198,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
-  const [dock, setDock] = useState<{ sectionId: string; fieldIndex: number; role: 'dp' | 'dok'; label: string } | null>(null)
+  const [dock, setDock] = useState<{ sectionId: string; fieldIndex: number; role: SignRole; label: string } | null>(null)
   const [action, setAction] = useState<null | 'complete' | 'review'>(null)
   const [pwd, setPwd] = useState('')
   // Подписант вводит СВОИ креды на каждую подпись (общий планшет; не запоминаем сессию).
@@ -208,6 +211,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   const canDp = perms.includes('EXECUTE_BMR') || perms.includes('MANAGE_PRODUCTION')
   const canComplete = perms.includes('MANAGE_PRODUCTION')
   const canDok = perms.includes('QA_DECISION')
+  const canWh = perms.includes('POST_RECEIPT')
 
   const load = useCallback(async () => {
     try {
@@ -253,7 +257,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
       const updated = await signBmrField(token, inst.id, {
         section_id: dock.sectionId, field_index: dock.fieldIndex,
         username: signer.trim(), password: pwd,
-        meaning: dock.role === 'dok' ? 'Проверено ДОК' : 'Выполнено ДП', reason: dock.label,
+        meaning: SIGN_MEANING[dock.role], reason: dock.label,
       })
       setInst(updated); setDock(null); setPwd(''); setSigner('')
     } catch (e) { setError(e instanceof Error ? e.message : 'Подпись не принята') }
@@ -371,7 +375,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
               </div>
             ) : visibleSections.map((s) => (
               <SectionBlock key={s.id} section={s} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed}
-                canDp={canDp} canDok={canDok} onSetVal={setVal}
+                canDp={canDp} canDok={canDok} canWh={canWh} onSetVal={setVal}
                 onSign={(fi, role, label) => { setSigner(''); setPwd(''); setDock({ sectionId: String(s.id), fieldIndex: fi, role, label }) }} />
             ))}
             {finalEndFields.length > 0 && (
@@ -396,7 +400,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
       {dock && (
         <SignDock role={dock.role} label={dock.label} pwd={pwd} setPwd={setPwd} busy={busy}
           signerName={signer} setSignerName={setSigner}
-          who={dock.role === 'dok' ? 'подписывает любой контролёр (ДОК)' : 'подписывает назначенный оператор (ДП)'}
+          who={dock.role === 'dok' ? 'подписывает любой контролёр (ДОК)' : dock.role === 'wh' ? 'подписывает кладовщик (Склад)' : 'подписывает назначенный оператор (ДП)'}
           onCancel={() => { setDock(null); setPwd(''); setSigner('') }} onConfirm={() => void confirmSign()} />
       )}
       {action && (
@@ -692,19 +696,24 @@ function StageRail({
 }
 
 /* ---- Sign dock ---- */
-function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, signerName, setSignerName }: { role: 'dp' | 'dok'; label: string; pwd: string; setPwd: (v: string) => void; busy: boolean; who: string; onCancel: () => void; onConfirm: () => void; signerName?: string; setSignerName?: (v: string) => void }) {
+function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, signerName, setSignerName }: { role: SignRole; label: string; pwd: string; setPwd: (v: string) => void; busy: boolean; who: string; onCancel: () => void; onConfirm: () => void; signerName?: string; setSignerName?: (v: string) => void }) {
   const dok = role === 'dok'
+  const wh = role === 'wh'
   const needsSigner = !!setSignerName
   const ready = pwd.length > 0 && (!needsSigner || (signerName || '').trim().length > 0)
+  const accentBorder = dok ? '#0f172a' : wh ? '#b45309' : '#2563eb'
+  const accentBg = dok ? 'bg-slate-900' : wh ? 'bg-amber-600' : 'bg-blue-600'
+  const title = dok ? 'ДОК «Проверил»' : wh ? 'Склад «Выдал»' : 'ДП «Выполнил»'
+  const act = dok ? 'проверку' : wh ? 'выдачу сырья' : 'выполнение'
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-4">
-      <div className="mx-auto max-w-3xl overflow-hidden rounded-xl border bg-white shadow-2xl ring-1" style={{ borderColor: dok ? '#0f172a' : '#2563eb' }}>
-        <div className={`flex items-center gap-2 px-4 py-2 text-white ${dok ? 'bg-slate-900' : 'bg-blue-600'}`}>
-          <Pen size={15} /><span className="text-[12.5px] font-semibold">Подпись {dok ? 'ДОК «Проверил»' : 'ДП «Выполнил»'} · {label}</span>
+      <div className="mx-auto max-w-3xl overflow-hidden rounded-xl border bg-white shadow-2xl ring-1" style={{ borderColor: accentBorder }}>
+        <div className={`flex items-center gap-2 px-4 py-2 text-white ${accentBg}`}>
+          <Pen size={15} /><span className="text-[12.5px] font-semibold">Подпись {title} · {label}</span>
           <span className="ml-auto mono text-[11px] opacity-80">{who}</span>
         </div>
         <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-          <div className="flex-1 min-w-[180px] text-[12px] text-slate-600">Подписант подтверждает {dok ? 'проверку' : 'выполнение'} лично своими данными (ALCOA+).</div>
+          <div className="flex-1 min-w-[180px] text-[12px] text-slate-600">Подписант подтверждает {act} лично своими данными (ALCOA+).</div>
           {needsSigner && (
             <input autoFocus value={signerName || ''} onChange={(e) => setSignerName!(e.target.value)} placeholder="Логин подписанта" autoComplete="off"
               className="h-11 w-44 rounded-lg border border-slate-300 px-3 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
@@ -712,7 +721,7 @@ function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, si
           <input type="password" autoFocus={!needsSigner} value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="Пароль / PIN" autoComplete="off"
             onKeyDown={(e) => { if (e.key === 'Enter' && ready) onConfirm() }}
             className="h-11 w-44 rounded-lg border border-slate-300 px-3 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-          <button disabled={busy || !ready} onClick={onConfirm} className={`inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 ${dok ? 'bg-slate-900' : 'bg-blue-600'}`}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Подтвердить</button>
+          <button disabled={busy || !ready} onClick={onConfirm} className={`inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 ${accentBg}`}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Подтвердить</button>
           <button onClick={onCancel} className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-600"><X size={15} /></button>
         </div>
       </div>
@@ -721,23 +730,30 @@ function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, si
 }
 
 /* ---- Signature cell ---- */
-function SignCell({ role, state, who, at, onSign }: { role: 'dp' | 'dok'; state: 'locked' | 'ready' | 'signed'; who?: string; at?: string; onSign?: () => void }) {
+const SIGN_LABEL: Record<SignRole, string> = { dp: 'ДП', dok: 'ДОК', wh: 'Склад' }
+function SignCell({ role, state, who, at, onSign }: { role: SignRole; state: 'locked' | 'ready' | 'signed'; who?: string; at?: string; onSign?: () => void }) {
   const dok = role === 'dok'
+  const wh = role === 'wh'
+  const signedTone = dok ? 'border-emerald-200 bg-emerald-50' : wh ? 'border-amber-200 bg-amber-50' : 'border-indigo-200 bg-indigo-50'
+  const signedDot = dok ? 'bg-emerald-600' : wh ? 'bg-amber-600' : 'bg-indigo-600'
+  const signedName = dok ? 'text-emerald-900' : wh ? 'text-amber-900' : 'text-indigo-900'
+  const signedMeta = dok ? 'text-emerald-700/80' : wh ? 'text-amber-700/80' : 'text-indigo-700/80'
+  const btnTone = dok ? 'bg-slate-900 hover:bg-slate-800' : wh ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
   if (state === 'signed') return (
-    <div className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 ${dok ? 'border-emerald-200 bg-emerald-50' : 'border-indigo-200 bg-indigo-50'}`}>
-      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-white ${dok ? 'bg-emerald-600' : 'bg-indigo-600'}`}><Check size={12} /></span>
-      <div className="leading-tight"><div className={`text-[12px] font-semibold ${dok ? 'text-emerald-900' : 'text-indigo-900'}`}>{who}</div><div className={`mono text-[10px] ${dok ? 'text-emerald-700/80' : 'text-indigo-700/80'}`}>{dok ? 'ДОК' : 'ДП'} · {at}</div></div>
+    <div className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 ${signedTone}`}>
+      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-white ${signedDot}`}><Check size={12} /></span>
+      <div className="leading-tight"><div className={`text-[12px] font-semibold ${signedName}`}>{who}</div><div className={`mono text-[10px] ${signedMeta}`}>{SIGN_LABEL[role]} · {at}</div></div>
     </div>
   )
-  if (state === 'locked') return <div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-400"><Lock size={13} /> после ДП</div>
-  return <button onClick={onSign} className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-semibold text-white shadow-sm active:scale-[0.98] ${dok ? 'bg-slate-900 hover:bg-slate-800' : 'bg-blue-600 hover:bg-blue-700'}`}><Pen size={13} /> Подписать · {dok ? 'ДОК' : 'ДП'}</button>
+  if (state === 'locked') return <div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-400"><Lock size={13} /> {dok ? 'после ДП' : 'ожидает'}</div>
+  return <button onClick={onSign} className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-semibold text-white shadow-sm active:scale-[0.98] ${btnTone}`}><Pen size={13} /> Подписать · {SIGN_LABEL[role]}</button>
 }
 
 function fmtTime(iso?: string): string {
   if (!iso) return ''
   const d = new Date(iso); return isNaN(d.getTime()) ? '' : d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
-function sigState(e: BmrEntryItem | undefined, dpSigned: boolean, role: 'dp' | 'dok', unlocked = true): 'locked' | 'ready' | 'signed' {
+function sigState(e: BmrEntryItem | undefined, dpSigned: boolean, role: SignRole, unlocked = true): 'locked' | 'ready' | 'signed' {
   if (e?.value && e.value.signed_by) return 'signed'
   if (!unlocked) return 'locked'
   if (role === 'dok' && !dpSigned) return 'locked'
@@ -800,10 +816,10 @@ function ProcessClosureBlock({
 }
 
 /* ============================ SECTION BLOCKS ============================ */
-function SectionBlock({ section, allSections, entries, draft, closed, canDp, canDok, onSetVal, onSign }: {
+function SectionBlock({ section, allSections, entries, draft, closed, canDp, canDok, canWh, onSetVal, onSign }: {
   section: BmrSectionItem; allSections: BmrSectionItem[]; entries: EntryMap; draft: Record<string, string>; closed: boolean
-  canDp: boolean; canDok: boolean; onSetVal: (sid: string, fi: number, v: string) => void
-  onSign: (fi: number, role: 'dp' | 'dok', label: string) => void
+  canDp: boolean; canDok: boolean; canWh: boolean; onSetVal: (sid: string, fi: number, v: string) => void
+  onSign: (fi: number, role: SignRole, label: string) => void
 }) {
   const sid = String(section.id)
   const kind = sectionKind(section)
@@ -944,6 +960,57 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
           </tr>
         ))}</tbody>
       </table>
+    )
+  }
+
+  /* ---- distribution_list (лист распределения сырья: вес нетто + Склад/ДП/ДОК) ---- */
+  if (kind === 'distribution_list') {
+    const groups = section.config?.groups || []
+    const rows: React.ReactNode[] = []
+    let base = 0
+    groups.forEach((g, gi) => {
+      rows.push(
+        <tr key={`g-${gi}`} className="border-b border-slate-200 bg-slate-100/70">
+          <td colSpan={6} className="px-3 py-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-slate-600">{g.title}</td>
+        </tr>
+      )
+      g.items.forEach((it, ii) => {
+        const b = base
+        base += 4
+        const whE = entries[key(sid, b + 1)]; const dpE = entries[key(sid, b + 2)]; const dokE = entries[key(sid, b + 3)]
+        const whSigned = !!(whE?.value && whE.value.signed_by)
+        const dpSigned = !!(dpE?.value && dpE.value.signed_by)
+        const uWh = fieldUnlocked(allSections, entries, draft, sid, b + 1)
+        const uDp = fieldUnlocked(allSections, entries, draft, sid, b + 2)
+        const uDok = fieldUnlocked(allSections, entries, draft, sid, b + 3)
+        rows.push(
+          <tr key={`i-${gi}-${ii}`} className="border-b border-slate-100 align-middle">
+            <td className="px-3 py-2 text-[13px] text-slate-800">{it.name}{it.spec ? <span className="mono ml-1 text-[10.5px] text-slate-400">{it.spec}</span> : null}</td>
+            <td className="mono px-3 py-2 text-[12px] text-slate-500">{it.qty || '—'}</td>
+            <td className="px-3 py-2">{inputFor(b + 0, 'number', 'кг')}</td>
+            <td className="px-3 py-2"><SignCell role="wh" state={sigState(whE, false, 'wh', uWh)} who={whE?.value?.signed_by} at={fmtTime(whE?.value?.signed_at)} onSign={(canWh || canDp) && !closed && uWh ? () => onSign(b + 1, 'wh', `${it.name} · выдача`) : undefined} /></td>
+            <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && whSigned && uDp ? () => onSign(b + 2, 'dp', `${it.name} · проверка ДП`) : undefined} /></td>
+            <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(b + 3, 'dok', `${it.name} · проверка ДОК`) : undefined} /></td>
+          </tr>
+        )
+      })
+    })
+    return wrap(
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[860px]">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-3 py-2">Наименование ингредиента</th>
+              <th className="w-[120px] px-3 py-2">Кол-во на серию, кг</th>
+              <th className="w-[150px] px-3 py-2">Вес нетто</th>
+              <th className="w-[160px] px-3 py-2">Выдал · Склад</th>
+              <th className="w-[160px] px-3 py-2">Проверил · ДП</th>
+              <th className="w-[160px] px-3 py-2">Проверил · ДОК</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
     )
   }
 
