@@ -96,10 +96,16 @@ export function BmrFillPage({ token, user }: Props) {
 
   useEffect(() => { void loadList() }, [loadList])
 
-  if (openId) return <FillView token={token} user={user} instanceId={openId} onBack={() => { setOpenId(null); void loadList() }} />
-
   const myRoom = roomFromWorkstation(user?.workstation_id)
   const isSupervisor = (user?.permissions || []).some((p) => p === 'MANAGE_PRODUCTION' || p === 'QA_DECISION')
+  useEffect(() => {
+    if (!isSupervisor && !openId && list.length === 1) {
+      setOpenId(list[0].instanceId)
+    }
+  }, [isSupervisor, list, openId])
+
+  if (openId) return <FillView token={token} user={user} instanceId={openId} onBack={() => { setOpenId(null); void loadList() }} />
+
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-5 flex items-center gap-3">

@@ -95,6 +95,9 @@ export const SECTION_ORDER: NavSection[] = ['warehouse', 'qc', 'qa', 'production
 
 export function getVisibleNavItems(user: CurrentUser): NavItem[] {
   const permissions = new Set(user.permissions)
+  if (user.role === 'PRODUCTION_OPERATOR') {
+    return NAV_ITEMS.filter((item) => item.route === 'bmr' && permissions.has(item.permission))
+  }
   return NAV_ITEMS.filter(
     (item) =>
       permissions.has(item.permission) &&
