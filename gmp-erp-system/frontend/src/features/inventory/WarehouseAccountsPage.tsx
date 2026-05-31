@@ -103,16 +103,16 @@ export function WarehouseAccountsPage({ token }: Props) {
 
       {/* Сводка */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div className="rounded-xl border border-slate-900 bg-slate-900 p-4 text-white">
-          <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-slate-300"><Coins size={14} /> {t('accounts.totalBalance')}</div>
-          <div className="mt-1.5 font-mono text-[22px] font-semibold tabular-nums">{fmt(total)} <span className="text-[13px] font-normal text-slate-400">{currency}</span></div>
-        </div>
         {(['SUBSTANCE_API', 'EXCIPIENT', 'PACKAGING'] as const).map((g) => (
           <div key={g} className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{t(`accounts.group.${g}` as never)}</div>
             <div className="mt-1.5 font-mono text-[20px] font-semibold tabular-nums text-slate-900">{fmt(totalsByGroup[g] || 0)}</div>
           </div>
         ))}
+        <div className="rounded-xl border border-slate-900 bg-slate-900 p-4 text-white">
+          <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-slate-300"><Coins size={14} /> {t('accounts.totalBalance')}</div>
+          <div className="mt-1.5 font-mono text-[22px] font-semibold tabular-nums">{fmt(total)} <span className="text-[13px] font-normal text-slate-400">{currency}</span></div>
+        </div>
       </div>
 
       {/* Оборотная ведомость */}

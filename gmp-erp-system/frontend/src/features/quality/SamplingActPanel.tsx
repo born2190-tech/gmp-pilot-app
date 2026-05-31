@@ -53,14 +53,19 @@ const PURPOSE_META: Record<SamplingPurpose, { icon: typeof Beaker; key: string }
 
 // Стартовые строки: подставляем нормы Ф-1 из карточки материала, если они
 // заданы (lot.sample_*_qty). Единица берётся из нормы материала, иначе из лота.
-function defaultLines(sopForm: '533' | '548', lot: LotItem): SamplingLineInput[] {
+// Строки формы держим с количеством-СТРОКОЙ (raw input), чтобы можно было
+// вводить «0» и промежуточные значения; в число конвертируем на отправке.
+type ActLine = { purpose: SamplingLineInput['purpose']; quantity: string; unit: string }
+const qtyStr = (v: number | null | undefined): string => (v ? String(v) : '')
+
+function defaultLines(sopForm: '533' | '548', lot: LotItem): ActLine[] {
   const u = lot.sample_unit || lot.unit
-  const base: SamplingLineInput[] = [
-    { purpose: 'PHYSICOCHEMICAL', quantity: lot.sample_pc_qty ?? 0, unit: u },
-    { purpose: 'MICROBIOLOGICAL', quantity: lot.sample_micro_qty ?? 0, unit: u },
-    { purpose: 'ARCHIVE', quantity: lot.sample_archive_qty ?? 0, unit: u },
+  const base: ActLine[] = [
+    { purpose: 'PHYSICOCHEMICAL', quantity: qtyStr(lot.sample_pc_qty), unit: u },
+    { purpose: 'MICROBIOLOGICAL', quantity: qtyStr(lot.sample_micro_qty), unit: u },
+    { purpose: 'ARCHIVE', quantity: qtyStr(lot.sample_archive_qty), unit: u },
   ]
-  if (sopForm === '548') base.push({ purpose: 'STABILITY', quantity: lot.sample_stability_qty ?? 0, unit: u })
+  if (sopForm === '548') base.push({ purpose: 'STABILITY', quantity: qtyStr(lot.sample_stability_qty), unit: u })
   return base
 }
 
@@ -73,7 +78,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
   const fileRef = useRef<HTMLInputElement>(null)
 
   // editable draft fields
-  const [lines, setLines] = useState<SamplingLineInput[]>([])
+  const [lines, setLines] = useState<ActLine[]>([])
   const [samplingDate, setSamplingDate] = useState('')
   const [location, setLocation] = useState('Пробоотборник №1')
   const [temperature, setTemperature] = useState('')
@@ -93,7 +98,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
       if (found) {
         setLines(
           found.lines.length
-            ? found.lines.map((l) => ({ purpose: l.purpose, quantity: l.quantity, unit: l.unit }))
+            ? found.lines.map((l) => ({ purpose: l.purpose, quantity: qtyStr(l.quantity), unit: l.unit }))
             : defaultLines(found.sop_form, lot),
         )
         setSamplingDate(found.sampling_date ?? new Date().toISOString().slice(0, 10))
@@ -128,7 +133,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
       temperature_c: temperature ? Number(temperature) : null,
       humidity_pct: humidity ? Number(humidity) : null,
       specification_ref: specRef || null,
-      lines: lines.filter((l) => Number(l.quantity) > 0),
+      lines: lines.filter((l) => Number(l.quantity) > 0).map((l) => ({ ...l, quantity: Number(l.quantity) })),
     }
   }
 
@@ -288,10 +293,10 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
                       min={0}
                       step="any"
                       disabled={isVerified || busy}
-                      value={line.quantity || ''}
+                      value={line.quantity}
                       onChange={(e) => {
                         const v = e.target.value
-                        setLines((cur) => cur.map((l, i) => (i === idx ? { ...l, quantity: Number(v) } : l)))
+                        setLines((cur) => cur.map((l, i) => (i === idx ? { ...l, quantity: v } : l)))
                       }}
                       className="h-8 w-24 rounded-md border border-slate-300 bg-white px-2 text-right font-mono text-[12.5px] tabular-nums outline-none focus:border-slate-400 disabled:bg-slate-50"
                     />
