@@ -529,13 +529,17 @@ def _stages() -> list[dict]:
 
 def _etalon_sections() -> list[dict]:
     """Плоский список секций всех стадий с инъекцией stage/stage_title в config.
-    Каждой стадии предпосылается шапка процесса (даты, предыдущий ЛС/серия)."""
+    Стадиям с комнатой предпосылается шапка процесса (даты, предыдущий ЛС/серия);
+    справочным стадиям без комнаты (производственная формула) — нет, чтобы их
+    шапка не попадала операторам и не блокировала последовательность заполнения."""
     out: list[dict] = []
     for stage in _stages():
-        sections = [
-            _process_header(stage["stage_title"], stage["room"], stage["room_no"], stage["sop"]),
-            *stage["sections"],
-        ]
+        sections = list(stage["sections"])
+        if stage.get("room"):
+            sections = [
+                _process_header(stage["stage_title"], stage["room"], stage["room_no"], stage["sop"]),
+                *sections,
+            ]
         for section in sections:
             config = dict(section["config"])
             config.setdefault("stage", stage["stage"])

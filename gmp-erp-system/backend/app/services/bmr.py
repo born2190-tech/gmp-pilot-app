@@ -18,6 +18,7 @@ from app.models.inventory import (
     BmrSection,
     BmrTemplate,
     ProductionBatch,
+    ProductionRequisition,
     Product,
 )
 from app.schemas.bmr import (
@@ -553,6 +554,32 @@ def _stage_route(db: Session, instance: BmrInstance) -> list[dict]:
     return out
 
 
+def _requisition_issued_for_batch(db: Session, batch_id) -> bool:
+    if not batch_id:
+        return False
+    return (
+        db.query(ProductionRequisition)
+        .filter(
+            ProductionRequisition.production_batch_id == batch_id,
+            ProductionRequisition.status.in_(("issued", "partially_issued")),
+        )
+        .first()
+        is not None
+    )
+
+
+def _ensure_weighing_gate(db: Session, instance: BmrInstance, section: BmrInstanceSection) -> None:
+    """Ф3: стадию взвешивания нельзя заполнять/подписывать, пока накладная
+    (требование) на серию не выдана складом (FEFO)."""
+    if (section.config or {}).get("stage") != "weighing":
+        return
+    if not _requisition_issued_for_batch(db, instance.production_batch_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Стадия взвешивания заблокирована: сначала производство формирует требование, а склад выдаёт накладную (FEFO).",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Fill / sign / complete / review — Phase C
 # ---------------------------------------------------------------------------
@@ -716,6 +743,7 @@ def save_entries(db: Session, user: CurrentUser, instance_id: UUID, payload: Bmr
         if not section:
             continue
         _ensure_section_access(section, user)
+        _ensure_weighing_gate(db, inst, section)
         fields = (section.config or {}).get("fields", [])
         if item.field_index < 0 or item.field_index >= len(fields):
             continue
@@ -755,6 +783,7 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
     if not section:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Секция не найдена")
     _ensure_section_access(section, user)
+    _ensure_weighing_gate(db, inst, section)
     fields = (section.config or {}).get("fields", [])
     if payload.field_index < 0 or payload.field_index >= len(fields):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Поле не найдено")
