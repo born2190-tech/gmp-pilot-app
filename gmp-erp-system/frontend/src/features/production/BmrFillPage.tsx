@@ -574,7 +574,13 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         <Meta label="Процесс" value={section.config?.process || section.title} />
         <Meta label="Комната / №" value={`${section.config?.room || '—'}${section.config?.room_no ? ` / ${section.config.room_no}` : ''}`} />
         {regularFields.map(({ f, fi }) => (
-          <div key={fi}><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{f.label}</div>{inputFor(fi, f.type)}</div>
+          <div key={fi}>
+            <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{f.label}</div>
+            {inputFor(fi, f.type)}
+            {String(f.label || '').toLowerCase().includes('предыдущ') && (
+              <div className="mt-1 text-[11px] text-slate-400">Подставляется из истории комнаты, можно исправить вручную.</div>
+            )}
+          </div>
         ))}
         {regularFields.length !== fields.length && (
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[12px] text-blue-700 sm:col-span-2">

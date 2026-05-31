@@ -252,6 +252,8 @@ def create_instance_for_batch(db: Session, user: CurrentUser, batch: ProductionB
             instance_id=instance.id, ordinal=s.ordinal,
             section_type=s.section_type, title=s.title, config=s.config or {},
         ))
+    db.flush()
+    _ensure_previous_process_entries(db, instance)
     write_audit(
         db, user, object_type="bmr_instance", object_id=str(instance.id),
         action_type="CREATE_BMR_INSTANCE",
@@ -259,6 +261,83 @@ def create_instance_for_batch(db: Session, user: CurrentUser, batch: ProductionB
     )
     db.flush()
     return instance
+
+
+def _field_index_by_label(section: BmrInstanceSection, label_part: str) -> int | None:
+    needle = label_part.lower()
+    for index, field in enumerate((section.config or {}).get("fields", [])):
+        if needle in str(field.get("label") or "").lower():
+            return index
+    return None
+
+
+def _previous_batch_for_room(db: Session, instance: BmrInstance, room: str | None) -> ProductionBatch | None:
+    if not room:
+        return None
+    current_batch = db.get(ProductionBatch, instance.production_batch_id)
+    if not current_batch:
+        return None
+    return (
+        db.query(ProductionBatch)
+        .join(BmrInstance, BmrInstance.production_batch_id == ProductionBatch.id)
+        .join(BmrInstanceSection, BmrInstanceSection.instance_id == BmrInstance.id)
+        .filter(
+            BmrInstance.production_batch_id != instance.production_batch_id,
+            BmrInstance.created_at < instance.created_at,
+            BmrInstanceSection.config["room"].astext == room,
+            ProductionBatch.status != "cancelled",
+        )
+        .order_by(
+            BmrInstance.created_at.desc(),
+            ProductionBatch.completed_at.desc().nullslast(),
+            ProductionBatch.started_at.desc().nullslast(),
+        )
+        .first()
+    )
+
+
+def _set_system_prefill_if_empty(
+    db: Session,
+    instance: BmrInstance,
+    section: BmrInstanceSection,
+    field_index: int | None,
+    value: str | None,
+) -> bool:
+    if field_index is None or not value:
+        return False
+    entry = (
+        db.query(BmrEntry)
+        .filter(BmrEntry.instance_id == instance.id, BmrEntry.section_id == section.id, BmrEntry.field_index == field_index)
+        .first()
+    )
+    if entry and _entry_is_complete(entry):
+        return False
+    if entry is None:
+        entry = BmrEntry(instance_id=instance.id, section_id=section.id, field_index=field_index)
+        db.add(entry)
+    entry.value = {"v": value, "source": "system_previous_stage"}
+    entry.filled_by = None
+    entry.filled_at = now_utc()
+    return True
+
+
+def _ensure_previous_process_entries(db: Session, instance: BmrInstance) -> bool:
+    changed = False
+    for section in instance.sections:
+        if str((section.config or {}).get("kind") or section.section_type) != "process_header":
+            continue
+        previous = _previous_batch_for_room(db, instance, (section.config or {}).get("room"))
+        if not previous:
+            continue
+        changed = _set_system_prefill_if_empty(
+            db, instance, section, _field_index_by_label(section, "Предыдущий ЛС"), previous.product_name
+        ) or changed
+        changed = _set_system_prefill_if_empty(
+            db, instance, section, _field_index_by_label(section, "Предыдущая серия"), previous.batch_no
+        ) or changed
+    if changed:
+        db.flush()
+    return changed
 
 
 def _instance_dict(db: Session, instance: BmrInstance, user: CurrentUser | None = None) -> dict:
@@ -578,6 +657,9 @@ def get_instance(db: Session, user: CurrentUser, instance_id: UUID) -> dict:
     inst = db.get(BmrInstance, instance_id)
     if not inst:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BMR instance not found")
+    if _ensure_previous_process_entries(db, inst):
+        db.commit()
+        db.refresh(inst)
     return _instance_dict(db, inst, user)
 
 
@@ -588,4 +670,7 @@ def get_instance_for_batch(db: Session, user: CurrentUser, batch_id: UUID) -> di
         return None
     if not _visible_sections(inst, user):
         return None
+    if _ensure_previous_process_entries(db, inst):
+        db.commit()
+        db.refresh(inst)
     return _instance_dict(db, inst, user)
