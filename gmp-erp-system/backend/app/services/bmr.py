@@ -371,13 +371,25 @@ def _field_label(section: BmrInstanceSection, field_index: int) -> str:
     return f"{section.title} / {label or f'поле {field_index + 1}'}"
 
 
+def _is_process_end_field(section: BmrInstanceSection, field: dict) -> bool:
+    config = section.config or {}
+    section_kind = str(config.get("kind") or section.section_type or "").lower()
+    label = str(field.get("label") or "").lower()
+    return section_kind == "process_header" and field.get("type") == "datetime" and "оконч" in label
+
+
 def _ordered_fields(instance: BmrInstance, user: CurrentUser) -> list[tuple[UUID, int, str]]:
     ordered: list[tuple[UUID, int, str]] = []
+    final_fields: list[tuple[UUID, int, str]] = []
     for section in _visible_sections(instance, user):
         fields = (section.config or {}).get("fields", [])
         for field_index, field in enumerate(fields):
-            ordered.append((section.id, field_index, str(field.get("type") or "")))
-    return ordered
+            item = (section.id, field_index, str(field.get("type") or ""))
+            if _is_process_end_field(section, field):
+                final_fields.append(item)
+            else:
+                ordered.append(item)
+    return [*ordered, *final_fields]
 
 
 def _entry_is_complete(entry: BmrEntry | None) -> bool:

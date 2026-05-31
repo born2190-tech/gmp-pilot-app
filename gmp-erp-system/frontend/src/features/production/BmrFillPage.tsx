@@ -67,10 +67,32 @@ function sectionIcon(kind: string) {
   return <Layers size={15} />
 }
 
+function isProcessEndField(section: BmrSectionItem, field: { label?: string; type?: string }): boolean {
+  const kind = sectionKind(section)
+  const label = String(field.label || '').toLowerCase()
+  return kind === 'process_header' && field.type === 'datetime' && label.includes('оконч')
+}
+
 function orderedFieldKeys(sections: BmrSectionItem[]): { sectionId: string; fieldIndex: number }[] {
+  const normal: { sectionId: string; fieldIndex: number }[] = []
+  const final: { sectionId: string; fieldIndex: number }[] = []
+  sections.forEach((section) => {
+    const fields = section.config?.fields || []
+    fields.forEach((field, fieldIndex) => {
+      const item = { sectionId: String(section.id), fieldIndex }
+      if (isProcessEndField(section, field)) final.push(item)
+      else normal.push(item)
+    })
+  })
+  return [...normal, ...final]
+}
+
+function processEndFields(sections: BmrSectionItem[]): { section: BmrSectionItem; fieldIndex: number; field: { label?: string; type?: string } }[] {
   return sections.flatMap((section) => {
     const fields = section.config?.fields || []
-    return fields.map((_field, fieldIndex) => ({ sectionId: String(section.id), fieldIndex }))
+    return fields
+      .map((field, fieldIndex) => ({ section, fieldIndex, field }))
+      .filter((item) => isProcessEndField(item.section, item.field))
   })
 }
 
@@ -253,6 +275,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
 
   const myRoom = roomFromWorkstation(user?.workstation_id)
   const visibleSections = inst.sections
+  const finalEndFields = processEndFields(visibleSections)
   const progressTotal = visibleSections.reduce((acc, s) => {
     const p = sectionProgress(s, entries, draft)
     return { done: acc.done + p.done, total: acc.total + p.total }
@@ -309,6 +332,9 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
               canDp={canDp} canDok={canDok} onSetVal={setVal}
               onSign={(fi, role, label) => setDock({ sectionId: String(s.id), fieldIndex: fi, role, label })} />
           ))}
+          {finalEndFields.length > 0 && (
+            <ProcessClosureBlock fields={finalEndFields} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed} onSetVal={setVal} />
+          )}
         </main>
       </div>
 
@@ -454,6 +480,61 @@ function sigState(e: BmrEntryItem | undefined, dpSigned: boolean, role: 'dp' | '
   return 'ready'
 }
 
+function ProcessClosureBlock({
+  fields,
+  allSections,
+  entries,
+  draft,
+  closed,
+  onSetVal,
+}: {
+  fields: { section: BmrSectionItem; fieldIndex: number; field: { label?: string; type?: string } }[]
+  allSections: BmrSectionItem[]
+  entries: EntryMap
+  draft: Record<string, string>
+  closed: boolean
+  onSetVal: (sid: string, fi: number, v: string) => void
+}) {
+  const first = fields[0]
+  const unlocked = first ? fieldUnlocked(allSections, entries, draft, String(first.section.id), first.fieldIndex) : false
+  return (
+    <section className="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2">
+        <div>
+          <div className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-slate-400">Финальное закрытие процесса</div>
+          <div className="text-[14px] font-semibold text-slate-900">Окончание стадии</div>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${unlocked ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200'}`}>
+          {unlocked ? 'Доступно' : 'После подписей ДОК'}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+        {fields.map(({ section, fieldIndex, field }) => {
+          const sid = String(section.id)
+          const itemUnlocked = fieldUnlocked(allSections, entries, draft, sid, fieldIndex)
+          const value = draft[key(sid, fieldIndex)] ?? ''
+          const inputType = field.type === 'datetime' ? 'datetime-local' : field.type === 'date' ? 'date' : 'text'
+          return (
+            <div key={`${sid}:${fieldIndex}`} className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{field.label || 'Дата-время окончания'}</div>
+              <input
+                disabled={closed || !itemUnlocked}
+                type={inputType}
+                value={value}
+                onChange={(event) => onSetVal(sid, fieldIndex, event.target.value)}
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-2.5 text-[13px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500"
+              />
+              <div className="mt-2 text-[11.5px] text-slate-500">
+                Заполняется только после завершения предыдущих пунктов и подписей контролера ДОК.
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 /* ============================ SECTION BLOCKS ============================ */
 function SectionBlock({ section, allSections, entries, draft, closed, canDp, canDok, onSetVal, onSign }: {
   section: BmrSectionItem; allSections: BmrSectionItem[]; entries: EntryMap; draft: Record<string, string>; closed: boolean
@@ -487,13 +568,19 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   /* ---- process_header ---- */
   if (kind === 'process_header') {
     const fields = section.config?.fields || []
+    const regularFields = fields.map((f, fi) => ({ f, fi })).filter((item) => !isProcessEndField(section, item.f))
     return wrap(
       <div className="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-2">
         <Meta label="Процесс" value={section.config?.process || section.title} />
         <Meta label="Комната / №" value={`${section.config?.room || '—'}${section.config?.room_no ? ` / ${section.config.room_no}` : ''}`} />
-        {fields.map((f, fi) => (
+        {regularFields.map(({ f, fi }) => (
           <div key={fi}><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{f.label}</div>{inputFor(fi, f.type)}</div>
         ))}
+        {regularFields.length !== fields.length && (
+          <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[12px] text-blue-700 sm:col-span-2">
+            Дата-время окончания заполняется в финальном блоке после выполнения и проверки всех предыдущих этапов.
+          </div>
+        )}
       </div>
     )
   }
