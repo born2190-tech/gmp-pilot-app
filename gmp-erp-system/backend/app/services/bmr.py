@@ -374,7 +374,36 @@ def _instance_dict(db: Session, instance: BmrInstance, user: CurrentUser | None 
              "filled_by_name": name, "filled_at": e.filled_at}
             for e, name in rows
         ],
+        "assignments": instance.assignments or {},
+        "stages": _stages_of(instance),
     }
+
+
+def _section_stage(section: BmrInstanceSection) -> str:
+    """Код этапа секции: config.stage, иначе комната, иначе id секции."""
+    config = section.config or {}
+    stage = config.get("stage")
+    if stage:
+        return str(stage)
+    return _section_room(section) or str(section.id)
+
+
+def _stages_of(instance: BmrInstance) -> list[dict]:
+    """Уникальные этапы экземпляра (для назначения операторов начальником цеха)."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for section in instance.sections:
+        code = _section_stage(section)
+        if code in seen:
+            continue
+        seen.add(code)
+        config = section.config or {}
+        out.append({
+            "stage": code,
+            "title": str(config.get("stage_title") or section.title),
+            "room": _section_room(section),
+        })
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -600,6 +629,16 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
     signer = validate_independent_signature(
         db, user, payload, "SIGN_BMR_FIELD", "bmr_instance", str(inst.id), required,
     )
+    # Назначение по этапам: если начальник цеха назначил операторов на этот этап,
+    # ячейку ДП может подписать только назначенный оператор (контролёров не ограничиваем).
+    if role == "operator":
+        stage = _section_stage(section)
+        assigned = (inst.assignments or {}).get(stage) or []
+        if assigned and str(signer.id) not in {str(a) for a in assigned}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Этот оператор не назначен на данный этап начальником цеха",
+            )
     entry = (
         db.query(BmrEntry)
         .filter(BmrEntry.section_id == payload.section_id, BmrEntry.field_index == payload.field_index)
@@ -677,4 +716,47 @@ def get_instance_for_batch(db: Session, user: CurrentUser, batch_id: UUID) -> di
     if _ensure_previous_process_entries(db, inst):
         db.commit()
         db.refresh(inst)
+    return _instance_dict(db, inst, user)
+
+
+# ---------------------------------------------------------------------------
+# Назначение операторов по этапам (начальник цеха) — task #12
+# ---------------------------------------------------------------------------
+
+def list_assignable_operators(db: Session, user: CurrentUser) -> list[dict]:
+    """Кандидаты-операторы (ДП) для назначения на этапы: пользователи, чья роль
+    имеет право EXECUTE_BMR. Доступно надзору (MANAGE_PRODUCTION/QA)."""
+    _require_any(user, ("MANAGE_PRODUCTION", "QA_DECISION"))
+    out: list[dict] = []
+    for u in db.query(User).filter(User.is_active.is_(True)).order_by(User.full_name).all():
+        codes = {p.code for p in u.role.permissions} if u.role else set()
+        if "EXECUTE_BMR" in codes:
+            out.append({
+                "id": str(u.id), "username": u.username, "full_name": u.full_name,
+                "role": u.role.name if u.role else None,
+                "is_operator": "MANAGE_PRODUCTION" not in codes,
+            })
+    return out
+
+
+def set_assignments(db: Session, user: CurrentUser, instance_id: UUID, mapping: dict[str, list[str]]) -> dict:
+    """Начальник цеха назначает операторов по этапам ДО заполнения цехом."""
+    _require_any(user, ("MANAGE_PRODUCTION",))
+    inst = _get_instance(db, instance_id)
+    if inst.status in ("completed", "reviewed"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR закрыт — назначения заморожены")
+    valid_stages = {s["stage"] for s in _stages_of(inst)}
+    cleaned: dict[str, list[str]] = {}
+    for stage, user_ids in (mapping or {}).items():
+        if stage not in valid_stages:
+            continue
+        cleaned[stage] = [str(uid) for uid in (user_ids or [])]
+    inst.assignments = cleaned
+    write_audit(
+        db, user, object_type="bmr_instance", object_id=str(inst.id),
+        action_type="ASSIGN_BMR_OPERATORS",
+        new_value={"stages": list(cleaned.keys())},
+    )
+    db.commit()
+    db.refresh(inst)
     return _instance_dict(db, inst, user)

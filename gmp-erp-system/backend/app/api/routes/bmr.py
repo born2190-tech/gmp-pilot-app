@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, get_current_user
 from app.core.database import get_db
 from app.schemas.bmr import (
+    BmrAssignmentsRequest,
     BmrEntriesSaveRequest,
     BmrInstanceActionRequest,
     BmrInstanceItem,
+    BmrOperatorsResponse,
     BmrSignRequest,
     BmrTemplateApproveRequest,
     BmrTemplateCreate,
@@ -27,15 +29,22 @@ from app.services.bmr import (
     duplicate_template,
     get_instance,
     get_template,
+    list_assignable_operators,
     list_templates,
     review_instance,
     save_entries,
+    set_assignments,
     sign_field,
     update_template,
 )
 
 router = APIRouter(prefix="/api/bmr/templates", tags=["bmr"])
 instances_router = APIRouter(prefix="/api/bmr/instances", tags=["bmr"])
+
+
+@instances_router.get("/operators", response_model=BmrOperatorsResponse)
+def operators_route(db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrOperatorsResponse:
+    return BmrOperatorsResponse(operators=list_assignable_operators(db, user))
 
 
 @instances_router.get("/{instance_id}", response_model=BmrInstanceItem)
@@ -61,6 +70,11 @@ def complete_route(instance_id: UUID, payload: BmrInstanceActionRequest, db: Ses
 @instances_router.post("/{instance_id}/review", response_model=BmrInstanceItem)
 def review_route(instance_id: UUID, payload: BmrInstanceActionRequest, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrInstanceItem:
     return BmrInstanceItem.model_validate(review_instance(db, user, instance_id, payload))
+
+
+@instances_router.put("/{instance_id}/assignments", response_model=BmrInstanceItem)
+def assignments_route(instance_id: UUID, payload: BmrAssignmentsRequest, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrInstanceItem:
+    return BmrInstanceItem.model_validate(set_assignments(db, user, instance_id, payload.assignments))
 
 
 @instances_router.get("/{instance_id}/pdf")

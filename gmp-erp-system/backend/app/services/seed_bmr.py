@@ -28,6 +28,8 @@ from app.models.inventory import BmrInstance, BmrSection, BmrTemplate, Product
 ETALON_MARKER = "__etalon_dapiga_opudrivanie__"
 ETALON_TITLE = "ЗПС Дапига 10 мг — роллер-компактор (эталон)"
 ETALON_ROOM = "Комн. 29"
+ETALON_STAGE = "opudrivanie"
+ETALON_STAGE_TITLE = "Опудривание"
 
 
 def _sig_pair() -> list[dict]:
@@ -157,9 +159,12 @@ def _write_sections(db: Session, template_id) -> None:
     db.query(BmrSection).filter(BmrSection.template_id == template_id).delete()
     db.flush()
     for idx, sec in enumerate(_etalon_sections(), start=1):
+        config = dict(sec["config"])
+        config.setdefault("stage", ETALON_STAGE)
+        config.setdefault("stage_title", ETALON_STAGE_TITLE)
         db.add(BmrSection(
             template_id=template_id, ordinal=idx,
-            section_type=sec["section_type"], title=sec["title"], config=sec["config"],
+            section_type=sec["section_type"], title=sec["title"], config=config,
         ))
 
 
@@ -189,13 +194,14 @@ def seed_bmr_etalon(db: Session) -> None:
             .filter(BmrInstance.template_id == existing.id)
             .scalar()
         ) or 0
-        if not has_instance:
-            # Шаблон ещё не использован — безопасно переписать секции (итерация дизайна).
-            existing.title = ETALON_TITLE
-            existing.product_id = product.id
-            _write_sections(db, existing.id)
+        # Структура шаблона = определение; перезапись секций НЕ влияет на снимки уже
+        # выданных экземпляров (у них своя копия). Поэтому держим шаблон актуальным.
+        existing.title = ETALON_TITLE
+        existing.product_id = product.id
+        _write_sections(db, existing.id)
         _retire_siblings(db, product.id, existing.id)
         db.commit()
+        _ = has_instance
         return
 
     template = BmrTemplate(

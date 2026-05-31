@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronRight, ClipboardCheck, Clock,
   DoorOpen, Droplet, Eye, FileDown, Gauge, Layers, Loader2, Lock, Pen, Save, ShieldCheck,
-  Thermometer, Wifi, X,
+  Thermometer, Users, Wifi, X,
 } from 'lucide-react'
+import { BmrAssignDialog } from './BmrAssignDialog'
 import {
   getBmrInstance, listProductionBatches, getBatchBmrInstance, saveBmrEntries, signBmrField,
   completeBmrInstance, reviewBmrInstance, downloadBmrInstancePdf,
@@ -195,6 +196,7 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
   const [pwd, setPwd] = useState('')
   // Подписант вводит СВОИ креды на каждую подпись (общий планшет; не запоминаем сессию).
   const [signer, setSigner] = useState('')
+  const [assignOpen, setAssignOpen] = useState(false)
 
   const perms = user?.permissions || []
   const isSupervisor = perms.includes('MANAGE_PRODUCTION') || perms.includes('QA_DECISION')
@@ -302,10 +304,14 @@ function FillView({ token, user, instanceId, onBack }: { token: string; user: Cu
           <div className="mono text-[10.5px] text-slate-400">BMR · v{inst.template_version} · СОП-11</div>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {isSupervisor && !closed && (inst.stages?.length || 0) > 0 && (
+            <button onClick={() => setAssignOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-2.5 text-[12px] font-semibold text-blue-700 hover:bg-blue-100"><Users size={14} /> Операторы по этапам</button>
+          )}
           <StatusChip status={inst.status} />
           {savedAt && <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10.5px] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Сохранено {savedAt}</span>}
         </div>
       </div>
+      {assignOpen && <BmrAssignDialog token={token} instance={inst} onClose={() => setAssignOpen(false)} onSaved={(u) => setInst(u)} />}
 
       {!isSupervisor && (
         <div className="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2 text-[12px] text-blue-700">

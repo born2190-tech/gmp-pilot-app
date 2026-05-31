@@ -1248,7 +1248,13 @@ export interface BmrInstanceItem {
   reviewed_at: string | null
   sections: BmrSectionItem[]
   entries: BmrEntryItem[]
+  assignments?: Record<string, string[]>
+  stages?: BmrStageItem[]
 }
+
+export interface BmrStageItem { stage: string; title: string; room: string | null }
+export interface BmrOperatorItem { id: string; username: string; full_name: string; role: string | null; is_operator: boolean }
+export interface BmrOperatorsResponse { operators: BmrOperatorItem[] }
 
 export interface BmrBatchInstanceResponse {
   instance: BmrInstanceItem | null

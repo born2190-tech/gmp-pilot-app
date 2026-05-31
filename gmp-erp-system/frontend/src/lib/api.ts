@@ -89,6 +89,7 @@ import type {
   BmrTemplateInput,
   BmrBatchInstanceResponse,
   BmrInstanceItem,
+  BmrOperatorsResponse,
   ProductionBatchStartRequest,
   SamplingActCreate,
   SamplingActItem,
@@ -1100,6 +1101,14 @@ export function getBatchBmrInstance(token: string, batchId: string): Promise<Bmr
 
 export function getBmrInstance(token: string, id: string): Promise<BmrInstanceItem> {
   return request<BmrInstanceItem>(`/api/bmr/instances/${id}`, 'GET', { token })
+}
+
+export function listBmrOperators(token: string): Promise<BmrOperatorsResponse> {
+  return request<BmrOperatorsResponse>('/api/bmr/instances/operators', 'GET', { token })
+}
+
+export function setBmrAssignments(token: string, id: string, assignments: Record<string, string[]>): Promise<BmrInstanceItem> {
+  return request<BmrInstanceItem>(`/api/bmr/instances/${id}/assignments`, 'PUT', { token, body: { assignments } })
 }
 
 export function saveBmrEntries(token: string, id: string, entries: { section_id: string; field_index: number; value: unknown }[]): Promise<BmrInstanceItem> {

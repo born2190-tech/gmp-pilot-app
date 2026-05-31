@@ -117,6 +117,28 @@ class BmrEntryItem(BaseModel):
     filled_at: datetime | None = None
 
 
+class BmrStageItem(BaseModel):
+    stage: str
+    title: str
+    room: str | None = None
+
+
+class BmrOperatorItem(BaseModel):
+    id: str
+    username: str
+    full_name: str
+    role: str | None = None
+    is_operator: bool = True
+
+
+class BmrOperatorsResponse(BaseModel):
+    operators: list[BmrOperatorItem] = Field(default_factory=list)
+
+
+class BmrAssignmentsRequest(BaseModel):
+    assignments: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class BmrInstanceItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -132,6 +154,8 @@ class BmrInstanceItem(BaseModel):
     reviewed_at: datetime | None
     sections: list[BmrInstanceSectionItem]
     entries: list[BmrEntryItem] = Field(default_factory=list)
+    assignments: dict[str, list[str]] = Field(default_factory=dict)
+    stages: list[BmrStageItem] = Field(default_factory=list)
 
 
 class BmrEntrySave(BaseModel):
