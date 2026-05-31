@@ -365,6 +365,60 @@ def _ensure_instance_scope(instance: BmrInstance, user: CurrentUser) -> None:
     )
 
 
+def _field_label(section: BmrInstanceSection, field_index: int) -> str:
+    fields = (section.config or {}).get("fields", [])
+    label = fields[field_index].get("label") if 0 <= field_index < len(fields) else None
+    return f"{section.title} / {label or f'поле {field_index + 1}'}"
+
+
+def _ordered_fields(instance: BmrInstance, user: CurrentUser) -> list[tuple[UUID, int, str]]:
+    ordered: list[tuple[UUID, int, str]] = []
+    for section in _visible_sections(instance, user):
+        fields = (section.config or {}).get("fields", [])
+        for field_index, field in enumerate(fields):
+            ordered.append((section.id, field_index, str(field.get("type") or "")))
+    return ordered
+
+
+def _entry_is_complete(entry: BmrEntry | None) -> bool:
+    if not entry or not entry.value:
+        return False
+    value = entry.value
+    if value.get("signed_by"):
+        return True
+    if "v" not in value:
+        return False
+    return value.get("v") not in (None, "")
+
+
+def _completion_map(db: Session, instance_id: UUID) -> dict[tuple[UUID, int], bool]:
+    rows = db.query(BmrEntry).filter(BmrEntry.instance_id == instance_id).all()
+    return {(row.section_id, row.field_index): _entry_is_complete(row) for row in rows}
+
+
+def _ensure_previous_complete(
+    instance: BmrInstance,
+    user: CurrentUser,
+    section_map: dict[UUID, BmrInstanceSection],
+    section_id: UUID,
+    field_index: int,
+    completed: dict[tuple[UUID, int], bool],
+) -> None:
+    ordered = _ordered_fields(instance, user)
+    positions = {(sid, idx): pos for pos, (sid, idx, _ftype) in enumerate(ordered)}
+    current = (section_id, field_index)
+    if current not in positions:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Поле недоступно для вашего рабочего места")
+    for previous_sid, previous_idx, _previous_type in ordered[: positions[current]]:
+        if completed.get((previous_sid, previous_idx)):
+            continue
+        previous_section = section_map[previous_sid]
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Сначала завершите предыдущий пункт и подпись ДОК: {_field_label(previous_section, previous_idx)}",
+        )
+
+
 def _get_instance(db: Session, instance_id: UUID) -> BmrInstance:
     inst = db.get(BmrInstance, instance_id)
     if not inst:
@@ -386,11 +440,27 @@ def save_entries(db: Session, user: CurrentUser, instance_id: UUID, payload: Bmr
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR закрыт — правка запрещена")
     _ensure_instance_scope(inst, user)
     section_map = {s.id: s for s in inst.sections}
+    ordered = _ordered_fields(inst, user)
+    positions = {(sid, idx): pos for pos, (sid, idx, _ftype) in enumerate(ordered)}
+    completed = _completion_map(db, inst.id)
+    valid_items = []
     for item in payload.entries:
         section = section_map.get(item.section_id)
         if not section:
             continue
         _ensure_section_access(section, user)
+        fields = (section.config or {}).get("fields", [])
+        if item.field_index < 0 or item.field_index >= len(fields):
+            continue
+        field_type = str(fields[item.field_index].get("type") or "")
+        if field_type.startswith("signature_"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Подписи выполняются только через действие подписи")
+        if (item.section_id, item.field_index) not in positions:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Поле недоступно для вашего рабочего места")
+        valid_items.append(item)
+    valid_items.sort(key=lambda item: positions[(item.section_id, item.field_index)])
+    for item in valid_items:
+        _ensure_previous_complete(inst, user, section_map, item.section_id, item.field_index, completed)
         entry = (
             db.query(BmrEntry)
             .filter(BmrEntry.section_id == item.section_id, BmrEntry.field_index == item.field_index)
@@ -402,6 +472,7 @@ def save_entries(db: Session, user: CurrentUser, instance_id: UUID, payload: Bmr
         entry.value = {"v": item.value}
         entry.filled_by = user.id
         entry.filled_at = now_utc()
+        completed[(item.section_id, item.field_index)] = item.value not in (None, "")
     _mark_started(inst, user)
     db.commit()
     db.refresh(inst)
@@ -421,6 +492,9 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
     if payload.field_index < 0 or payload.field_index >= len(fields):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Поле не найдено")
     ftype = fields[payload.field_index].get("type")
+    section_map = {s.id: s for s in inst.sections}
+    completed = _completion_map(db, inst.id)
+    _ensure_previous_complete(inst, user, section_map, payload.section_id, payload.field_index, completed)
     if ftype == "signature_qa":
         _require_any(user, ("QA_DECISION",))
         role = "qa"
