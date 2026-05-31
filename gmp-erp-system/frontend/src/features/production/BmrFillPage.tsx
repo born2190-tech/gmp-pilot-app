@@ -749,6 +749,17 @@ function SignCell({ role, state, who, at, onSign }: { role: SignRole; state: 'lo
   return <button onClick={onSign} className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-semibold text-white shadow-sm active:scale-[0.98] ${btnTone}`}><Pen size={13} /> Подписать · {SIGN_LABEL[role]}</button>
 }
 
+function numVal(s?: string): number | null {
+  const v = parseFloat(String(s ?? '').replace(',', '.'))
+  return Number.isFinite(v) ? v : null
+}
+function outOfLimit(v: number | null, lo?: number, hi?: number): boolean {
+  if (v == null) return false
+  if (lo != null && v < lo) return true
+  if (hi != null && v > hi) return true
+  return false
+}
+
 function fmtTime(iso?: string): string {
   if (!iso) return ''
   const d = new Date(iso); return isNaN(d.getTime()) ? '' : d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -960,6 +971,147 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
           </tr>
         ))}</tbody>
       </table>
+    )
+  }
+
+  /* ---- production_formula (справочный состав серии, read-only) ---- */
+  if (kind === 'production_formula') {
+    const rows = section.config?.rows || []
+    return wrap(
+      <div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px]">
+            <thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-3 py-2">Состав</th><th className="px-3 py-2">Спецификация</th><th className="px-3 py-2">На таблетку</th><th className="px-3 py-2">На серию</th>
+            </tr></thead>
+            <tbody>{rows.map((r, i) => (
+              <tr key={i} className="border-b border-slate-100 text-[12.5px] text-slate-700">
+                <td className="px-3 py-2">{r.name}</td><td className="mono px-3 py-2 text-slate-500">{r.spec || '—'}</td>
+                <td className="mono px-3 py-2 text-slate-600">{r.per_tab || '—'}</td><td className="mono px-3 py-2 text-slate-600">{r.per_series || '—'}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        {section.config?.note && <div className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">{section.config.note}</div>}
+      </div>
+    )
+  }
+
+  /* ---- yield (выход / материальный баланс: план + факт → авто % выхода/потерь) ---- */
+  if (kind === 'yield') {
+    const cfg = section.config || {}
+    const unit = cfg.unit || ''
+    const planned = numVal(draft[key(sid, 0)])
+    const actual = numVal(draft[key(sid, 1)])
+    const yieldPct = planned != null && planned > 0 && actual != null ? (actual / planned) * 100 : null
+    const lossPct = yieldPct != null ? Math.max(0, 100 - yieldPct) : null
+    const dpE = entries[key(sid, 2)]; const dokE = entries[key(sid, 3)]
+    const dpSigned = !!(dpE?.value && dpE.value.signed_by)
+    const uDp = fieldUnlocked(allSections, entries, draft, sid, 2)
+    const uDok = fieldUnlocked(allSections, entries, draft, sid, 3)
+    return wrap(
+      <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+        <div>
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{cfg.planned_label || 'По плану'}</div>
+          {inputFor(0, 'number', unit)}
+        </div>
+        <div>
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{cfg.actual_label || 'Фактически'}</div>
+          {inputFor(1, 'number', unit)}
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 sm:col-span-2">
+          <div className="flex flex-wrap items-center gap-4">
+            <div><div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Выход</div><div className="mono text-[17px] font-bold text-slate-900">{yieldPct != null ? `${yieldPct.toFixed(2)} %` : '—'}</div></div>
+            <div><div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Потери</div><div className={`mono text-[17px] font-bold ${lossPct != null && lossPct > 5 ? 'text-rose-600' : 'text-slate-900'}`}>{lossPct != null ? `${lossPct.toFixed(2)} %` : '—'}</div></div>
+            <span className="ml-auto text-[11px] text-slate-400">Авто-расчёт: факт ÷ план × 100</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-slate-500">Рассчитал · ДП</span>
+          <SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && uDp ? () => onSign(2, 'dp', section.title) : undefined} />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-slate-500">Проверил · ДОК</span>
+          <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(3, 'dok', section.title) : undefined} />
+        </div>
+      </div>
+    )
+  }
+
+  /* ---- in_process_control (ВПК: параметр × пробы, авто-среднее, подсветка вне предела) ---- */
+  if (kind === 'in_process_control') {
+    const params = section.config?.params || []
+    const phases = section.config?.phases || []
+    const perPhase = params.reduce((a, p) => a + (p.samples || 1), 0) + 2
+    return wrap(
+      <div className="space-y-4 p-3">
+        {phases.map((ph, pi) => {
+          const phaseBase = pi * perPhase
+          let cursor = phaseBase
+          const paramRows = params.map((p, ppi) => {
+            const n = p.samples || 1
+            const start = cursor
+            cursor += n
+            const vals = Array.from({ length: n }, (_, s) => numVal(draft[key(sid, start + s)]))
+            const filled = vals.filter((v): v is number => v != null)
+            const avg = filled.length ? filled.reduce((a, b) => a + b, 0) / filled.length : null
+            const avgOut = outOfLimit(avg, p.lo, p.hi)
+            return (
+              <tr key={ppi} className="border-b border-slate-100 align-top">
+                <td className="px-2 py-2 text-[12.5px] font-medium text-slate-800">{p.name}{p.limit && <div className="mono text-[10px] text-slate-400">предел: {p.limit}</div>}</td>
+                <td className="px-2 py-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {Array.from({ length: n }, (_, s) => {
+                      const fi = start + s
+                      const v = numVal(draft[key(sid, fi)])
+                      const bad = outOfLimit(v, p.lo, p.hi)
+                      const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi)
+                      return (
+                        <input key={s} disabled={closed || !unlocked} type="number" value={draft[key(sid, fi)] ?? ''} onChange={(e) => onSetVal(sid, fi, e.target.value)}
+                          className={`h-9 w-16 rounded-md border bg-white px-2 text-[12.5px] outline-none focus:ring-2 disabled:bg-slate-50 disabled:text-slate-400 ${bad ? 'border-rose-400 text-rose-700 focus:ring-rose-100' : 'border-slate-300 focus:border-blue-500 focus:ring-blue-100'}`} />
+                      )
+                    })}
+                  </div>
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap">
+                  <span className={`mono rounded-md px-2 py-1 text-[12px] font-semibold ring-1 ring-inset ${avg == null ? 'bg-slate-100 text-slate-400 ring-slate-200' : avgOut ? 'bg-rose-50 text-rose-700 ring-rose-200' : 'bg-emerald-50 text-emerald-700 ring-emerald-200'}`}>
+                    {avg == null ? 'ср. —' : `ср. ${avg.toFixed(2)}`}{p.unit ? ` ${p.unit}` : ''}
+                  </span>
+                </td>
+              </tr>
+            )
+          })
+          const dpFi = phaseBase + params.reduce((a, p) => a + (p.samples || 1), 0)
+          const dokFi = dpFi + 1
+          const dpE = entries[key(sid, dpFi)]; const dokE = entries[key(sid, dokFi)]
+          const dpSigned = !!(dpE?.value && dpE.value.signed_by)
+          const uDp = fieldUnlocked(allSections, entries, draft, sid, dpFi)
+          const uDok = fieldUnlocked(allSections, entries, draft, sid, dokFi)
+          return (
+            <div key={ph.key} className="overflow-hidden rounded-lg border border-slate-200">
+              <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+                <span className="text-[12.5px] font-semibold text-slate-800">В процессе · {ph.title}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px]">
+                  <thead><tr className="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    <th className="px-2 py-1.5">Параметр</th><th className="px-2 py-1.5">Пробы</th><th className="px-2 py-1.5">Среднее</th>
+                  </tr></thead>
+                  <tbody>{paramRows}</tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-white px-3 py-2">
+                <div className="flex items-center gap-2"><span className="text-[11px] text-slate-500">Испытал · ДП</span>
+                  <SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && uDp ? () => onSign(dpFi, 'dp', `ВПК ${ph.title}`) : undefined} />
+                </div>
+                <div className="flex items-center gap-2"><span className="text-[11px] text-slate-500">Утвердил · ДОК</span>
+                  <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(dokFi, 'dok', `ВПК ${ph.title}`) : undefined} />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     )
   }
 
