@@ -8,11 +8,12 @@ import {
   duplicateBmrTemplate,
   getBmrTemplate,
   listBmrTemplates,
+  listMaterials,
   listProducts,
   updateBmrTemplate,
 } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
-import type { BmrTemplateItem, BmrTemplateListItem, ProductItem } from '../../types/inventory'
+import type { BmrTemplateItem, BmrTemplateListItem, MaterialItem, ProductItem } from '../../types/inventory'
 
 interface Props { token: string; user: CurrentUser }
 
@@ -51,17 +52,60 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 }
 
 interface FieldDef { label: string; type: string; unit?: string; required?: boolean }
-interface SecForm { section_type: string; title: string; fields: FieldDef[] }
+interface DistRow { id: string; group: string; material_code: string; name: string; qty: string }
+interface SecForm { section_type: string; title: string; room?: string; stage?: string; stage_title?: string; fields: FieldDef[]; dist?: DistRow[] }
 interface TplForm { id?: string; product_id: string; title: string; status: string; version: number; sections: SecForm[] }
+
+let _rid = 0
+function rid(): string { _rid += 1; return `r${_rid}` }
+
+function distFromConfig(config: BmrTemplateItem['sections'][number]['config']): DistRow[] {
+  const rows: DistRow[] = []
+  for (const g of config?.groups ?? []) {
+    for (const it of g.items ?? []) {
+      rows.push({ id: rid(), group: g.title || '', material_code: (it as { material_code?: string }).material_code ?? '', name: it.name ?? '', qty: it.qty ?? '' })
+    }
+  }
+  return rows
+}
 
 function fromItem(item: BmrTemplateItem): TplForm {
   return {
     id: item.id, product_id: item.product_id, title: item.title, status: item.status, version: item.version,
     sections: item.sections.map((s) => ({
       section_type: s.section_type, title: s.title,
+      room: s.config?.room ?? '', stage: s.config?.stage ?? '', stage_title: s.config?.stage_title ?? '',
       fields: (s.config?.fields ?? []).map((f) => ({ label: f.label, type: f.type, unit: f.unit ?? '', required: !!f.required })),
+      dist: s.section_type === 'distribution_list' ? distFromConfig(s.config) : undefined,
     })),
   }
+}
+
+/** Строит config для distribution_list из строк-материалов: groups + 6 полей на
+ * ингредиент (как backend _distribution_list): серия сырья, аналит. лист, вес,
+ * Склад, ДП, ДОК. */
+function distConfig(sec: SecForm): Record<string, unknown> {
+  const rows = (sec.dist ?? []).filter((r) => r.name.trim() || r.material_code)
+  const groupsMap = new Map<string, { name: string; material_code: string; qty: string }[]>()
+  const order: string[] = []
+  for (const r of rows) {
+    const key = r.group.trim() || 'Материалы'
+    if (!groupsMap.has(key)) { groupsMap.set(key, []); order.push(key) }
+    groupsMap.get(key)!.push({ name: r.name.trim(), material_code: r.material_code || undefined as unknown as string, qty: r.qty.trim() })
+  }
+  const groups = order.map((title) => ({ title, items: groupsMap.get(title)! }))
+  const fields: FieldDef[] = []
+  for (const g of groups) {
+    for (const it of g.items) {
+      fields.push({ label: `${it.name} · № серии сырья`, type: 'text' })
+      fields.push({ label: `${it.name} · № аналит. листа`, type: 'text' })
+      fields.push({ label: `${it.name} · вес нетто`, type: 'number', unit: 'кг' })
+      fields.push({ label: `${it.name} · Выдал (Склад)`, type: 'signature_warehouse' })
+      fields.push({ label: `${it.name} · Проверил (ДП)`, type: 'signature_operator' })
+      fields.push({ label: `${it.name} · Проверил (ДОК)`, type: 'signature_qa' })
+    }
+  }
+  return { kind: 'distribution_list', groups, fields }
 }
 
 export function BmrTemplatesPage({ token, user }: Props) {
@@ -70,6 +114,7 @@ export function BmrTemplatesPage({ token, user }: Props) {
 
   const [list, setList] = useState<BmrTemplateListItem[]>([])
   const [products, setProducts] = useState<ProductItem[]>([])
+  const [materials, setMaterials] = useState<MaterialItem[]>([])
   const [form, setForm] = useState<TplForm | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -77,9 +122,14 @@ export function BmrTemplatesPage({ token, user }: Props) {
 
   const reload = useCallback(async () => {
     try {
-      const [t, p] = await Promise.all([listBmrTemplates(token), listProducts(token).catch(() => ({ products: [] as ProductItem[] }))])
+      const [t, p, m] = await Promise.all([
+        listBmrTemplates(token),
+        listProducts(token).catch(() => ({ products: [] as ProductItem[] })),
+        listMaterials(token).catch(() => ({ materials: [] as MaterialItem[] })),
+      ])
       setList(t.templates)
       setProducts(p.products)
+      setMaterials(m.materials)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить шаблоны')
     }
@@ -103,10 +153,16 @@ export function BmrTemplatesPage({ token, user }: Props) {
   function buildInput() {
     return {
       product_id: form!.product_id, title: form!.title.trim(), notes: null,
-      sections: form!.sections.map((s) => ({
-        section_type: s.section_type, title: s.title.trim(),
-        config: { fields: s.fields.map((f) => ({ label: f.label.trim(), type: f.type, unit: f.unit?.trim() || null, required: !!f.required })) },
-      })),
+      sections: form!.sections.map((s) => {
+        const meta: Record<string, unknown> = {}
+        if (s.room?.trim()) meta.room = s.room.trim()
+        if (s.stage?.trim()) meta.stage = s.stage.trim()
+        if (s.stage_title?.trim()) meta.stage_title = s.stage_title.trim()
+        const config = s.section_type === 'distribution_list'
+          ? { ...distConfig(s), ...meta }
+          : { ...meta, fields: s.fields.map((f) => ({ label: f.label.trim(), type: f.type, unit: f.unit?.trim() || null, required: !!f.required })) }
+        return { section_type: s.section_type, title: s.title.trim(), config }
+      }),
     }
   }
 
@@ -136,7 +192,20 @@ export function BmrTemplatesPage({ token, user }: Props) {
 
   // section/field mutations
   function patchSec(i: number, p: Partial<SecForm>) { setForm((f) => f ? { ...f, sections: f.sections.map((s, x) => x === i ? { ...s, ...p } : s) } : f) }
-  function addSection(type: string) { setForm((f) => f ? { ...f, sections: [...f.sections, { section_type: type, title: SECTION_LABEL[type], fields: [] }] } : f) }
+  function addSection(type: string) { setForm((f) => f ? { ...f, sections: [...f.sections, { section_type: type, title: SECTION_LABEL[type], fields: [], dist: type === 'distribution_list' ? [] : undefined }] } : f) }
+  function addDistRow(i: number) { patchSec(i, { dist: [...(form!.sections[i].dist ?? []), { id: rid(), group: 'Материалы для смешивания', material_code: '', name: '', qty: '' }] }) }
+  function patchDistRow(i: number, rowId: string, p: Partial<DistRow>) {
+    patchSec(i, { dist: (form!.sections[i].dist ?? []).map((r) => {
+      if (r.id !== rowId) return r
+      const next = { ...r, ...p }
+      if (p.material_code !== undefined) {
+        const mat = materials.find((m) => m.code === p.material_code)
+        if (mat && !next.name.trim()) next.name = mat.name
+      }
+      return next
+    }) })
+  }
+  function removeDistRow(i: number, rowId: string) { patchSec(i, { dist: (form!.sections[i].dist ?? []).filter((r) => r.id !== rowId) }) }
   function removeSection(i: number) { setForm((f) => f ? { ...f, sections: f.sections.filter((_, x) => x !== i) } : f) }
   function moveSection(i: number, d: number) { setForm((f) => { if (!f) return f; const a = [...f.sections]; const j = i + d; if (j < 0 || j >= a.length) return f; [a[i], a[j]] = [a[j], a[i]]; return { ...f, sections: a } }) }
   function addField(i: number) { patchSec(i, { fields: [...form!.sections[i].fields, { label: '', type: 'text', unit: '', required: false }] }) }
@@ -231,29 +300,69 @@ export function BmrTemplatesPage({ token, user }: Props) {
                       </div>
                     )}
                   </div>
-                  <div className="p-3">
-                    <table className="w-full text-left text-[12.5px]">
-                      <thead className="text-[10px] uppercase tracking-wide text-slate-500">
-                        <tr><th className="px-2 py-1">Поле / колонка</th><th className="w-44 px-2 py-1">Тип</th><th className="w-24 px-2 py-1">Ед.</th><th className="w-20 px-2 py-1 text-center">Обяз.</th>{editable && <th className="w-8" />}</tr>
-                      </thead>
-                      <tbody>
-                        {sec.fields.map((fl, fi) => (
-                          <tr key={fi} className="border-t border-slate-100">
-                            <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={fl.label} disabled={!editable} onChange={(e) => patchField(i, fi, { label: e.target.value })} placeholder="Напр.: Температура помещения" /></td>
-                            <td className="px-2 py-1">
-                              <select className="w-full rounded border border-slate-200 px-1 py-1 disabled:bg-slate-50" value={fl.type} disabled={!editable} onChange={(e) => patchField(i, fi, { type: e.target.value })}>
-                                {FIELD_TYPES.map((ft) => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
-                              </select>
-                            </td>
-                            <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={fl.unit ?? ''} disabled={!editable} onChange={(e) => patchField(i, fi, { unit: e.target.value })} placeholder="°C, кг…" /></td>
-                            <td className="px-2 py-1 text-center"><input type="checkbox" checked={!!fl.required} disabled={!editable} onChange={(e) => patchField(i, fi, { required: e.target.checked })} className="h-4 w-4" /></td>
-                            {editable && <td className="px-2 py-1"><button type="button" onClick={() => removeField(i, fi)} className="rounded p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button></td>}
-                          </tr>
-                        ))}
-                        {sec.fields.length === 0 && <tr><td colSpan={5} className="px-2 py-2 text-[12px] text-slate-400">Поля не заданы.</td></tr>}
-                      </tbody>
-                    </table>
-                    {editable && <button type="button" onClick={() => addField(i)} className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-slate-50"><Plus size={12} />Поле</button>}
+                  <div className="space-y-3 p-3">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <label className="block"><span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Комната (scope)</span>
+                        <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={sec.room ?? ''} disabled={!editable} onChange={(e) => patchSec(i, { room: e.target.value })} placeholder="Комн. 39" /></label>
+                      <label className="block"><span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Код этапа</span>
+                        <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={sec.stage ?? ''} disabled={!editable} onChange={(e) => patchSec(i, { stage: e.target.value })} placeholder="weighing" /></label>
+                      <label className="block"><span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Название этапа</span>
+                        <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={sec.stage_title ?? ''} disabled={!editable} onChange={(e) => patchSec(i, { stage_title: e.target.value })} placeholder="Взвешивание" /></label>
+                    </div>
+
+                    {sec.section_type === 'distribution_list' ? (
+                      <div>
+                        <table className="w-full text-left text-[12.5px]">
+                          <thead className="text-[10px] uppercase tracking-wide text-slate-500">
+                            <tr><th className="px-2 py-1">Группа</th><th className="px-2 py-1">Материал (справочник)</th><th className="px-2 py-1">Наименование в ЗПС</th><th className="w-28 px-2 py-1">Кол-во/серию</th>{editable && <th className="w-8" />}</tr>
+                          </thead>
+                          <tbody>
+                            {(sec.dist ?? []).map((r) => (
+                              <tr key={r.id} className="border-t border-slate-100">
+                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={r.group} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { group: e.target.value })} placeholder="Материалы для смешивания 1" /></td>
+                                <td className="px-2 py-1">
+                                  <select className="w-full rounded border border-slate-200 px-1 py-1 disabled:bg-slate-50" value={r.material_code} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { material_code: e.target.value })}>
+                                    <option value="">— выбрать —</option>
+                                    {materials.map((m) => <option key={m.id} value={m.code}>{m.code} · {m.name}</option>)}
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={r.name} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { name: e.target.value })} placeholder="как в листе распределения" /></td>
+                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={r.qty} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { qty: e.target.value })} placeholder="3,690" /></td>
+                                {editable && <td className="px-2 py-1"><button type="button" onClick={() => removeDistRow(i, r.id)} className="rounded p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button></td>}
+                              </tr>
+                            ))}
+                            {(sec.dist ?? []).length === 0 && <tr><td colSpan={5} className="px-2 py-2 text-[12px] text-slate-400">Материалы не заданы.</td></tr>}
+                          </tbody>
+                        </table>
+                        {editable && <button type="button" onClick={() => addDistRow(i)} className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-slate-50"><Plus size={12} />Материал</button>}
+                        <p className="mt-2 text-[11px] text-slate-400">Поля (№ серии сырья, № аналит. листа, вес нетто, подписи Склад/ДП/ДОК) формируются автоматически по каждому материалу. Привязка к справочнику даёт автозаполнение требования и FEFO.</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <table className="w-full text-left text-[12.5px]">
+                          <thead className="text-[10px] uppercase tracking-wide text-slate-500">
+                            <tr><th className="px-2 py-1">Поле / колонка</th><th className="w-44 px-2 py-1">Тип</th><th className="w-24 px-2 py-1">Ед.</th><th className="w-20 px-2 py-1 text-center">Обяз.</th>{editable && <th className="w-8" />}</tr>
+                          </thead>
+                          <tbody>
+                            {sec.fields.map((fl, fi) => (
+                              <tr key={fi} className="border-t border-slate-100">
+                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={fl.label} disabled={!editable} onChange={(e) => patchField(i, fi, { label: e.target.value })} placeholder="Напр.: Температура помещения" /></td>
+                                <td className="px-2 py-1">
+                                  <select className="w-full rounded border border-slate-200 px-1 py-1 disabled:bg-slate-50" value={fl.type} disabled={!editable} onChange={(e) => patchField(i, fi, { type: e.target.value })}>
+                                    {FIELD_TYPES.map((ft) => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
+                                  </select>
+                                </td>
+                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={fl.unit ?? ''} disabled={!editable} onChange={(e) => patchField(i, fi, { unit: e.target.value })} placeholder="°C, кг…" /></td>
+                                <td className="px-2 py-1 text-center"><input type="checkbox" checked={!!fl.required} disabled={!editable} onChange={(e) => patchField(i, fi, { required: e.target.checked })} className="h-4 w-4" /></td>
+                                {editable && <td className="px-2 py-1"><button type="button" onClick={() => removeField(i, fi)} className="rounded p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button></td>}
+                              </tr>
+                            ))}
+                            {sec.fields.length === 0 && <tr><td colSpan={5} className="px-2 py-2 text-[12px] text-slate-400">Поля не заданы.</td></tr>}
+                          </tbody>
+                        </table>
+                        {editable && <button type="button" onClick={() => addField(i)} className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-slate-50"><Plus size={12} />Поле</button>}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
