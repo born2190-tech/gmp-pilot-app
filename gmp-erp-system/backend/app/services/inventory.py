@@ -401,6 +401,22 @@ def transfer_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: Transfer
             workstation_id=user.workstation_id,
         )
     )
+    # Перенос стоимости следует за физическим перемещением: когда склад двигает
+    # допущенную партию в зону RELEASED, её счёт переходит на «допущено» (раньше
+    # это делал допуск ОКК — теперь развязано, перемещение делает склад).
+    if lot.quality_status == "released" and target_location.code == "RELEASED":
+        from app.services.accounts import move_lot_account, zone_for_status
+
+        move_lot_account(
+            db,
+            lot,
+            zone_for_status(lot.quality_status),
+            user_id=user.id,
+            workstation_id=user.workstation_id,
+            document_type="warehouse_transfer",
+            document_id=lot.id,
+            reason=payload.reason,
+        )
     write_audit(
         db,
         user,
