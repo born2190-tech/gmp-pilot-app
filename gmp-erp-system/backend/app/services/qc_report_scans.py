@@ -19,7 +19,7 @@ from app.core.config import settings
 from app.models.quality import QCReport, QCReportParameter, QCReportScan
 from app.services.audit import write_audit
 from app.services.document_qr import DOC_QC_REPORT, canonical_hash, validate_scan_document_qr
-from app.services.permissions import require_permission
+from app.services.permissions import require_any_permission, require_permission
 from app.services.signature import validate_signature
 
 
@@ -32,7 +32,9 @@ def now_utc() -> datetime:
 
 
 def _scan_root() -> Path:
-    return Path(settings.qc_scan_root).resolve().parent / "qc-report-scans"
+    # Под смонтированным томом (qc_scan_root = /data/qc-scans), иначе сканы
+    # терялись при пересборке контейнера (писались в эфемерный /data).
+    return Path(settings.qc_scan_root).resolve() / "qc-report-scans"
 
 
 def _safe_seg(value: str) -> str:
@@ -146,7 +148,10 @@ def latest_scan(db: Session, report_id: UUID) -> QCReportScan | None:
 
 
 def load_scan_file(db: Session, user: CurrentUser, scan_id: UUID) -> tuple[bytes, str]:
-    require_permission(user, "VIEW_WAREHOUSE")
+    # Просмотр скана аналит. листа: загрузивший (ОКК), верификатор ДОК и
+    # просматривающие роли. Раньше требовался только VIEW_WAREHOUSE — из-за чего
+    # ДОК-верификатор не мог открыть документ для проверки.
+    require_any_permission(user, ("VERIFY_QC_SCAN", "ENTER_QC_RESULT", "VIEW_QC", "VIEW_QA", "VIEW_WAREHOUSE"))
     scan = db.get(QCReportScan, scan_id)
     if not scan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")

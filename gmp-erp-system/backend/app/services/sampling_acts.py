@@ -35,7 +35,7 @@ from app.models.quality import SamplingAct, SamplingLine, SamplingScan
 from app.schemas.quality import SamplingActCreate
 from app.services.audit import write_audit
 from app.services.document_qr import DOC_SAMPLING_ACT, canonical_hash, validate_scan_document_qr
-from app.services.permissions import require_permission
+from app.services.permissions import require_any_permission, require_permission
 from app.services.signature import validate_signature
 
 
@@ -51,8 +51,9 @@ def now_utc() -> datetime:
 
 
 def _scan_root() -> Path:
-    base = Path(settings.qc_scan_root).resolve().parent
-    return base / "sampling-act-scans"
+    # Под смонтированным томом (qc_scan_root = /data/qc-scans), иначе сканы
+    # терялись при пересборке контейнера (писались в эфемерный /data).
+    return Path(settings.qc_scan_root).resolve() / "sampling-act-scans"
 
 
 def _safe_seg(value: str) -> str:
@@ -408,7 +409,10 @@ def list_scans(db: Session, act_id: UUID) -> list[SamplingScan]:
 
 
 def load_scan_file(db: Session, user: CurrentUser, scan_id: UUID) -> tuple[bytes, str]:
-    require_permission(user, "VIEW_QC")
+    # Просмотр скана акта отбора (Ф-10): загрузивший (ОКК), верификатор ДОК и
+    # просматривающие роли. Раньше требовался только VIEW_QC — из-за чего ДОК
+    # не мог открыть отсканированный акт для верификации.
+    require_any_permission(user, ("VERIFY_QC_SCAN", "ENTER_QC_RESULT", "VIEW_QC", "VIEW_QA", "VIEW_WAREHOUSE"))
     scan = db.get(SamplingScan, scan_id)
     if not scan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")

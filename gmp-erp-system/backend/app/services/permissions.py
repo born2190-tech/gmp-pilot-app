@@ -11,6 +11,14 @@ def require_permission(user: CurrentUser, permission_code: str) -> None:
         )
 
 
+def require_any_permission(user: CurrentUser, permission_codes: tuple[str, ...]) -> None:
+    if not any(code in user.permissions for code in permission_codes):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"One of permissions {', '.join(permission_codes)} is required",
+        )
+
+
 def require_warehouse_type_scope(user: CurrentUser, warehouse_type: str) -> None:
     if user.warehouse_scope and user.warehouse_scope != warehouse_type:
         raise HTTPException(
