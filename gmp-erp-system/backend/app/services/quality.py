@@ -442,6 +442,12 @@ def create_qc_notification(db: Session, user: CurrentUser, payload: QCNotificati
             detail="QC notification (Ф-14 СОП-209) is only issued for the substance warehouse",
         )
 
+    # Извещение теперь создаётся автоматически при проведении прихода — если оно
+    # уже есть для этого прихода, возвращаем его (идемпотентно), а не ошибку.
+    existing = db.query(QCNotification).filter(QCNotification.receipt_id == receipt.id).first()
+    if existing:
+        return existing
+
     notification_no = (payload.notification_no or "").strip() or generate_qc_notification_no(receipt)
     if db.query(QCNotification).filter(QCNotification.notification_no == notification_no).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Notification number already exists")
