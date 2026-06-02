@@ -292,6 +292,12 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
         )
         lots_created += 1
 
+    # Авто-извещение входного контроля (Ф-14, СОП-209) для склада субстанций:
+    # сразу после проведения прихода появляется и у склада, и в лаборатории.
+    from app.services.quality import build_qc_notification_for_receipt
+
+    build_qc_notification_for_receipt(db, user, receipt)
+
     write_audit(
         db,
         user,

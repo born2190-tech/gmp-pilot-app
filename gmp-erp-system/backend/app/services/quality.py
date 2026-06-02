@@ -342,6 +342,86 @@ def generate_qc_notification_no(receipt: ReceiptDocument) -> str:
     return f"IQC-{receipt.received_date.strftime('%Y%m%d')}-{receipt.document_no}"[:64]
 
 
+def _populate_notification_lines(db: Session, notification: QCNotification, receipt: ReceiptDocument, lines, *, strict: bool) -> int:
+    """Заполняет строки извещения по строкам прихода (по созданным партиям).
+    strict=True → бросает, если партия не найдена; иначе пропускает строку."""
+    added = 0
+    for line in lines:
+        material = db.get(Material, line.material_id)
+        manufacturer = db.get(Manufacturer, line.manufacturer_id)
+        lot = (
+            db.query(Lot)
+            .filter(Lot.material_id == line.material_id, Lot.warehouse_id == receipt.warehouse_id)
+            .filter((Lot.supplier_lot == line.supplier_lot) | (Lot.internal_lot == (line.supplier_lot or "")))
+            .order_by(Lot.created_at.desc())
+            .first()
+        )
+        if not lot:
+            lot = (
+                db.query(Lot)
+                .filter(Lot.material_id == line.material_id, Lot.expiry_date == line.expiry_date)
+                .order_by(Lot.created_at.desc())
+                .first()
+            )
+        if not lot:
+            if strict:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Lot for material {material.code if material else line.material_id} not found — post the receipt first",
+                )
+            continue
+        db.add(
+            QCNotificationLine(
+                notification_id=notification.id,
+                lot_id=lot.id,
+                material_name=material.name if material else "",
+                batch_number=line.supplier_lot or lot.internal_lot,
+                expiry_date=line.expiry_date.isoformat(),
+                quantity=line.quantity,
+                unit=line.unit,
+                manufacturer_name=manufacturer.name if manufacturer else "",
+                invoice_info=f"{receipt.document_no} от {receipt.received_date.isoformat()}",
+            )
+        )
+        added += 1
+    return added
+
+
+def build_qc_notification_for_receipt(db: Session, user: CurrentUser, receipt: ReceiptDocument) -> QCNotification | None:
+    """Авто-создание извещения входного контроля (Ф-14) при проведении прихода
+    склада субстанций. Идемпотентно (одно извещение на приход), без commit —
+    коммитит вызывающая транзакция (post_receipt)."""
+    warehouse = db.get(Warehouse, receipt.warehouse_id)
+    if not warehouse or warehouse.warehouse_type != "SUBSTANCE_WAREHOUSE":
+        return None
+    existing = db.query(QCNotification).filter(QCNotification.receipt_id == receipt.id).first()
+    if existing:
+        return existing
+    lines = db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt.id).order_by(ReceiptLine.created_at).all()
+    if not lines:
+        return None
+    no = generate_qc_notification_no(receipt)
+    if db.query(QCNotification).filter(QCNotification.notification_no == no).first():
+        no = f"{no}-{str(receipt.id)[:4]}"[:64]
+    notification = QCNotification(
+        notification_no=no,
+        status="created",
+        warehouse_id=receipt.warehouse_id,
+        receipt_id=receipt.id,
+        created_by=user.id,
+        notified_at=now_utc(),
+    )
+    db.add(notification)
+    db.flush()
+    _populate_notification_lines(db, notification, receipt, lines, strict=False)
+    write_audit(
+        db, user, object_type="qc_notification", object_id=str(notification.id),
+        action_type="CREATE_QC_NOTIFICATION",
+        new_value={"notification_no": no, "receipt_document_no": receipt.document_no, "auto": True},
+    )
+    return notification
+
+
 def create_qc_notification(db: Session, user: CurrentUser, payload: QCNotificationCreate) -> QCNotification:
     """Manually create a QC notification (Извещение) for a posted receipt.
 
@@ -381,42 +461,7 @@ def create_qc_notification(db: Session, user: CurrentUser, payload: QCNotificati
     db.add(notification)
     db.flush()
 
-    for line in lines:
-        material = db.get(Material, line.material_id)
-        manufacturer = db.get(Manufacturer, line.manufacturer_id)
-        lot = (
-            db.query(Lot)
-            .filter(Lot.material_id == line.material_id, Lot.warehouse_id == receipt.warehouse_id)
-            .filter((Lot.supplier_lot == line.supplier_lot) | (Lot.internal_lot == (line.supplier_lot or "")))
-            .order_by(Lot.created_at.desc())
-            .first()
-        )
-        if not lot:
-            # Fallback: any lot from this receipt's material with matching expiry.
-            lot = (
-                db.query(Lot)
-                .filter(Lot.material_id == line.material_id, Lot.expiry_date == line.expiry_date)
-                .order_by(Lot.created_at.desc())
-                .first()
-            )
-        if not lot:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Lot for material {material.code} not found — post the receipt first",
-            )
-        db.add(
-            QCNotificationLine(
-                notification_id=notification.id,
-                lot_id=lot.id,
-                material_name=material.name,
-                batch_number=line.supplier_lot or lot.internal_lot,
-                expiry_date=line.expiry_date.isoformat(),
-                quantity=line.quantity,
-                unit=line.unit,
-                manufacturer_name=manufacturer.name,
-                invoice_info=f"{receipt.document_no} от {receipt.received_date.isoformat()}",
-            )
-        )
+    _populate_notification_lines(db, notification, receipt, lines, strict=True)
 
     write_audit(
         db,
