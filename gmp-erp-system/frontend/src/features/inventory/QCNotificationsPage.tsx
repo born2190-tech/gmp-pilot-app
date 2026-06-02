@@ -7,6 +7,7 @@ import {
   Eye,
   FileCheck2,
   Inbox,
+  Plus,
   Printer,
   RefreshCw,
   Search,
@@ -16,12 +17,15 @@ import { ScanButton } from '../../components/ui/ScanButton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useI18n } from '../../i18n/I18nProvider'
 import {
+  createQcNotification,
   downloadQcNotificationPdf,
   downloadQcNotificationScan,
+  listEligibleNotificationReceipts,
   listQcNotifications,
   listQcNotificationScans,
   uploadQcNotificationScan,
 } from '../../lib/api'
+import type { EligibleReceiptItem } from '../../lib/api'
 import { printBlob } from '../../lib/print'
 import type { CurrentUser } from '../../types/auth'
 import type { QCNotificationItem, QCNotificationScanItem } from '../../types/inventory'
@@ -49,11 +53,37 @@ function warehouseLabel(type: string, t: Translate): string {
 export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
   const { locale, t } = useI18n()
   const canUpload = user.permissions.includes('UPLOAD_QC_SCAN')
+  // Создавать/отправлять извещения вручную может склад (POST_RECEIPT); у ДКК — нет.
+  const canCreate = user.permissions.includes('POST_RECEIPT')
   const [notifications, setNotifications] = useState<QCNotificationItem[]>([])
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [eligible, setEligible] = useState<EligibleReceiptItem[]>([])
+  const [creatingId, setCreatingId] = useState<string | null>(null)
+
+  async function toggleCreate() {
+    const next = !createOpen
+    setCreateOpen(next)
+    if (next) {
+      setError(null)
+      try { setEligible((await listEligibleNotificationReceipts(token)).receipts) }
+      catch (e) { setError(e instanceof Error ? e.message : 'Ошибка загрузки приходов') }
+    }
+  }
+
+  async function createForReceipt(receiptId: string) {
+    setCreatingId(receiptId)
+    setError(null)
+    try {
+      await createQcNotification(token, { receipt_id: receiptId })
+      setCreateOpen(false)
+      await loadData()
+    } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось создать извещение') }
+    finally { setCreatingId(null) }
+  }
 
   async function loadData() {
     setIsLoading(true)
@@ -142,6 +172,16 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
               <span className="font-semibold tabular-nums text-slate-900">{notifications.length}</span>
             </span>
           </div>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => void toggleCreate()}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              <Plus size={14} />
+              Создать извещение
+            </button>
+          )}
           <button
             type="button"
             onClick={loadData}
@@ -152,6 +192,34 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
           </button>
         </div>
       </div>
+
+      {/* Создание извещения складом (Ф-14): выбор проведённого прихода субстанций без извещения */}
+      {canCreate && createOpen && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[13px] font-semibold text-slate-800">Проведённые приходы субстанций без извещения</p>
+            <button type="button" onClick={() => setCreateOpen(false)} className="text-[12px] text-slate-500 hover:text-slate-800">Закрыть</button>
+          </div>
+          {eligible.length === 0 ? (
+            <p className="text-[12.5px] text-slate-500">Нет приходов, ожидающих извещения. Извещение формируется по проведённому приходу склада субстанций.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {eligible.map((r) => (
+                <div key={r.receipt_id} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[13px] font-semibold text-slate-900">{r.document_no}</span>
+                    <span className="mono ml-2 text-[11px] text-slate-400">{formatDate(r.received_date, locale)} · позиций: {r.lines}</span>
+                  </div>
+                  <button type="button" disabled={creatingId === r.receipt_id} onClick={() => void createForReceipt(r.receipt_id)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[12.5px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                    <Plus size={13} /> {creatingId === r.receipt_id ? 'Создание…' : 'Создать и отправить'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Error alert */}
       {error && (

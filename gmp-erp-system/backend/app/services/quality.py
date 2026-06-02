@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
@@ -387,39 +388,33 @@ def _populate_notification_lines(db: Session, notification: QCNotification, rece
     return added
 
 
-def build_qc_notification_for_receipt(db: Session, user: CurrentUser, receipt: ReceiptDocument) -> QCNotification | None:
-    """Авто-создание извещения входного контроля (Ф-14) при проведении прихода
-    склада субстанций. Идемпотентно (одно извещение на приход), без commit —
-    коммитит вызывающая транзакция (post_receipt)."""
-    warehouse = db.get(Warehouse, receipt.warehouse_id)
-    if not warehouse or warehouse.warehouse_type != "SUBSTANCE_WAREHOUSE":
-        return None
-    existing = db.query(QCNotification).filter(QCNotification.receipt_id == receipt.id).first()
-    if existing:
-        return existing
-    lines = db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt.id).order_by(ReceiptLine.created_at).all()
-    if not lines:
-        return None
-    no = generate_qc_notification_no(receipt)
-    if db.query(QCNotification).filter(QCNotification.notification_no == no).first():
-        no = f"{no}-{str(receipt.id)[:4]}"[:64]
-    notification = QCNotification(
-        notification_no=no,
-        status="created",
-        warehouse_id=receipt.warehouse_id,
-        receipt_id=receipt.id,
-        created_by=user.id,
-        notified_at=now_utc(),
+def list_eligible_receipts_for_notification(db: Session, user: CurrentUser) -> list[dict]:
+    """Проведённые приходы склада субстанций, по которым ещё НЕ создано извещение
+    (Ф-14). Источник для ручного создания извещения складом во вкладке «Извещения»."""
+    require_permission(user, "POST_RECEIPT")
+    notified = db.query(QCNotification.receipt_id)
+    rows = (
+        db.query(ReceiptDocument)
+        .join(Warehouse, Warehouse.id == ReceiptDocument.warehouse_id)
+        .filter(
+            ReceiptDocument.status == "posted",
+            Warehouse.warehouse_type == "SUBSTANCE_WAREHOUSE",
+            ~ReceiptDocument.id.in_(notified),
+        )
+        .order_by(ReceiptDocument.posted_at.desc().nullslast())
+        .limit(100)
+        .all()
     )
-    db.add(notification)
-    db.flush()
-    _populate_notification_lines(db, notification, receipt, lines, strict=False)
-    write_audit(
-        db, user, object_type="qc_notification", object_id=str(notification.id),
-        action_type="CREATE_QC_NOTIFICATION",
-        new_value={"notification_no": no, "receipt_document_no": receipt.document_no, "auto": True},
-    )
-    return notification
+    out: list[dict] = []
+    for r in rows:
+        n = db.query(func.count(ReceiptLine.id)).filter(ReceiptLine.receipt_id == r.id).scalar() or 0
+        out.append({
+            "receipt_id": r.id,
+            "document_no": r.document_no,
+            "received_date": r.received_date,
+            "lines": int(n),
+        })
+    return out
 
 
 def create_qc_notification(db: Session, user: CurrentUser, payload: QCNotificationCreate) -> QCNotification:

@@ -852,6 +852,16 @@ def _qc_notification_item(db: Session, notification: QCNotification) -> QCNotifi
     )
 
 
+@router.get("/qc-notifications/eligible-receipts")
+def eligible_receipts_route(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    from app.services.quality import list_eligible_receipts_for_notification
+
+    return {"receipts": list_eligible_receipts_for_notification(db, current_user)}
+
+
 @router.post("/qc-notifications", response_model=QCNotificationItem, status_code=201)
 def create_qc_notification_route(
     payload: QCNotificationCreate,

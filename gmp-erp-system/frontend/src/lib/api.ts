@@ -710,6 +710,11 @@ export function createQcNotification(token: string, payload: QCNotificationCreat
   return request<QCNotificationItem>('/api/inventory/qc-notifications', 'POST', { token, body: payload })
 }
 
+export interface EligibleReceiptItem { receipt_id: string; document_no: string; received_date: string; lines: number }
+export function listEligibleNotificationReceipts(token: string): Promise<{ receipts: EligibleReceiptItem[] }> {
+  return request<{ receipts: EligibleReceiptItem[] }>('/api/inventory/qc-notifications/eligible-receipts', 'GET', { token })
+}
+
 export function qcNotificationPdfUrl(notificationId: string): string {
   return `/api/inventory/qc-notifications/${notificationId}/pdf`
 }
