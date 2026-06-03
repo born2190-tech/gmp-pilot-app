@@ -7,6 +7,7 @@ import {
   listEquipment,
   updateEquipment,
 } from '../../lib/api'
+import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 import type {
   CalibrationStatus,
@@ -23,35 +24,37 @@ interface Props {
 }
 
 type ActiveFilter = 'all' | 'active' | 'inactive'
+type Translate = ReturnType<typeof useI18n>['t']
 
-const STATUS_CONFIG: Record<CalibrationStatus, { icon: typeof CheckCircle2; label: string; cls: string; accent: string }> = {
+function statusLabel(status: CalibrationStatus, t: Translate): string {
+  return t(`equip.status.${status}` as Parameters<Translate>[0])
+}
+
+const STATUS_CONFIG: Record<CalibrationStatus, { icon: typeof CheckCircle2; cls: string; accent: string }> = {
   ok: {
     icon: CheckCircle2,
-    label: 'Действует',
     cls: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     accent: 'hover:border-emerald-300 data-[active=true]:border-emerald-400',
   },
   expiring: {
     icon: Clock,
-    label: 'Истекает',
     cls: 'border-amber-200 bg-amber-50 text-amber-700',
     accent: 'hover:border-amber-300 data-[active=true]:border-amber-400',
   },
   expired: {
     icon: XCircle,
-    label: 'Просрочена',
     cls: 'border-rose-200 bg-rose-50 text-rose-700',
     accent: 'hover:border-rose-300 data-[active=true]:border-rose-400',
   },
   missing: {
     icon: AlertCircle,
-    label: 'Нет калибровки',
     cls: 'border-slate-300 bg-slate-100 text-slate-700',
     accent: 'hover:border-slate-400 data-[active=true]:border-slate-500',
   },
 }
 
 export function EquipmentAdminPage({ token, user }: Props) {
+  const { t } = useI18n()
   const canManage = user.permissions.includes('EQUIPMENT_MANAGE')
   const [equipment, setEquipment] = useState<EquipmentItem[]>([])
   const [detail, setDetail] = useState<EquipmentDetail | null>(null)
@@ -76,7 +79,7 @@ export function EquipmentAdminPage({ token, user }: Props) {
         await selectEquipment(response.equipment[0].id)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить реестр КИП')
+      setError(err instanceof Error ? err.message : t('equip.loadFailed'))
     }
   }
 
@@ -94,7 +97,7 @@ export function EquipmentAdminPage({ token, user }: Props) {
       setDetail(item)
       setForm(fromDetail(item))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось открыть карточку прибора')
+      setError(err instanceof Error ? err.message : t('equip.openFailed'))
     }
   }
 
@@ -130,7 +133,7 @@ export function EquipmentAdminPage({ token, user }: Props) {
   async function saveEquipment() {
     if (!canManage) return
     if (!form.code.trim() || !form.name.trim()) {
-      setError('Укажите код и наименование прибора')
+      setError(t('equip.errCodeName'))
       return
     }
     setBusy(true)
@@ -138,7 +141,7 @@ export function EquipmentAdminPage({ token, user }: Props) {
     try {
       if (isNew) {
         const created = await createEquipment(token, cleanedCreate(form))
-        setSuccess(`Прибор ${created.code} создан`)
+        setSuccess(t('equip.created', { code: created.code }))
         setIsNew(false)
         setEditMode(false)
         await reload()
@@ -155,12 +158,12 @@ export function EquipmentAdminPage({ token, user }: Props) {
         }
         const updated = await updateEquipment(token, detail.id, payload)
         setDetail(updated)
-        setSuccess('Карточка прибора сохранена')
+        setSuccess(t('equip.saved'))
         setEditMode(false)
         await reload()
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось сохранить прибор')
+      setError(err instanceof Error ? err.message : t('equip.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -175,7 +178,7 @@ export function EquipmentAdminPage({ token, user }: Props) {
       setDetail(updated)
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось изменить статус прибора')
+      setError(err instanceof Error ? err.message : t('equip.statusChangeFailed'))
     } finally {
       setBusy(false)
     }
@@ -190,11 +193,11 @@ export function EquipmentAdminPage({ token, user }: Props) {
   async function submitCalibration() {
     if (!detail || !canManage) return
     if (!calForm.valid_from || !calForm.valid_until) {
-      setError('Укажите период действия калибровки')
+      setError(t('equip.calPeriodRequired'))
       return
     }
     if (new Date(calForm.valid_until) <= new Date(calForm.valid_from)) {
-      setError('Дата окончания должна быть позже даты начала')
+      setError(t('equip.calDateOrder'))
       return
     }
     setBusy(true)
@@ -208,12 +211,12 @@ export function EquipmentAdminPage({ token, user }: Props) {
         notes: cleanNullable(calForm.notes),
       })
       setDetail(updated)
-      setSuccess('Калибровка добавлена')
+      setSuccess(t('equip.calAdded'))
       setCalibrationDialogOpen(false)
       setCalForm(emptyCalibration())
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось добавить калибровку')
+      setError(err instanceof Error ? err.message : t('equip.calAddFailed'))
     } finally {
       setBusy(false)
     }
@@ -260,19 +263,19 @@ export function EquipmentAdminPage({ token, user }: Props) {
       <div className="mx-auto max-w-[1800px] p-6">
         <div className="mb-6">
           <div className="mb-2 text-xs uppercase tracking-wider text-slate-500">
-            ДКК / Реестр оборудования
+            {t('equip.eyebrow')}
           </div>
-          <h1 className="mb-1 text-2xl font-semibold text-slate-950">Реестр КИП</h1>
+          <h1 className="mb-1 text-2xl font-semibold text-slate-950">{t('nav.qcEquipment')}</h1>
           <p className="text-sm text-slate-600">
-            Контрольно-измерительные приборы и оборудование лаборатории с историей калибровок
+            {t('equip.subtitle')}
           </p>
         </div>
 
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-          <StatCard count={stats.ok} label="Действуют" status="ok" active={statusFilter === 'ok'} onClick={() => setStatusFilter(statusFilter === 'ok' ? 'all' : 'ok')} />
-          <StatCard count={stats.expiring} label="Истекают" status="expiring" active={statusFilter === 'expiring'} onClick={() => setStatusFilter(statusFilter === 'expiring' ? 'all' : 'expiring')} />
-          <StatCard count={stats.expired} label="Просрочены" status="expired" active={statusFilter === 'expired'} onClick={() => setStatusFilter(statusFilter === 'expired' ? 'all' : 'expired')} />
-          <StatCard count={stats.missing} label="Нет калибровки" status="missing" active={statusFilter === 'missing'} onClick={() => setStatusFilter(statusFilter === 'missing' ? 'all' : 'missing')} />
+          <StatCard count={stats.ok} label={t('equip.statOk')} status="ok" active={statusFilter === 'ok'} onClick={() => setStatusFilter(statusFilter === 'ok' ? 'all' : 'ok')} />
+          <StatCard count={stats.expiring} label={t('equip.statExpiring')} status="expiring" active={statusFilter === 'expiring'} onClick={() => setStatusFilter(statusFilter === 'expiring' ? 'all' : 'expiring')} />
+          <StatCard count={stats.expired} label={t('equip.statExpired')} status="expired" active={statusFilter === 'expired'} onClick={() => setStatusFilter(statusFilter === 'expired' ? 'all' : 'expired')} />
+          <StatCard count={stats.missing} label={t('equip.statMissing')} status="missing" active={statusFilter === 'missing'} onClick={() => setStatusFilter(statusFilter === 'missing' ? 'all' : 'missing')} />
         </div>
 
         <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
@@ -282,7 +285,7 @@ export function EquipmentAdminPage({ token, user }: Props) {
               <input
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Поиск по коду или наименованию..."
+                placeholder={t('equip.searchPlaceholder')}
                 className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-slate-400"
               />
             </div>
@@ -293,7 +296,7 @@ export function EquipmentAdminPage({ token, user }: Props) {
             >
               {categories.map((category) => (
                 <option key={category} value={category}>
-                  {category === 'all' ? 'Все категории' : category}
+                  {category === 'all' ? t('equip.allCategories') : category}
                 </option>
               ))}
             </select>
@@ -302,9 +305,9 @@ export function EquipmentAdminPage({ token, user }: Props) {
               onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}
               className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-slate-400"
             >
-              <option value="all">Все приборы</option>
-              <option value="active">В эксплуатации</option>
-              <option value="inactive">Выведены</option>
+              <option value="all">{t('equip.allEquipment')}</option>
+              <option value="active">{t('equip.inService')}</option>
+              <option value="inactive">{t('equip.retired')}</option>
             </select>
             {canManage && (
               <button
@@ -313,7 +316,7 @@ export function EquipmentAdminPage({ token, user }: Props) {
                 className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
               >
                 <Plus className="h-4 w-4" />
-                Добавить прибор
+                {t('equip.addEquipment')}
               </button>
             )}
           </div>
@@ -383,12 +386,13 @@ function EquipmentList({
   selectedId: string | null
   onSelect: (id: string) => void
 }) {
+  const { t } = useI18n()
   if (equipment.length === 0) {
     return (
       <div className="flex w-[45%] flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-8 text-center">
         <Wrench className="mb-3 h-12 w-12 text-slate-300" />
-        <div className="mb-2 text-slate-400">Приборы не найдены</div>
-        <p className="text-sm text-slate-500">Попробуйте изменить фильтры или добавьте первый прибор</p>
+        <div className="mb-2 text-slate-400">{t('equip.notFound')}</div>
+        <p className="text-sm text-slate-500">{t('equip.notFoundHint')}</p>
       </div>
     )
   }
@@ -396,7 +400,7 @@ function EquipmentList({
   return (
     <div className="flex w-[45%] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white">
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-        <div className="text-xs uppercase tracking-wide text-slate-500">Найдено приборов: {equipment.length}</div>
+        <div className="text-xs uppercase tracking-wide text-slate-500">{t('equip.foundCount', { n: equipment.length })}</div>
       </div>
       <div className="flex-1 overflow-auto">
         {equipment.map((item) => {
@@ -416,7 +420,7 @@ function EquipmentList({
                   <div className="mb-1 flex items-center gap-2">
                     <code className="font-mono text-sm text-slate-950">{item.code}</code>
                     {!item.is_active && (
-                      <span className="rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-600">Выведен</span>
+                      <span className="rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-600">{t('equip.retiredShort')}</span>
                     )}
                   </div>
                   <div className="truncate text-sm text-slate-700">{item.name}</div>
@@ -426,7 +430,7 @@ function EquipmentList({
               </div>
               {item.calibration_valid_until && (
                 <div className="mt-1 text-xs text-slate-500">
-                  Калибровка до {formatDate(item.calibration_valid_until)}
+                  {t('equip.calUntil', { date: formatDate(item.calibration_valid_until) })}
                 </div>
               )}
             </button>
@@ -450,12 +454,13 @@ function EquipmentDetailPanel({
   onEdit: () => void
   onToggleActive: () => void
 }) {
+  const { t } = useI18n()
   if (!equipment) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-8 text-center">
         <Info className="mx-auto mb-3 h-12 w-12 text-slate-400" />
-        <div className="mb-2 text-slate-400">Выберите прибор</div>
-        <p className="text-sm text-slate-500">Выберите прибор из списка слева для просмотра деталей</p>
+        <div className="mb-2 text-slate-400">{t('equip.selectEquipment')}</div>
+        <p className="text-sm text-slate-500">{t('equip.selectEquipmentHint')}</p>
       </div>
     )
   }
@@ -469,7 +474,7 @@ function EquipmentDetailPanel({
           <div className="flex-1">
             <div className="mb-1.5 flex items-center gap-2">
               <code className="font-mono text-lg text-slate-950">{equipment.code}</code>
-              {!equipment.is_active && <span className="rounded bg-slate-200 px-2 py-1 text-xs text-slate-700">Выведен из эксплуатации</span>}
+              {!equipment.is_active && <span className="rounded bg-slate-200 px-2 py-1 text-xs text-slate-700">{t('equip.retiredFull')}</span>}
             </div>
             <h2 className="mb-2 text-base font-medium text-slate-900">{equipment.name}</h2>
             <CalibrationBadge status={equipment.calibration_status} validUntil={equipment.calibration_valid_until} />
@@ -477,10 +482,10 @@ function EquipmentDetailPanel({
           {canManage && (
             <div className="flex gap-2">
               <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={onEdit} type="button">
-                Редактировать
+                {t('equip.edit')}
               </button>
               <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={onToggleActive} type="button">
-                {equipment.is_active ? 'Вывести' : 'Вернуть'}
+                {equipment.is_active ? t('equip.retire') : t('equip.restore')}
               </button>
             </div>
           )}
@@ -488,12 +493,12 @@ function EquipmentDetailPanel({
 
         {isUnavailable && (
           <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
-            <div className="mb-1 font-medium">Прибор недоступен для выбора в Ф-11</div>
+            <div className="mb-1 font-medium">{t('equip.unavailableTitle')}</div>
             <div className="text-xs text-rose-700">
-              {!equipment.is_active && 'Прибор выведен из эксплуатации. '}
-              {equipment.calibration_status === 'expired' && 'Калибровка просрочена. '}
-              {equipment.calibration_status === 'missing' && 'Отсутствует запись о калибровке. '}
-              Для использования в аналитических листах требуется действующая калибровка.
+              {!equipment.is_active && `${t('equip.unavailableRetired')} `}
+              {equipment.calibration_status === 'expired' && `${t('equip.unavailableExpired')} `}
+              {equipment.calibration_status === 'missing' && `${t('equip.unavailableMissing')} `}
+              {t('equip.unavailableNeed')}
             </div>
           </div>
         )}
@@ -501,14 +506,14 @@ function EquipmentDetailPanel({
 
       <div className="flex-1 overflow-auto p-5">
         <div className="mb-6">
-          <h3 className="mb-3 text-xs uppercase tracking-wide text-slate-500">Паспортные данные</h3>
+          <h3 className="mb-3 text-xs uppercase tracking-wide text-slate-500">{t('equip.passport')}</h3>
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-            <DetailValue label="Категория" value={equipment.category} />
-            <DetailValue label="Производитель" value={equipment.manufacturer} />
-            <DetailValue label="Модель" value={equipment.model} mono />
-            <DetailValue label="Серийный номер" value={equipment.serial_no} mono />
-            <DetailValue className="col-span-2" label="Место установки" value={equipment.location} />
-            <DetailValue className="col-span-2" label="Примечания" value={equipment.notes} />
+            <DetailValue label={t('equip.fieldCategory')} value={equipment.category} />
+            <DetailValue label={t('equip.fieldManufacturer')} value={equipment.manufacturer} />
+            <DetailValue label={t('equip.fieldModel')} value={equipment.model} mono />
+            <DetailValue label={t('equip.fieldSerial')} value={equipment.serial_no} mono />
+            <DetailValue className="col-span-2" label={t('equip.fieldLocation')} value={equipment.location} />
+            <DetailValue className="col-span-2" label={t('equip.fieldNotes')} value={equipment.notes} />
           </div>
         </div>
 
@@ -516,11 +521,11 @@ function EquipmentDetailPanel({
 
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-xs uppercase tracking-wide text-slate-500">История калибровок ({equipment.calibrations.length})</h3>
+            <h3 className="text-xs uppercase tracking-wide text-slate-500">{t('equip.calHistory', { n: equipment.calibrations.length })}</h3>
             {canManage && (
               <button className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800" onClick={onAddCalibration} type="button">
                 <Plus className="h-3.5 w-3.5" />
-                Добавить калибровку
+                {t('equip.addCalibration')}
               </button>
             )}
           </div>
@@ -528,8 +533,8 @@ function EquipmentDetailPanel({
           {equipment.calibrations.length === 0 ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 py-8 text-center">
               <Clock className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-              <div className="text-sm text-slate-500">Нет записей о калибровках</div>
-              <div className="mt-1 text-xs text-slate-400">Добавьте первую калибровку для активации прибора</div>
+              <div className="text-sm text-slate-500">{t('equip.noCalibrations')}</div>
+              <div className="mt-1 text-xs text-slate-400">{t('equip.noCalibrationsHint')}</div>
             </div>
           ) : (
             <div className="space-y-3">
@@ -548,14 +553,14 @@ function EquipmentDetailPanel({
                         {calibration.certificate_no && <div className="mb-1 font-mono text-sm text-slate-950">{calibration.certificate_no}</div>}
                         {calibration.performed_by && <div className="text-sm text-slate-700">{calibration.performed_by}</div>}
                       </div>
-                      {isLatest && isActive && <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white">Текущая</span>}
+                      {isLatest && isActive && <span className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white">{t('equip.current')}</span>}
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                      <div><span className="text-slate-500">Действует с:</span> <span className="font-medium text-slate-900">{formatDate(calibration.valid_from)}</span></div>
-                      <div><span className="text-slate-500">Действует по:</span> <span className="font-medium text-slate-900">{formatDate(calibration.valid_until)}</span></div>
+                      <div><span className="text-slate-500">{t('equip.validFrom')}</span> <span className="font-medium text-slate-900">{formatDate(calibration.valid_from)}</span></div>
+                      <div><span className="text-slate-500">{t('equip.validTo')}</span> <span className="font-medium text-slate-900">{formatDate(calibration.valid_until)}</span></div>
                     </div>
                     {calibration.notes && <div className="mt-2 rounded bg-white/50 p-2 text-xs text-slate-600">{calibration.notes}</div>}
-                    <div className="mt-2 text-xs text-slate-400">Внесено: {calibration.recorded_by || '—'} · {formatDateTime(calibration.recorded_at)}</div>
+                    <div className="mt-2 text-xs text-slate-400">{t('equip.recordedBy')}: {calibration.recorded_by || '—'} · {formatDateTime(calibration.recorded_at)}</div>
                   </div>
                 )
               })}
@@ -584,24 +589,25 @@ function EquipmentForm({
   onChange: (form: EquipmentCreate) => void
   onSave: () => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white p-5">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-slate-950">{isNew ? 'Новый прибор' : 'Редактирование прибора'}</h2>
-          <p className="mt-1 text-sm text-slate-500">Паспортные данные КИП для использования в аналитических листах Ф-11.</p>
+          <h2 className="text-base font-semibold text-slate-950">{isNew ? t('equip.formNew') : t('equip.formEdit')}</h2>
+          <p className="mt-1 text-sm text-slate-500">{t('equip.formSubtitle')}</p>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <InputField disabled={!canManage || !isNew} label="Код" mono onChange={(value) => onChange({ ...form, code: value })} value={form.code} placeholder="HPLC-01" />
-        <InputField disabled={!canManage} label="Наименование" onChange={(value) => onChange({ ...form, name: value })} value={form.name} placeholder="Жидкостной хроматограф Agilent 1260" />
-        <InputField disabled={!canManage} label="Категория" onChange={(value) => onChange({ ...form, category: value })} value={form.category || ''} placeholder="ВЭЖХ" />
-        <InputField disabled={!canManage} label="Производитель" onChange={(value) => onChange({ ...form, manufacturer: value })} value={form.manufacturer || ''} placeholder="Agilent" />
-        <InputField disabled={!canManage} label="Модель" mono onChange={(value) => onChange({ ...form, model: value })} value={form.model || ''} placeholder="1260 Infinity II" />
-        <InputField disabled={!canManage} label="Серийный номер" mono onChange={(value) => onChange({ ...form, serial_no: value })} value={form.serial_no || ''} />
-        <InputField disabled={!canManage} label="Место установки" onChange={(value) => onChange({ ...form, location: value })} value={form.location || ''} placeholder="Лаборатория ДКК, помещение 203" />
+        <InputField disabled={!canManage || !isNew} label={t('equip.fieldCode')} mono onChange={(value) => onChange({ ...form, code: value })} value={form.code} placeholder="HPLC-01" />
+        <InputField disabled={!canManage} label={t('equip.fieldName')} onChange={(value) => onChange({ ...form, name: value })} value={form.name} placeholder={t('equip.namePlaceholder')} />
+        <InputField disabled={!canManage} label={t('equip.fieldCategory')} onChange={(value) => onChange({ ...form, category: value })} value={form.category || ''} placeholder={t('equip.categoryPlaceholder')} />
+        <InputField disabled={!canManage} label={t('equip.fieldManufacturer')} onChange={(value) => onChange({ ...form, manufacturer: value })} value={form.manufacturer || ''} placeholder="Agilent" />
+        <InputField disabled={!canManage} label={t('equip.fieldModel')} mono onChange={(value) => onChange({ ...form, model: value })} value={form.model || ''} placeholder="1260 Infinity II" />
+        <InputField disabled={!canManage} label={t('equip.fieldSerial')} mono onChange={(value) => onChange({ ...form, serial_no: value })} value={form.serial_no || ''} />
+        <InputField disabled={!canManage} label={t('equip.fieldLocation')} onChange={(value) => onChange({ ...form, location: value })} value={form.location || ''} placeholder={t('equip.locationPlaceholder')} />
         <label className="block md:col-span-2">
-          <span className="mb-1.5 block text-sm text-slate-600">Примечания</span>
+          <span className="mb-1.5 block text-sm text-slate-600">{t('equip.fieldNotes')}</span>
           <textarea className="min-h-[90px] w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-slate-400 disabled:opacity-60" disabled={!canManage} onChange={(event) => onChange({ ...form, notes: event.target.value })} value={form.notes || ''} />
         </label>
       </div>
@@ -609,11 +615,11 @@ function EquipmentForm({
         <div className="mt-5 flex gap-2 border-t border-slate-200 pt-4">
           <button className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50" disabled={busy} onClick={onSave} type="button">
             <Save className="h-4 w-4" />
-            Сохранить
+            {t('common.save')}
           </button>
           <button className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 hover:bg-slate-50" onClick={onCancel} type="button">
             <X className="h-4 w-4" />
-            Отмена
+            {t('common.cancel')}
           </button>
         </div>
       )}
@@ -638,34 +644,35 @@ function AddCalibrationDialog({
   onSubmit: () => void
   open: boolean
 }) {
+  const { t } = useI18n()
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
       <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-xl">
         <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-950">Добавить калибровку</h2>
+          <h2 className="text-lg font-semibold text-slate-950">{t('equip.addCalibration')}</h2>
           <p className="mt-1 text-sm text-slate-600">
             <code className="font-mono text-slate-700">{equipment.code}</code> · {equipment.name}
           </p>
         </div>
         <div className="space-y-4 px-6 py-5">
           <div className="grid grid-cols-2 gap-4">
-            <InputField label="№ сертификата / протокола" mono onChange={(value) => onChange({ ...form, certificate_no: value })} value={form.certificate_no || ''} placeholder="KAL-2024-001" />
-            <InputField label="Кем выполнена" onChange={(value) => onChange({ ...form, performed_by: value })} value={form.performed_by || ''} placeholder="ООО «Узметрология»" />
-            <InputField label="Действует с *" onChange={(value) => onChange({ ...form, valid_from: value })} type="date" value={form.valid_from} />
-            <InputField label="Действует по *" onChange={(value) => onChange({ ...form, valid_until: value })} type="date" value={form.valid_until} />
+            <InputField label={t('equip.certNo')} mono onChange={(value) => onChange({ ...form, certificate_no: value })} value={form.certificate_no || ''} placeholder="KAL-2024-001" />
+            <InputField label={t('equip.performedBy')} onChange={(value) => onChange({ ...form, performed_by: value })} value={form.performed_by || ''} placeholder={t('equip.performedByPlaceholder')} />
+            <InputField label={t('equip.validFromReq')} onChange={(value) => onChange({ ...form, valid_from: value })} type="date" value={form.valid_from} />
+            <InputField label={t('equip.validToReq')} onChange={(value) => onChange({ ...form, valid_until: value })} type="date" value={form.valid_until} />
           </div>
           <label className="block">
-            <span className="mb-1.5 block text-sm text-slate-600">Примечания</span>
-            <textarea className="min-h-[90px] w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-slate-400" onChange={(event) => onChange({ ...form, notes: event.target.value })} value={form.notes || ''} placeholder="Дополнительная информация о калибровке" />
+            <span className="mb-1.5 block text-sm text-slate-600">{t('equip.fieldNotes')}</span>
+            <textarea className="min-h-[90px] w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-slate-400" onChange={(event) => onChange({ ...form, notes: event.target.value })} value={form.notes || ''} placeholder={t('equip.calNotesPlaceholder')} />
           </label>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <strong>GMP Annex 15:</strong> запись о калибровке фиксируется с указанием текущего пользователя и времени внесения.
+            <strong>GMP Annex 15:</strong> {t('equip.annexNote')}
           </div>
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
-          <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={onClose} type="button">Отмена</button>
-          <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50" disabled={busy} onClick={onSubmit} type="button">Добавить калибровку</button>
+          <button className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={onClose} type="button">{t('common.cancel')}</button>
+          <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50" disabled={busy} onClick={onSubmit} type="button">{t('equip.addCalibration')}</button>
         </div>
       </div>
     </div>
@@ -681,14 +688,15 @@ export function CalibrationBadge({
   validUntil?: string | null
   size?: 'sm' | 'md'
 }) {
+  const { t } = useI18n()
   const config = STATUS_CONFIG[status]
   const Icon = config.icon
   const isSmall = size === 'sm'
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border ${config.cls} ${isSmall ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs'}`}>
       <Icon className={isSmall ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
-      <span>{config.label}</span>
-      {validUntil && status !== 'missing' && <span className="text-xs opacity-75">до {formatShortDate(validUntil)}</span>}
+      <span>{statusLabel(status, t)}</span>
+      {validUntil && status !== 'missing' && <span className="text-xs opacity-75">{t('equip.badgeUntil')} {formatShortDate(validUntil)}</span>}
     </span>
   )
 }
