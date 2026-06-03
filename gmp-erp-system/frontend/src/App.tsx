@@ -100,11 +100,11 @@ export function App() {
       <div className="min-h-screen bg-slate-50">
         <div className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b border-slate-200 bg-white px-4">
           <div className="rounded-full bg-blue-50 px-3 py-1 text-[12px] font-semibold text-blue-700">
-            Оператор производства · {user.workstation_id}
+            {t('role.productionOperator')} · {user.workstation_id}
           </div>
           <div className="ml-auto text-right">
             <div className="text-[13px] font-semibold text-slate-900">{user.full_name}</div>
-            <div className="text-[11px] text-slate-500">Только ЭЗПС / BMR</div>
+            <div className="text-[11px] text-slate-500">{t('app.operatorOnlyBmr')}</div>
           </div>
           <button
             type="button"
@@ -112,7 +112,7 @@ export function App() {
             className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-700 hover:bg-slate-50"
           >
             <LogOut size={15} />
-            Выйти
+            {t('topbar.logout')}
           </button>
         </div>
         <BmrFillPage token={token} user={user} />

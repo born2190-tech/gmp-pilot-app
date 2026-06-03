@@ -1,4 +1,5 @@
 import { FillView } from './BmrFillPage'
+import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
  * по комнатам. Один код — один вид.
  */
 export function BmrFillModal({ token, user, instanceId, onClose, onChanged }: Props) {
+  const { t } = useI18n()
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#eef1f5]">
       <FillView
@@ -24,7 +26,7 @@ export function BmrFillModal({ token, user, instanceId, onClose, onChanged }: Pr
         user={user}
         instanceId={instanceId}
         readOnly
-        backLabel="Закрыть"
+        backLabel={t('common.close')}
         onBack={() => { onChanged?.(); onClose() }}
       />
     </div>

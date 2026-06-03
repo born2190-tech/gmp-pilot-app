@@ -426,7 +426,7 @@ function VerifyModal({
               <>
                 <div className="flex justify-end border-b border-slate-200 bg-white px-2 py-1">
                   <button type="button" onClick={() => window.open(pdfUrl, '_blank', 'noopener')}
-                    className="text-[12px] font-medium text-blue-600 hover:underline">Открыть в новой вкладке</button>
+                    className="text-[12px] font-medium text-blue-600 hover:underline">{t('qcVerification.openInNewTab')}</button>
                 </div>
                 <iframe title="QC scan" src={pdfUrl} className="h-full min-h-[440px] w-full" />
               </>
