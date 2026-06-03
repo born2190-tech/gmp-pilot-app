@@ -106,3 +106,27 @@ export function FlagUZ({ size = 18, className }: FlagProps) {
     </svg>
   )
 }
+
+export function FlagEN({ size = 18, className }: FlagProps) {
+  // Упрощённый «Юнион Джек» для английского языка.
+  return (
+    <svg
+      width={size}
+      height={size * (2 / 3)}
+      viewBox="0 0 60 30"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      style={{ borderRadius: 2, overflow: 'hidden' }}
+    >
+      <clipPath id="en-clip"><rect width="60" height="30" /></clipPath>
+      <g clipPath="url(#en-clip)">
+        <rect width="60" height="30" fill="#012169" />
+        <path d="M0,0 L60,30 M60,0 L0,30" stroke="#FFFFFF" strokeWidth="6" />
+        <path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" strokeWidth="2" />
+        <path d="M30,0 V30 M0,15 H60" stroke="#FFFFFF" strokeWidth="10" />
+        <path d="M30,0 V30 M0,15 H60" stroke="#C8102E" strokeWidth="6" />
+      </g>
+      <rect x="0.5" y="0.5" width="59" height="29" fill="none" stroke="rgba(0,0,0,0.12)" strokeWidth="1" />
+    </svg>
+  )
+}

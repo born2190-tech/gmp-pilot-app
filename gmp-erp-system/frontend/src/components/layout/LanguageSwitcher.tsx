@@ -2,7 +2,7 @@ import type { ComponentType } from 'react'
 import type { LanguageCode } from '../../i18n/translations'
 import { languages } from '../../i18n/translations'
 import { useI18n } from '../../i18n/I18nProvider'
-import { FlagRU, FlagUZ } from './flags'
+import { FlagEN, FlagRU, FlagUZ } from './flags'
 
 // Pill-переключатель языков с чёткими SVG-флагами вместо emoji.
 // SVG нарисованы вручную в нативных пропорциях (RU 2:3, UZ 1:2) и
@@ -12,6 +12,7 @@ type FlagComponent = ComponentType<{ size?: number; className?: string }>
 const FLAG_BY_LANG: Record<LanguageCode, FlagComponent> = {
   ru: FlagRU,
   uz: FlagUZ,
+  en: FlagEN,
 }
 
 export function LanguageSwitcher() {

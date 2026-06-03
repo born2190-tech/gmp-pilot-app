@@ -1,6 +1,7 @@
 export const languages = [
   { code: 'ru', label: 'RU' },
   { code: 'uz', label: 'UZ' },
+  { code: 'en', label: 'EN' },
 ] as const
 
 export type LanguageCode = (typeof languages)[number]['code']
@@ -8,6 +9,7 @@ export type LanguageCode = (typeof languages)[number]['code']
 export const languageLocale: Record<LanguageCode, string> = {
   ru: 'ru-RU',
   uz: 'uz-UZ',
+  en: 'en-US',
 }
 
 export const translations = {
@@ -2375,6 +2377,9 @@ export const translations = {
     'quality.loadFailed': 'Sifat vazifalarini yuklab bo‘lmadi',
     'quality.actionFailed': 'Amalni bajarib bo‘lmadi',
   },
+  en: {
+    // English translations are filled in batches below; missing keys fall back to RU.
+  } as Record<string, string>,
 } as const
 
 export type TranslationKey = keyof typeof translations.ru
