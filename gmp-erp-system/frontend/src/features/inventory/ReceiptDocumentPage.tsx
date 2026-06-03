@@ -614,7 +614,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
             <Field label={t('receipt.contractDate')}><input type="date" {...form.register('contract_date')} className="input" /></Field>
             <Field label={t('receipt.currency')}>
               <select {...form.register('currency')} className="input">
-                <option value="UZS">UZS (сум)</option>
+                <option value="UZS">{t('receipt.uzsSom')}</option>
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
                 <option value="RUB">RUB</option>
@@ -764,7 +764,7 @@ function GtdSection({ gtd, setGtd, t }: { gtd: GtdForm; setGtd: (g: GtdForm) => 
             <Field label={t('receipt.gtd.date')}><input type="date" className="input" value={gtd.gtd_date} onChange={(e) => upd({ gtd_date: e.target.value })} /></Field>
             <Field label={t('receipt.gtd.procedure')}><input className="input" value={gtd.procedure} onChange={(e) => upd({ procedure: e.target.value })} placeholder="ИМ 40" /></Field>
             <Field label={t('receipt.gtd.incoterms')}><input className="input" value={gtd.incoterms} onChange={(e) => upd({ incoterms: e.target.value })} placeholder="CIP" /></Field>
-            <Field label={t('receipt.gtd.countryOrigin')}><input className="input" value={gtd.country_origin} onChange={(e) => upd({ country_origin: e.target.value })} placeholder="Китай" /></Field>
+            <Field label={t('receipt.gtd.countryOrigin')}><input className="input" value={gtd.country_origin} onChange={(e) => upd({ country_origin: e.target.value })} placeholder={t('receipt.gtd.countryPlaceholder')} /></Field>
             <Field label={t('receipt.gtd.foreignManufacturer')}><input className="input" value={gtd.foreign_manufacturer} onChange={(e) => upd({ foreign_manufacturer: e.target.value })} /></Field>
             <Field label={t('receipt.gtd.broker')}><input className="input" value={gtd.broker} onChange={(e) => upd({ broker: e.target.value })} /></Field>
             <Field label={t('receipt.gtd.contractCurrency')}><input className="input" value={gtd.contract_currency} onChange={(e) => upd({ contract_currency: e.target.value })} placeholder="USD" /></Field>
@@ -1012,7 +1012,7 @@ function MaterialDetailPanel({
         <Separator />
 
         <Field label={t('receipt.supplierLot')}>
-          <input className="input bg-white font-mono" placeholder="Введите серию" title={line.supplier_lot} value={line.supplier_lot} onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })} />
+          <input className="input bg-white font-mono" placeholder={t('receipt.enterLot')} title={line.supplier_lot} value={line.supplier_lot} onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })} />
           {line.supplier_lot && <p className="mt-2 break-words text-xs text-slate-600">{line.supplier_lot}</p>}
         </Field>
 
@@ -1414,7 +1414,7 @@ function CoaPanel({
                   {c.certificate_no || t('receipt.coa.noNumber')}
                 </div>
                 <div className="font-mono text-[10.5px] text-slate-500">
-                  sha256: {c.sha256_hash.slice(0, 12)}… · {(c.file_size / 1024).toFixed(0)} КБ
+                  sha256: {c.sha256_hash.slice(0, 12)}… · {(c.file_size / 1024).toFixed(0)} {t('common.kb')}
                 </div>
               </div>
               <a

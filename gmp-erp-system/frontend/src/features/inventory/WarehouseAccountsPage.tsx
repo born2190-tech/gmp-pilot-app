@@ -53,7 +53,7 @@ export function WarehouseAccountsPage({ token }: Props) {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'оборотная-ведомость.xlsx'
+      a.download = t('accounts.exportFilename')
       document.body.appendChild(a)
       a.click()
       a.remove()

@@ -92,13 +92,13 @@ function uniqueValues(values: string[]): string[] {
 
 // Format the physical coordinate (rack/sector/tier/place/pallet) as one line.
 // Only includes filled segments. Returns '' if all segments are empty.
-function formatPhysAddr(lot: LotItem): string {
+function formatPhysAddr(lot: LotItem, t: Translate): string {
   const parts: string[] = []
   if (lot.rack_no)   parts.push(lot.rack_no)
-  if (lot.sector_no) parts.push(`С.${lot.sector_no}`)
-  if (lot.tier_no)   parts.push(`Я.${lot.tier_no}`)
-  if (lot.place_no)  parts.push(`М.${lot.place_no}`)
-  if (lot.pallet_no) parts.push(`П.${lot.pallet_no}`)
+  if (lot.sector_no) parts.push(`${t('registry.addr.sector')}${lot.sector_no}`)
+  if (lot.tier_no)   parts.push(`${t('registry.addr.tier')}${lot.tier_no}`)
+  if (lot.place_no)  parts.push(`${t('registry.addr.place')}${lot.place_no}`)
+  if (lot.pallet_no) parts.push(`${t('registry.addr.pallet')}${lot.pallet_no}`)
   return parts.join(' · ')
 }
 
@@ -857,7 +857,7 @@ function SeriesTable({ rows, sort, onSort, onSelect, selectedId, locale, t, onDo
                     </span>
                   </div>
                   {(() => {
-                    const addr = formatPhysAddr(lot)
+                    const addr = formatPhysAddr(lot, t)
                     return addr ? (
                       <div
                         className="mt-0.5 font-mono text-[11px] tabular-nums text-slate-600"
