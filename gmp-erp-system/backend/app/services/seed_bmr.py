@@ -567,8 +567,7 @@ def _ensure_materials(db: Session) -> None:
 def _find_dapiga(db: Session) -> Product | None:
     return (
         db.query(Product)
-        .filter(Product.name.ilike("%Дапи%"), Product.market_code == "UZ")
-        .order_by(Product.code)
+        .filter(Product.code == "041", Product.market_code == "UZ")
         .first()
     )
 
