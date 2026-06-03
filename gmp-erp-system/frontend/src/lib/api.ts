@@ -1115,6 +1115,10 @@ export function updateBmrTemplate(token: string, id: string, payload: BmrTemplat
   return request<BmrTemplateItem>(`/api/bmr/templates/${id}`, 'PUT', { token, body: payload })
 }
 
+export function deleteBmrTemplate(token: string, id: string): Promise<void> {
+  return request<void>(`/api/bmr/templates/${id}`, 'DELETE', { token })
+}
+
 export function duplicateBmrTemplate(token: string, id: string): Promise<BmrTemplateItem> {
   return request<BmrTemplateItem>(`/api/bmr/templates/${id}/duplicate`, 'POST', { token })
 }

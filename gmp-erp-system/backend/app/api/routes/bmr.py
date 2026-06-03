@@ -2,7 +2,7 @@
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,7 @@ from app.services.bmr import (
     approve_template,
     complete_instance,
     create_template,
+    delete_template,
     duplicate_template,
     get_instance,
     get_template,
@@ -117,6 +118,11 @@ def update(template_id: UUID, payload: BmrTemplateUpdate, db: Session = Depends(
 def duplicate(template_id: UUID, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> BmrTemplateItem:
     t = duplicate_template(db, user, template_id)
     return BmrTemplateItem.model_validate(get_template(db, user, t.id))
+
+
+@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete(template_id: UUID, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> None:
+    delete_template(db, user, template_id)
 
 
 @router.post("/{template_id}/approve", response_model=BmrTemplateItem)

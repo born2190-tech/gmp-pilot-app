@@ -5,6 +5,7 @@ import {
 import {
   approveBmrTemplate,
   createBmrTemplate,
+  deleteBmrTemplate,
   duplicateBmrTemplate,
   getBmrTemplate,
   listBmrTemplates,
@@ -176,6 +177,17 @@ export function BmrTemplatesPage({ token, user }: Props) {
     catch (err) { setError(err instanceof Error ? err.message : 'failed') } finally { setBusy(false) }
   }
 
+  async function doDelete() {
+    if (!form?.id || form.status !== 'draft') return
+    const ok = window.confirm(`Удалить ошибочный черновик v${form.version || ''}? Утверждённые версии не удаляются, они остаются для GMP-аудита.`)
+    if (!ok) return
+    setBusy(true); setError(null); setSuccess(null)
+    try {
+      await deleteBmrTemplate(token, form.id)
+      setForm(null); await reload(); setSuccess('Черновик шаблона удалён.')
+    } catch (err) { setError(err instanceof Error ? err.message : 'delete failed') } finally { setBusy(false) }
+  }
+
   async function doApprove() {
     if (!form?.id) return
     setBusy(true); setError(null)
@@ -260,6 +272,7 @@ export function BmrTemplatesPage({ token, user }: Props) {
                   <div className="ml-auto flex gap-2">
                     {editable && <button type="button" disabled={busy} onClick={() => void save()} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-emerald-700 px-3 text-[13px] font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"><CheckCircle2 size={15} />{t('common.save')}</button>}
                     {form.id && canEdit && <button type="button" disabled={busy} onClick={() => void doDuplicate()} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 hover:bg-slate-50"><Copy size={15} />{t('bmrTpl.newVersion')}</button>}
+                    {form.id && isDraft && canEdit && <button type="button" disabled={busy} onClick={() => void doDelete()} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-rose-200 bg-white px-3 text-[13px] font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"><Trash2 size={15} />Удалить черновик</button>}
                     {form.id && isDraft && canApprove && <button type="button" disabled={busy} onClick={() => void doApprove()} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><ShieldCheck size={15} />{t('bmrTpl.approve')}</button>}
                     <button type="button" onClick={() => setForm(null)} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-600 hover:bg-slate-50"><X size={15} />{t('common.close')}</button>
                   </div>

@@ -183,6 +183,26 @@ def duplicate_template(db: Session, user: CurrentUser, template_id: UUID) -> Bmr
     return copy
 
 
+def delete_template(db: Session, user: CurrentUser, template_id: UUID) -> None:
+    """Удаляет только ошибочный черновик, который ещё не использовался для серии."""
+    _require_any(user, _EDIT)
+    t = db.get(BmrTemplate, template_id)
+    if not t:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BMR template not found")
+    if t.status != "draft":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Удалять можно только черновик. Утверждённые и архивные версии хранятся для GMP-аудита.")
+    used_count = db.query(func.count(BmrInstance.id)).filter(BmrInstance.template_id == t.id).scalar() or 0
+    if used_count:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Шаблон уже использовался для серии — удаление запрещено")
+    write_audit(
+        db, user, object_type="bmr_template", object_id=str(t.id),
+        action_type="DELETE_BMR_TEMPLATE_DRAFT",
+        old_value={"product_id": str(t.product_id), "title": t.title, "version": t.version, "status": t.status},
+    )
+    db.delete(t)
+    db.commit()
+
+
 def approve_template(db: Session, user: CurrentUser, template_id: UUID, payload: BmrTemplateApproveRequest) -> BmrTemplate:
     """ДОК утверждает шаблон (СОП-11 п.5.1.5). Прочие approved-версии продукта → obsolete."""
     _require_any(user, _APPROVE)
