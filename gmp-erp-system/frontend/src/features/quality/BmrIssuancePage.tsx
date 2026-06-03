@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2, FileSignature, Inbox, RefreshCw, ShieldCheck, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Eye, FileSignature, Inbox, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import { useI18n } from '../../i18n/I18nProvider'
-import { approveBmrTemplate, issueProductionBmr, listBmrQueue, listBmrTemplates } from '../../lib/api'
+import { approveBmrTemplate, getBmrTemplate, issueProductionBmr, listBmrQueue, listBmrTemplates } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
-import type { BmrQueueItem, BmrTemplateListItem } from '../../types/inventory'
+import type { BmrQueueItem, BmrSectionItem, BmrTemplateItem, BmrTemplateListItem } from '../../types/inventory'
 
 interface BmrIssuancePageProps {
   token: string
@@ -48,6 +48,19 @@ const copy = {
     pendingTemplates: 'Ожидают утверждения',
     templateEmpty: 'Нет черновиков BMR, ожидающих утверждения.',
     approveTemplate: 'Утвердить шаблон',
+    viewTemplate: 'Просмотр',
+    approveLocked: 'Сначала откройте и проверьте документ',
+    templatePreviewTitle: 'Просмотр черновика BMR',
+    templatePreviewSubtitle: 'ДОК проверяет структуру master-copy перед утверждением.',
+    templateReviewed: 'Документ просмотрен, структура соответствует СОП-11',
+    templateStructure: 'Структура документа',
+    noFields: 'Поля не заданы',
+    stage: 'Этап',
+    room: 'Помещение',
+    sop: 'СОП',
+    field: 'Поле',
+    type: 'Тип',
+    required: 'обяз.',
     templateApproved: 'Шаблон BMR утверждён. Предыдущая утверждённая версия по этому ЛС переведена в архив.',
     sections: 'секций',
   },
@@ -87,6 +100,19 @@ const copy = {
     pendingTemplates: 'Tasdiqlash kutilmoqda',
     templateEmpty: 'Tasdiqlashni kutayotgan BMR qoralamalari yo‘q.',
     approveTemplate: 'Shablonni tasdiqlash',
+    viewTemplate: 'Ko‘rish',
+    approveLocked: 'Avval hujjatni ochib tekshiring',
+    templatePreviewTitle: 'BMR qoralamasini ko‘rish',
+    templatePreviewSubtitle: 'SKA tasdiqlashdan oldin master-copy tuzilmasini tekshiradi.',
+    templateReviewed: 'Hujjat ko‘rib chiqildi, tuzilma SOP-11 ga mos',
+    templateStructure: 'Hujjat tuzilmasi',
+    noFields: 'Maydonlar berilmagan',
+    stage: 'Bosqich',
+    room: 'Xona',
+    sop: 'SOP',
+    field: 'Maydon',
+    type: 'Tur',
+    required: 'majburiy',
     templateApproved: 'BMR shabloni tasdiqlandi. Shu dori vositasi bo‘yicha oldingi tasdiqlangan versiya arxivga o‘tkazildi.',
     sections: 'bo‘lim',
   },
@@ -126,10 +152,25 @@ const copy = {
     pendingTemplates: 'Awaiting approval',
     templateEmpty: 'No draft BMR templates awaiting approval.',
     approveTemplate: 'Approve template',
+    viewTemplate: 'Preview',
+    approveLocked: 'Open and review the document first',
+    templatePreviewTitle: 'Draft BMR preview',
+    templatePreviewSubtitle: 'QA reviews the master-copy structure before approval.',
+    templateReviewed: 'Document reviewed; structure complies with SOP-11',
+    templateStructure: 'Document structure',
+    noFields: 'No fields defined',
+    stage: 'Stage',
+    room: 'Room',
+    sop: 'SOP',
+    field: 'Field',
+    type: 'Type',
+    required: 'req.',
     templateApproved: 'BMR template approved. The previous approved version for this product was archived.',
     sections: 'sections',
   },
 } as const
+
+type BmrIssuanceCopy = (typeof copy)[keyof typeof copy]
 
 function formatDate(value: string, locale: string) {
   return new Intl.DateTimeFormat(locale).format(new Date(value))
@@ -145,6 +186,9 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
   const text = copy[lang]
   const [items, setItems] = useState<BmrQueueItem[]>([])
   const [draftTemplates, setDraftTemplates] = useState<BmrTemplateListItem[]>([])
+  const [previewTemplate, setPreviewTemplate] = useState<BmrTemplateItem | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [reviewedTemplateIds, setReviewedTemplateIds] = useState<Set<string>>(() => new Set())
   const [active, setActive] = useState<BmrQueueItem | null>(null)
   const [reviewed, setReviewed] = useState(false)
   const [bmrNo, setBmrNo] = useState('')
@@ -177,13 +221,47 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
 
   const oldest = useMemo(() => items[0]?.bmr_requested_at ?? null, [items])
 
-  async function approveTemplate(template: BmrTemplateListItem) {
+  async function openTemplatePreview(template: BmrTemplateListItem) {
+    setPreviewLoading(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      setPreviewTemplate(await getBmrTemplate(token, template.id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : text.loadFailed)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  function closeTemplatePreview() {
+    setPreviewTemplate(null)
+  }
+
+  function markTemplateReviewed(templateId: string, checked: boolean) {
+    setReviewedTemplateIds((current) => {
+      const next = new Set(current)
+      if (checked) {
+        next.add(templateId)
+      } else {
+        next.delete(templateId)
+      }
+      return next
+    })
+  }
+
+  async function approveTemplate(template: Pick<BmrTemplateListItem, 'id'>) {
+    if (!reviewedTemplateIds.has(template.id)) {
+      setError(text.approveLocked)
+      return
+    }
     setSubmitting(true)
     setError(null)
     setSuccess(null)
     try {
       await approveBmrTemplate(token, template.id, null)
       setSuccess(text.templateApproved)
+      closeTemplatePreview()
       await reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось утвердить шаблон BMR')
@@ -294,15 +372,27 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-700">{template.sections_count} {text.sections}</td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        disabled={submitting || template.sections_count === 0}
-                        onClick={() => void approveTemplate(template)}
-                        className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <ShieldCheck size={15} />
-                        {text.approveTemplate}
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={previewLoading}
+                          onClick={() => void openTemplatePreview(template)}
+                          className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Eye size={15} />
+                          {text.viewTemplate}
+                        </button>
+                        <button
+                          type="button"
+                          title={!reviewedTemplateIds.has(template.id) ? text.approveLocked : undefined}
+                          disabled={submitting || template.sections_count === 0 || !reviewedTemplateIds.has(template.id)}
+                          onClick={() => void approveTemplate(template)}
+                          className="inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <ShieldCheck size={15} />
+                          {text.approveTemplate}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -376,6 +466,70 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
         </div>
       </div>
 
+      {previewTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
+          <div className="flex max-h-[92vh] w-full max-w-6xl flex-col rounded-xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{text.templatePreviewSubtitle}</p>
+                <h2 className="mt-1 text-[20px] font-semibold text-slate-950">{text.templatePreviewTitle}</h2>
+              </div>
+              <button type="button" onClick={closeTemplatePreview} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-4">
+                <Info label={text.product} value={previewTemplate.product_name || '-'} />
+                <Info label={text.codePrefix} value={`${previewTemplate.product_code || '-'} · ${previewTemplate.market_code || '-'}`} mono />
+                <Info label="BMR / ЗПС" value={previewTemplate.title} />
+                <Info label="Версия" value={`v${previewTemplate.version} · ${previewTemplate.status}`} mono />
+              </div>
+
+              <div className="mt-5 flex items-center justify-between">
+                <h3 className="text-[18px] font-semibold text-slate-950">{text.templateStructure}</h3>
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                  {previewTemplate.sections.length} {text.sections}
+                </span>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                {previewTemplate.sections.map((section, index) => (
+                  <TemplateSectionPreview key={section.id || `${section.section_type}-${index}`} section={section} text={text} />
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={reviewedTemplateIds.has(previewTemplate.id)}
+                  onChange={(event) => markTemplateReviewed(previewTemplate.id, event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                />
+                <span className="font-medium text-slate-900">{text.templateReviewed}</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={closeTemplatePreview} className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  {text.close}
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting || !reviewedTemplateIds.has(previewTemplate.id) || previewTemplate.sections.length === 0}
+                  onClick={() => void approveTemplate(previewTemplate)}
+                  className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <ShieldCheck size={16} />
+                  {text.approveTemplate}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {active && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4">
           <div className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl">
@@ -441,6 +595,90 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
         </div>
       )}
     </section>
+  )
+}
+
+function TemplateSectionPreview({ section, text }: { section: BmrSectionItem; text: BmrIssuanceCopy }) {
+  const config = section.config || {}
+  const fields = config.fields || []
+  const steps = config.steps || []
+  const params = config.params || []
+  const rows = config.rows || []
+  const groups = config.groups || []
+  const phases = config.phases || []
+  const meta = [
+    config.stage_title ? `${text.stage}: ${config.stage_title}` : null,
+    config.room ? `${text.room}: ${config.room}` : null,
+    config.sop ? `${text.sop}: ${config.sop}` : null,
+  ].filter(Boolean)
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white">
+      <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              {section.ordinal ?? '-'} · {section.section_type}
+            </div>
+            <div className="mt-1 text-sm font-semibold text-slate-950">{section.title}</div>
+          </div>
+          {meta.length > 0 && (
+            <div className="max-w-xl text-right text-xs text-slate-500">
+              {meta.map((item) => <div key={item}>{item}</div>)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-3 p-4">
+        {fields.length > 0 ? (
+          <div className="overflow-x-auto rounded-md border border-slate-200">
+            <table className="min-w-[720px] w-full text-left text-xs">
+              <thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">{text.field}</th>
+                  <th className="px-3 py-2">{text.type}</th>
+                  <th className="px-3 py-2">Ед.</th>
+                  <th className="px-3 py-2">{text.required}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fields.map((field, index) => (
+                  <tr key={`${field.label}-${index}`} className="border-t border-slate-100">
+                    <td className="px-3 py-2 font-medium text-slate-900">{field.label || '-'}</td>
+                    <td className="px-3 py-2 font-mono text-slate-600">{field.type || '-'}</td>
+                    <td className="px-3 py-2 text-slate-600">{field.unit || '-'}</td>
+                    <td className="px-3 py-2 text-slate-600">{field.required ? '✓' : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500">{text.noFields}</div>
+        )}
+
+        {(steps.length > 0 || params.length > 0 || rows.length > 0 || groups.length > 0 || phases.length > 0 || config.note) && (
+          <div className="grid grid-cols-1 gap-2 text-xs text-slate-600 md:grid-cols-2">
+            {steps.length > 0 && <Summary label="Шаги" value={steps.map((step) => step.text).join('; ')} />}
+            {params.length > 0 && <Summary label="Параметры" value={params.map((param) => param.name).join(', ')} />}
+            {rows.length > 0 && <Summary label="Оборудование" value={rows.map((row) => row.name).join(', ')} />}
+            {groups.length > 0 && <Summary label="Материалы" value={groups.map((group) => `${group.title}: ${group.items.length}`).join('; ')} />}
+            {phases.length > 0 && <Summary label="Фазы IPC" value={phases.map((phase) => phase.title).join(', ')} />}
+            {config.note && <Summary label="Примечание" value={config.note} />}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Summary({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-slate-50 px-3 py-2">
+      <div className="font-semibold text-slate-500">{label}</div>
+      <div className="mt-1 line-clamp-3 text-slate-700">{value || '-'}</div>
+    </div>
   )
 }
 

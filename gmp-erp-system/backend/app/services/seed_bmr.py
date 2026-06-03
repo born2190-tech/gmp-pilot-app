@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.identity import User
@@ -607,7 +607,7 @@ def seed_bmr_etalon(db: Session) -> None:
 
     existing = (
         db.query(BmrTemplate)
-        .filter(BmrTemplate.notes == ETALON_MARKER)
+        .filter(or_(BmrTemplate.notes == ETALON_MARKER, BmrTemplate.title == ETALON_TITLE))
         .order_by(BmrTemplate.version.desc())
         .first()
     )
@@ -616,6 +616,7 @@ def seed_bmr_etalon(db: Session) -> None:
         # Структура шаблона = определение; перезапись секций НЕ влияет на снимки уже
         # выданных экземпляров (у них своя копия). Держим шаблон актуальным.
         existing.title = ETALON_TITLE
+        existing.notes = ETALON_MARKER
         existing.product_id = product.id
         _write_sections(db, existing.id)
         _retire_siblings(db, product.id, existing.id)
