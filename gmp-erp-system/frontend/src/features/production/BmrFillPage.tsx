@@ -9,23 +9,31 @@ import {
   getBmrInstance, listProductionBatches, getBatchBmrInstance, saveBmrEntries, signBmrField,
   completeBmrInstance, reviewBmrInstance, downloadBmrInstancePdf,
 } from '../../lib/api'
+import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 import type { BmrInstanceItem, BmrEntryItem, BmrSectionItem, BmrParticipantItem, BmrRouteStageItem } from '../../types/inventory'
 
 interface Props { token: string; user: CurrentUser | null }
 
+type Translate = ReturnType<typeof useI18n>['t']
+
 /* ---- status system (from design direction) ---- */
-const STAGE_STATUS: Record<string, { label: string; dot: string; chip: string }> = {
-  issued:      { label: 'Выдан', dot: 'bg-slate-300', chip: 'bg-slate-100 text-slate-600 ring-slate-200' },
-  in_progress: { label: 'В работе', dot: 'bg-cyan-500', chip: 'bg-cyan-50 text-cyan-700 ring-cyan-200' },
-  completed:   { label: 'Заполнен ДП', dot: 'bg-indigo-500', chip: 'bg-indigo-50 text-indigo-700 ring-indigo-200' },
-  reviewed:    { label: 'Проверен ДОК', dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+const STAGE_STYLE: Record<string, { dot: string; chip: string }> = {
+  issued:      { dot: 'bg-slate-300', chip: 'bg-slate-100 text-slate-600 ring-slate-200' },
+  in_progress: { dot: 'bg-cyan-500', chip: 'bg-cyan-50 text-cyan-700 ring-cyan-200' },
+  completed:   { dot: 'bg-indigo-500', chip: 'bg-indigo-50 text-indigo-700 ring-indigo-200' },
+  reviewed:    { dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+}
+function stageStatusLabel(status: string, t: Translate): string {
+  return ['issued', 'in_progress', 'completed', 'reviewed'].includes(status)
+    ? t(`bmrFill.stageStatus.${status}` as Parameters<Translate>[0]) : status
 }
 function StatusChip({ status }: { status: string }) {
-  const v = STAGE_STATUS[status] || STAGE_STATUS.issued
+  const { t } = useI18n()
+  const v = STAGE_STYLE[status] || STAGE_STYLE.issued
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${v.chip}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${v.dot}`} />{v.label}
+      <span className={`h-1.5 w-1.5 rounded-full ${v.dot}`} />{stageStatusLabel(status, t)}
     </span>
   )
 }
@@ -40,7 +48,8 @@ type EntryMap = Record<string, BmrEntryItem>
 type SignRole = 'dp' | 'dok' | 'wh'
 const key = (sid: string, fi: number) => `${sid}:${fi}`
 
-const SIGN_MEANING: Record<SignRole, string> = { dp: 'Выполнено ДП', dok: 'Проверено ДОК', wh: 'Выдано (Склад)' }
+function signMeaning(role: SignRole, t: Translate): string { return t(`bmrFill.meaning.${role}` as Parameters<Translate>[0]) }
+function signRoleLabel(role: SignRole, t: Translate): string { return t(`bmrFill.role.${role}` as Parameters<Translate>[0]) }
 
 function sectionKind(section: BmrSectionItem): string {
   return section.config?.kind || section.section_type
@@ -113,6 +122,7 @@ function fieldUnlocked(sections: BmrSectionItem[], entries: EntryMap, draft: Rec
 
 /* ============================ PAGE ============================ */
 export function BmrFillPage({ token, user }: Props) {
+  const { t } = useI18n()
   const [list, setList] = useState<{ batchId: string; instanceId: string; batchNo: string | null; title: string; status: string; room: string | null }[]>([])
   const [loadingList, setLoadingList] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -134,9 +144,9 @@ export function BmrFillPage({ token, user }: Props) {
         } catch { /* skip */ }
       }
       setList(out)
-    } catch (e) { setError(e instanceof Error ? e.message : 'Ошибка загрузки') }
+    } catch (e) { setError(e instanceof Error ? e.message : t('bmrFill.loadFailed')) }
     finally { setLoadingList(false) }
-  }, [token])
+  }, [token, t])
 
   useEffect(() => { void loadList() }, [loadList])
 
@@ -155,19 +165,19 @@ export function BmrFillPage({ token, user }: Props) {
       <div className="mb-5 flex items-center gap-3">
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white"><ClipboardCheck size={20} /></span>
         <div>
-          <h1 className="text-[22px] font-bold tracking-tight text-slate-900">Заполнение BMR / ЗПС</h1>
-          <p className="text-[13px] text-slate-500">Рабочее место цеха · электронный журнал записи производства серии (СОП-11){myRoom ? ` · ${myRoom}` : ''}</p>
+          <h1 className="text-[22px] font-bold tracking-tight text-slate-900">{t('bmrFill.title')}</h1>
+          <p className="text-[13px] text-slate-500">{t('bmrFill.subtitle')}{myRoom ? ` · ${myRoom}` : ''}</p>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${isSupervisor ? 'bg-slate-100 text-slate-700 ring-slate-200' : 'bg-blue-50 text-blue-700 ring-blue-200'}`}>
-          {isSupervisor ? 'Надзор: все стадии' : 'Оператор: только своя комната'}
+          {isSupervisor ? t('bmrFill.scopeSupervisor') : t('bmrFill.scopeOperator')}
         </span>
-        <button onClick={() => void loadList()} className="ml-auto inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-600 hover:bg-slate-50">Обновить</button>
+        <button onClick={() => void loadList()} className="ml-auto inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-600 hover:bg-slate-50">{t('common.refresh')}</button>
       </div>
       {error && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
       {loadingList ? (
-        <div className="flex items-center gap-2 py-16 text-slate-400"><Loader2 size={18} className="animate-spin" /> загрузка нарядов…</div>
+        <div className="flex items-center gap-2 py-16 text-slate-400"><Loader2 size={18} className="animate-spin" /> {t('bmrFill.loadingOrders')}</div>
       ) : list.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center text-slate-400">Нет выданных BMR. ЗПС появится здесь после выдачи серии (ДОК).</div>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center text-slate-400">{t('bmrFill.emptyOrders')}</div>
       ) : (
         <div className="space-y-2">
           {list.map((it) => (
@@ -177,9 +187,9 @@ export function BmrFillPage({ token, user }: Props) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-[14px] font-semibold text-slate-900">{it.title}</span>
-                  <span className="mono rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">Серия {it.batchNo}</span>
+                  <span className="mono rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">{t('bmrFill.series')} {it.batchNo}</span>
                 </div>
-                <div className="mono text-[11px] text-slate-400">{it.room || '—'} · BMR / ЗПС</div>
+                <div className="mono text-[11px] text-slate-400">{it.room || '—'} · {t('bmrFill.bmrZps')}</div>
               </div>
               <StatusChip status={it.status} />
               <ChevronRight size={16} className="text-slate-300" />
@@ -192,7 +202,9 @@ export function BmrFillPage({ token, user }: Props) {
 }
 
 /* ============================ FILL VIEW (Каркас C) ============================ */
-export function FillView({ token, user, instanceId, onBack, readOnly = false, backLabel = 'Наряды' }: { token: string; user: CurrentUser | null; instanceId: string; onBack: () => void; readOnly?: boolean; backLabel?: string }) {
+export function FillView({ token, user, instanceId, onBack, readOnly = false, backLabel }: { token: string; user: CurrentUser | null; instanceId: string; onBack: () => void; readOnly?: boolean; backLabel?: string }) {
+  const { t } = useI18n()
+  const backText = backLabel ?? t('bmrFill.orders')
   const [inst, setInst] = useState<BmrInstanceItem | null>(null)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -222,8 +234,8 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
         if (e.value && 'v' in e.value && e.value.v != null) d[key(e.section_id, e.field_index)] = String(e.value.v)
       }
       setDraft(d)
-    } catch (e) { setError(e instanceof Error ? e.message : 'Ошибка') }
-  }, [token, instanceId])
+    } catch (e) { setError(e instanceof Error ? e.message : t('common.error')) }
+  }, [token, instanceId, t])
   useEffect(() => { void load() }, [load])
 
   const entries: EntryMap = useMemo(() => {
@@ -246,7 +258,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
       }
       const updated = await saveBmrEntries(token, inst.id, payload)
       setInst(updated); setSavedAt(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))
-    } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось сохранить') }
+    } catch (e) { setError(e instanceof Error ? e.message : t('bmrFill.saveFailed')) }
     finally { setBusy(false) }
   }
 
@@ -257,10 +269,10 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
       const updated = await signBmrField(token, inst.id, {
         section_id: dock.sectionId, field_index: dock.fieldIndex,
         username: signer.trim(), password: pwd,
-        meaning: SIGN_MEANING[dock.role], reason: dock.label,
+        meaning: signMeaning(dock.role, t), reason: dock.label,
       })
       setInst(updated); setDock(null); setPwd(''); setSigner('')
-    } catch (e) { setError(e instanceof Error ? e.message : 'Подпись не принята') }
+    } catch (e) { setError(e instanceof Error ? e.message : t('bmrFill.signRejected')) }
     finally { setBusy(false) }
   }
 
@@ -268,10 +280,10 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
     if (!inst || !action || !user) return
     setBusy(true); setError(null)
     try {
-      const body = { username: user.username, password: pwd, meaning: action === 'review' ? 'Проверка BMR ДОК' : 'Завершение заполнения BMR', reason: action }
+      const body = { username: user.username, password: pwd, meaning: action === 'review' ? t('bmrFill.meaningReview') : t('bmrFill.meaningComplete'), reason: action }
       const updated = action === 'review' ? await reviewBmrInstance(token, inst.id, body) : await completeBmrInstance(token, inst.id, body)
       setInst(updated); setAction(null); setPwd('')
-    } catch (e) { setError(e instanceof Error ? e.message : 'Действие не выполнено') }
+    } catch (e) { setError(e instanceof Error ? e.message : t('bmrFill.actionFailed')) }
     finally { setBusy(false) }
   }
 
@@ -281,10 +293,10 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
       const blob = await downloadBmrInstancePdf(token, inst.id)
       const url = URL.createObjectURL(blob); window.open(url, '_blank', 'noopener,noreferrer')
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    } catch (e) { setError(e instanceof Error ? e.message : 'PDF не сформирован') }
+    } catch (e) { setError(e instanceof Error ? e.message : t('bmrFill.pdfFailed')) }
   }
 
-  if (!inst) return <div className="flex items-center gap-2 p-10 text-slate-400"><Loader2 size={18} className="animate-spin" /> загрузка BMR…</div>
+  if (!inst) return <div className="flex items-center gap-2 p-10 text-slate-400"><Loader2 size={18} className="animate-spin" /> {t('bmrFill.loadingBmr')}</div>
 
   const myRoom = roomFromWorkstation(user?.workstation_id)
   const visibleSections = inst.sections
@@ -315,39 +327,39 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
     <div className="min-h-screen bg-[#eef1f5] pb-28">
       {/* OS strip */}
       <div className="flex items-center justify-between bg-slate-900 px-4 py-1 text-[11px] text-slate-300">
-        <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-1.5 py-0.5 font-semibold text-white"><DoorOpen size={12} /> {myRoom || 'Рабочее место'}</span>
-        <span className="inline-flex items-center gap-1.5 text-emerald-300"><Wifi size={13} /> онлайн</span>
+        <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-1.5 py-0.5 font-semibold text-white"><DoorOpen size={12} /> {myRoom || t('bmrFill.workstation')}</span>
+        <span className="inline-flex items-center gap-1.5 text-emerald-300"><Wifi size={13} /> {t('bmrFill.online')}</span>
       </div>
       {/* batch bar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
-        <button onClick={onBack} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50"><ArrowRight size={14} className="rotate-180" /> {backLabel}</button>
+        <button onClick={onBack} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50"><ArrowRight size={14} className="rotate-180" /> {backText}</button>
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-[10px] font-bold text-white">B21</span>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-[14px] font-semibold text-slate-900">{inst.title}</span>
-            <span className="mono rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">Серия {inst.batch_no}</span>
+            <span className="mono rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">{t('bmrFill.series')} {inst.batch_no}</span>
           </div>
-          <div className="mono text-[10.5px] text-slate-400">BMR · v{inst.template_version} · СОП-11</div>
+          <div className="mono text-[10.5px] text-slate-400">{t('bmrFill.bmrVersionLine', { v: inst.template_version })}</div>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {isSupervisor && (
             <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
-              <button onClick={() => setOverview(false)} className={`rounded-md px-2.5 py-1 text-[12px] font-semibold ${!overview ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Моя стадия</button>
-              <button onClick={() => setOverview(true)} className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-semibold ${overview ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}><Map size={13} /> Обзор серии</button>
+              <button onClick={() => setOverview(false)} className={`rounded-md px-2.5 py-1 text-[12px] font-semibold ${!overview ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>{t('bmrFill.myStage')}</button>
+              <button onClick={() => setOverview(true)} className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-semibold ${overview ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}><Map size={13} /> {t('bmrFill.seriesOverview')}</button>
             </div>
           )}
           {isSupervisor && !closed && (inst.stages?.length || 0) > 0 && (
-            <button onClick={() => setAssignOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-2.5 text-[12px] font-semibold text-blue-700 hover:bg-blue-100"><Users size={14} /> Операторы по этапам</button>
+            <button onClick={() => setAssignOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-2.5 text-[12px] font-semibold text-blue-700 hover:bg-blue-100"><Users size={14} /> {t('bmrFill.operatorsByStage')}</button>
           )}
           <StatusChip status={inst.status} />
-          {savedAt && <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10.5px] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Сохранено {savedAt}</span>}
+          {savedAt && <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10.5px] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {t('bmrFill.savedAt', { at: savedAt })}</span>}
         </div>
       </div>
       {assignOpen && <BmrAssignDialog token={token} instance={inst} onClose={() => setAssignOpen(false)} onSaved={(u) => setInst(u)} />}
 
       {!isSupervisor && (
         <div className="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2 text-[12px] text-blue-700">
-          <Eye size={14} /> Показаны только секции рабочего места {myRoom || user?.workstation_id || 'не определено'}; остальные стадии скрыты GMP-scope доступом.
+          <Eye size={14} /> {t('bmrFill.scopeNotice', { room: myRoom || user?.workstation_id || t('bmrFill.undefined') })}
         </div>
       )}
 
@@ -371,7 +383,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
             <ParticipantsJournal participants={inst.participants || []} />
             {visibleSections.length === 0 ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-[13px] text-amber-800">
-                Для рабочего места {myRoom || user?.workstation_id || 'не определено'} в этой серии нет назначенной стадии.
+                {t('bmrFill.noStageForRoom', { room: myRoom || user?.workstation_id || t('bmrFill.undefined') })}
               </div>
             ) : visibleSections.map((s) => (
               <SectionBlock key={s.id} section={s} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed}
@@ -388,11 +400,11 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
       {/* footer action bar */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-[1680px] items-center gap-2">
-          {!closed && <button disabled={busy} onClick={() => void saveAll()} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Save size={16} /> Сохранить</button>}
-          {!closed && canComplete && (inst.status === 'in_progress' || inst.status === 'issued') && <button disabled={busy} onClick={() => { setAction('complete'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Check size={16} /> Завершить (ДП)</button>}
-          {!readOnly && inst.status === 'completed' && canDok && <button disabled={busy} onClick={() => { setAction('review'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><ShieldCheck size={16} /> Проверить (ДОК)</button>}
+          {!closed && <button disabled={busy} onClick={() => void saveAll()} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Save size={16} /> {t('common.save')}</button>}
+          {!closed && canComplete && (inst.status === 'in_progress' || inst.status === 'issued') && <button disabled={busy} onClick={() => { setAction('complete'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Check size={16} /> {t('bmrFill.completeDp')}</button>}
+          {!readOnly && inst.status === 'completed' && canDok && <button disabled={busy} onClick={() => { setAction('review'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-[13px] font-semibold text-white hover:bg-slate-800 disabled:opacity-50"><ShieldCheck size={16} /> {t('bmrFill.reviewDok')}</button>}
           <button onClick={() => void openPdf()} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-[13px] font-medium text-slate-600 hover:bg-slate-50"><FileDown size={16} /> PDF</button>
-          <span className="ml-auto text-[11px] text-slate-400">{readOnly ? 'Только просмотр (надзор) — заполнение и подписи на планшетах операторов' : closed ? 'BMR закрыт — только просмотр' : 'черновик автосохраняется по «Сохранить»'}</span>
+          <span className="ml-auto text-[11px] text-slate-400">{readOnly ? t('bmrFill.footerReadOnly') : closed ? t('bmrFill.footerClosed') : t('bmrFill.footerDraft')}</span>
         </div>
       </div>
 
@@ -400,11 +412,11 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
       {dock && (
         <SignDock role={dock.role} label={dock.label} pwd={pwd} setPwd={setPwd} busy={busy}
           signerName={signer} setSignerName={setSigner}
-          who={dock.role === 'dok' ? 'подписывает любой контролёр (ДОК)' : dock.role === 'wh' ? 'подписывает кладовщик (Склад)' : 'подписывает назначенный оператор (ДП)'}
+          who={dock.role === 'dok' ? t('bmrFill.whoDok') : dock.role === 'wh' ? t('bmrFill.whoWh') : t('bmrFill.whoDp')}
           onCancel={() => { setDock(null); setPwd(''); setSigner('') }} onConfirm={() => void confirmSign()} />
       )}
       {action && (
-        <SignDock role={action === 'review' ? 'dok' : 'dp'} label={action === 'review' ? 'Проверка и закрытие BMR (ДОК)' : 'Завершение заполнения BMR (ДП)'}
+        <SignDock role={action === 'review' ? 'dok' : 'dp'} label={action === 'review' ? t('bmrFill.actionReviewLabel') : t('bmrFill.actionCompleteLabel')}
           pwd={pwd} setPwd={setPwd} busy={busy} who={user?.full_name || user?.username || ''}
           onCancel={() => { setAction(null); setPwd('') }} onConfirm={() => void confirmAction()} />
       )}
@@ -414,9 +426,10 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
 
 /* ---- HandoffRibbon (task #17): маршрут серии между комнатами ---- */
 function HandoffRibbon({ route, currentStage }: { route: BmrRouteStageItem[]; currentStage: string | null }) {
+  const { t } = useI18n()
   return (
     <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50/70 px-4 py-2.5">
-      <span className="mr-1 flex-none text-[10px] font-semibold uppercase tracking-wider text-slate-400">Маршрут серии</span>
+      <span className="mr-1 flex-none text-[10px] font-semibold uppercase tracking-wider text-slate-400">{t('bmrFill.seriesRoute')}</span>
       {route.map((r, i) => {
         const me = r.stage === currentStage
         return (
@@ -428,7 +441,7 @@ function HandoffRibbon({ route, currentStage }: { route: BmrRouteStageItem[]; cu
               </span>
               <div className="leading-tight">
                 <div className={`max-w-[160px] truncate text-[12.5px] font-semibold ${me ? 'text-blue-900' : 'text-slate-700'}`}>{r.title}</div>
-                <div className="mono text-[10px] text-slate-400">{r.room || '—'}{me ? ' · ВЫ' : ''}</div>
+                <div className="mono text-[10px] text-slate-400">{r.room || '—'}{me ? ` · ${t('bmrFill.you')}` : ''}</div>
               </div>
               <StatusChip status={r.status} />
             </div>
@@ -468,6 +481,7 @@ function OverviewCounter({ label, n, tone }: { label: string; n: number; tone: '
 }
 
 function SeriesOverview({ route, initialStage, onOpenStage }: { route: BmrRouteStageItem[]; initialStage: string | null; onOpenStage: (code: string) => void }) {
+  const { t } = useI18n()
   const [selected, setSelected] = useState<string | null>(initialStage)
   const totalStages = route.length
   const reviewed = route.filter((r) => r.status === 'reviewed').length
@@ -479,7 +493,7 @@ function SeriesOverview({ route, initialStage, onOpenStage }: { route: BmrRouteS
   const sel = route.find((r) => r.stage === selected) || route[0]
 
   if (totalStages === 0) {
-    return <div className="mx-auto max-w-[1680px] p-6 text-[13px] text-slate-400">У этой серии нет этапов для обзора.</div>
+    return <div className="mx-auto max-w-[1680px] p-6 text-[13px] text-slate-400">{t('bmrFill.noStagesOverview')}</div>
   }
 
   return (
@@ -488,7 +502,7 @@ function SeriesOverview({ route, initialStage, onOpenStage }: { route: BmrRouteS
       <div className="flex flex-wrap items-center gap-4 border-b border-slate-200 bg-white px-4 py-3">
         <div className="flex-1 min-w-[240px]">
           <div className="mb-1 flex items-center justify-between text-[11px]">
-            <span className="font-semibold text-slate-600">Прогресс BMR · {reviewed} из {totalStages} стадий закрыто ДОК</span>
+            <span className="font-semibold text-slate-600">{t('bmrFill.progressLine', { reviewed, total: totalStages })}</span>
             <span className="mono text-slate-400">{pctReviewed}%</span>
           </div>
           <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
@@ -499,9 +513,9 @@ function SeriesOverview({ route, initialStage, onOpenStage }: { route: BmrRouteS
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <OverviewCounter label="осталось ДП" n={dpLeft} tone="blue" />
-          <OverviewCounter label="осталось ДОК" n={dokLeft} tone="slate" />
-          <OverviewCounter label="закрыто" n={reviewed} tone="emerald" />
+          <OverviewCounter label={t('bmrFill.dpLeft')} n={dpLeft} tone="blue" />
+          <OverviewCounter label={t('bmrFill.dokLeft')} n={dokLeft} tone="slate" />
+          <OverviewCounter label={t('bmrFill.closed')} n={reviewed} tone="emerald" />
         </div>
       </div>
       {/* split: stage list + detail */}
@@ -528,7 +542,7 @@ function SeriesOverview({ route, initialStage, onOpenStage }: { route: BmrRouteS
         <div className="bg-slate-50/40 p-4">
           {sel && (
             <>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Выбранная стадия</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.selectedStage')}</div>
               <div className="mt-1 flex items-center gap-2">
                 <span className="mono inline-flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-[13px] font-bold text-white">{String(sel.ordinal).padStart(2, '0')}</span>
                 <div className="text-[14px] font-bold text-slate-900">{sel.title}</div>
@@ -536,13 +550,13 @@ function SeriesOverview({ route, initialStage, onOpenStage }: { route: BmrRouteS
               <div className="mono mt-1 text-[11px] text-slate-400">{sel.room || '—'}{sel.who ? ` · ${sel.who}` : ''}</div>
               <div className="mt-3"><StatusChip status={sel.status} /></div>
               <div className="mt-4 space-y-2">
-                <OverviewMini label="Заполнено полей" done={sel.done} total={sel.total} />
-                <OverviewMini label="Подписи ДП" done={sel.dp_done} total={sel.dp_total} />
-                <OverviewMini label="Подписи ДОК" done={sel.dok_done} total={sel.dok_total} />
+                <OverviewMini label={t('bmrFill.fieldsFilled')} done={sel.done} total={sel.total} />
+                <OverviewMini label={t('bmrFill.signaturesDp')} done={sel.dp_done} total={sel.dp_total} />
+                <OverviewMini label={t('bmrFill.signaturesDok')} done={sel.dok_done} total={sel.dok_total} />
               </div>
               <button type="button" onClick={() => onOpenStage(sel.stage)}
-                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-[13px] font-medium text-slate-600 hover:bg-slate-50"><Eye size={15} /> Открыть (только просмотр)</button>
-              <p className="mt-2 text-[10.5px] leading-relaxed text-slate-400">Из обзора стадия открывается в режиме «Моя стадия». Редактировать можно только с планшета той комнаты, где идёт стадия.</p>
+                className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-[13px] font-medium text-slate-600 hover:bg-slate-50"><Eye size={15} /> {t('bmrFill.openReadOnly')}</button>
+              <p className="mt-2 text-[10.5px] leading-relaxed text-slate-400">{t('bmrFill.overviewHint')}</p>
             </>
           )}
         </div>
@@ -559,6 +573,7 @@ function dutyChipClass(duty: string): string {
 }
 
 function ParticipantsJournal({ participants }: { participants: BmrParticipantItem[] }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const count = participants.length
   return (
@@ -569,8 +584,8 @@ function ParticipantsJournal({ participants }: { participants: BmrParticipantIte
       >
         <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-white"><Users size={15} /></span>
         <div>
-          <div className="text-[14px] font-semibold text-slate-900">Журнал участников серии</div>
-          <div className="text-[11px] text-slate-500">Роли и назначенные операторы этапов (СОП-11 · ALCOA+)</div>
+          <div className="text-[14px] font-semibold text-slate-900">{t('bmrFill.journalTitle')}</div>
+          <div className="text-[11px] text-slate-500">{t('bmrFill.journalSubtitle')}</div>
         </div>
         <span className="ml-auto inline-flex items-center gap-2">
           <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">{count}</span>
@@ -580,18 +595,18 @@ function ParticipantsJournal({ participants }: { participants: BmrParticipantIte
       {open && (
         count === 0 ? (
           <div className="px-3 py-6 text-center text-[12.5px] text-slate-400">
-            Участники появятся после назначения операторов начальником цеха и первых e-подписей.
+            {t('bmrFill.journalEmpty')}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[620px]">
               <thead>
                 <tr className="border-b border-slate-200 bg-white text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">Ф.И.О.</th>
-                  <th className="px-3 py-2">Должность</th>
-                  <th className="px-3 py-2">Роль</th>
-                  <th className="px-3 py-2">Этапы</th>
-                  <th className="px-3 py-2">Участие</th>
+                  <th className="px-3 py-2">{t('bmrFill.colFullName')}</th>
+                  <th className="px-3 py-2">{t('bmrFill.colPosition')}</th>
+                  <th className="px-3 py-2">{t('bmrFill.colRole')}</th>
+                  <th className="px-3 py-2">{t('bmrFill.colStages')}</th>
+                  <th className="px-3 py-2">{t('bmrFill.colParticipation')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -609,8 +624,8 @@ function ParticipantsJournal({ participants }: { participants: BmrParticipantIte
                     <td className="px-3 py-2 text-slate-600">{p.stages.length ? p.stages.join(', ') : '—'}</td>
                     <td className="px-3 py-2">
                       <span className="flex flex-wrap gap-1">
-                        {p.assigned && <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10.5px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200">назначен</span>}
-                        {p.signed && <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">подписал</span>}
+                        {p.assigned && <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10.5px] font-medium text-blue-700 ring-1 ring-inset ring-blue-200">{t('bmrFill.assigned')}</span>}
+                        {p.signed && <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">{t('bmrFill.signedChip')}</span>}
                         {!p.assigned && !p.signed && <span className="text-slate-400">—</span>}
                       </span>
                     </td>
@@ -642,20 +657,21 @@ function StageRail({
   progress: { done: number; total: number }
   status: string
 }) {
+  const { t } = useI18n()
   const percent = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
   return (
     <aside className="self-start rounded-lg border border-slate-200 bg-white shadow-sm xl:sticky xl:top-3">
       <div className="border-b border-slate-200 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Маршрут серии</div>
-            <div className="mt-1 text-[14px] font-semibold text-slate-900">{isSupervisor ? 'Обзор всех стадий' : myRoom || 'Комната не определена'}</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{t('bmrFill.seriesRoute')}</div>
+            <div className="mt-1 text-[14px] font-semibold text-slate-900">{isSupervisor ? t('bmrFill.allStagesOverview') : myRoom || t('bmrFill.roomUndefined')}</div>
           </div>
           <StatusChip status={status} />
         </div>
         <div className="mt-2.5">
           <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
-            <span>Заполнено</span>
+            <span>{t('bmrFill.filled')}</span>
             <span className="mono">{progress.done}/{progress.total || 0}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -665,7 +681,7 @@ function StageRail({
       </div>
       <nav className="max-h-[calc(100vh-190px)] space-y-1 overflow-y-auto p-2">
         {sections.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-6 text-center text-[12px] text-slate-400">Нет доступных стадий</div>
+          <div className="rounded-lg border border-dashed border-slate-200 px-3 py-6 text-center text-[12px] text-slate-400">{t('bmrFill.noAvailableStages')}</div>
         ) : sections.map((section) => {
           const p = sectionProgress(section, entries, draft)
           const done = p.total > 0 && p.done >= p.total
@@ -683,7 +699,7 @@ function StageRail({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-semibold text-slate-900">{section.ordinal}. {section.title}</span>
                 <span className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-slate-500">
-                  <span className="truncate">{section.config?.room || 'Общая секция'}</span>
+                  <span className="truncate">{section.config?.room || t('bmrFill.commonSection')}</span>
                   <span className="mono flex-none">{p.done}/{p.total || 0}</span>
                 </span>
               </span>
@@ -697,31 +713,32 @@ function StageRail({
 
 /* ---- Sign dock ---- */
 function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, signerName, setSignerName }: { role: SignRole; label: string; pwd: string; setPwd: (v: string) => void; busy: boolean; who: string; onCancel: () => void; onConfirm: () => void; signerName?: string; setSignerName?: (v: string) => void }) {
+  const { t } = useI18n()
   const dok = role === 'dok'
   const wh = role === 'wh'
   const needsSigner = !!setSignerName
   const ready = pwd.length > 0 && (!needsSigner || (signerName || '').trim().length > 0)
   const accentBorder = dok ? '#0f172a' : wh ? '#b45309' : '#2563eb'
   const accentBg = dok ? 'bg-slate-900' : wh ? 'bg-amber-600' : 'bg-blue-600'
-  const title = dok ? 'ДОК «Проверил»' : wh ? 'Склад «Выдал»' : 'ДП «Выполнил»'
-  const act = dok ? 'проверку' : wh ? 'выдачу сырья' : 'выполнение'
+  const title = dok ? t('bmrFill.signTitleDok') : wh ? t('bmrFill.signTitleWh') : t('bmrFill.signTitleDp')
+  const act = dok ? t('bmrFill.signActDok') : wh ? t('bmrFill.signActWh') : t('bmrFill.signActDp')
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-4">
       <div className="mx-auto max-w-3xl overflow-hidden rounded-xl border bg-white shadow-2xl ring-1" style={{ borderColor: accentBorder }}>
         <div className={`flex items-center gap-2 px-4 py-2 text-white ${accentBg}`}>
-          <Pen size={15} /><span className="text-[12.5px] font-semibold">Подпись {title} · {label}</span>
+          <Pen size={15} /><span className="text-[12.5px] font-semibold">{t('bmrFill.signHeader', { title, label })}</span>
           <span className="ml-auto mono text-[11px] opacity-80">{who}</span>
         </div>
         <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-          <div className="flex-1 min-w-[180px] text-[12px] text-slate-600">Подписант подтверждает {act} лично своими данными (ALCOA+).</div>
+          <div className="flex-1 min-w-[180px] text-[12px] text-slate-600">{t('bmrFill.signerConfirms', { act })}</div>
           {needsSigner && (
-            <input autoFocus value={signerName || ''} onChange={(e) => setSignerName!(e.target.value)} placeholder="Логин подписанта" autoComplete="off"
+            <input autoFocus value={signerName || ''} onChange={(e) => setSignerName!(e.target.value)} placeholder={t('weighing.signerLogin')} autoComplete="off"
               className="h-11 w-44 rounded-lg border border-slate-300 px-3 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           )}
-          <input type="password" autoFocus={!needsSigner} value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="Пароль / PIN" autoComplete="off"
+          <input type="password" autoFocus={!needsSigner} value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder={t('weighing.passwordPin')} autoComplete="off"
             onKeyDown={(e) => { if (e.key === 'Enter' && ready) onConfirm() }}
             className="h-11 w-44 rounded-lg border border-slate-300 px-3 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-          <button disabled={busy || !ready} onClick={onConfirm} className={`inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 ${accentBg}`}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Подтвердить</button>
+          <button disabled={busy || !ready} onClick={onConfirm} className={`inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 ${accentBg}`}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {t('common.confirm')}</button>
           <button onClick={onCancel} className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-600"><X size={15} /></button>
         </div>
       </div>
@@ -730,8 +747,8 @@ function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, si
 }
 
 /* ---- Signature cell ---- */
-const SIGN_LABEL: Record<SignRole, string> = { dp: 'ДП', dok: 'ДОК', wh: 'Склад' }
 function SignCell({ role, state, who, at, onSign }: { role: SignRole; state: 'locked' | 'ready' | 'signed'; who?: string; at?: string; onSign?: () => void }) {
+  const { t } = useI18n()
   const dok = role === 'dok'
   const wh = role === 'wh'
   const signedTone = dok ? 'border-emerald-200 bg-emerald-50' : wh ? 'border-amber-200 bg-amber-50' : 'border-indigo-200 bg-indigo-50'
@@ -742,11 +759,11 @@ function SignCell({ role, state, who, at, onSign }: { role: SignRole; state: 'lo
   if (state === 'signed') return (
     <div className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 ${signedTone}`}>
       <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-white ${signedDot}`}><Check size={12} /></span>
-      <div className="leading-tight"><div className={`text-[12px] font-semibold ${signedName}`}>{who}</div><div className={`mono text-[10px] ${signedMeta}`}>{SIGN_LABEL[role]} · {at}</div></div>
+      <div className="leading-tight"><div className={`text-[12px] font-semibold ${signedName}`}>{who}</div><div className={`mono text-[10px] ${signedMeta}`}>{signRoleLabel(role, t)} · {at}</div></div>
     </div>
   )
-  if (state === 'locked') return <div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-400"><Lock size={13} /> {dok ? 'после ДП' : 'ожидает'}</div>
-  return <button onClick={onSign} className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-semibold text-white shadow-sm active:scale-[0.98] ${btnTone}`}><Pen size={13} /> Подписать · {SIGN_LABEL[role]}</button>
+  if (state === 'locked') return <div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-400"><Lock size={13} /> {dok ? t('bmrFill.afterDp') : t('bmrFill.awaiting')}</div>
+  return <button onClick={onSign} className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-semibold text-white shadow-sm active:scale-[0.98] ${btnTone}`}><Pen size={13} /> {t('bmrFill.sign')} · {signRoleLabel(role, t)}</button>
 }
 
 function numVal(s?: string): number | null {
@@ -786,17 +803,18 @@ function ProcessClosureBlock({
   closed: boolean
   onSetVal: (sid: string, fi: number, v: string) => void
 }) {
+  const { t } = useI18n()
   const first = fields[0]
   const unlocked = first ? fieldUnlocked(allSections, entries, draft, String(first.section.id), first.fieldIndex) : false
   return (
     <section className="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2">
         <div>
-          <div className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-slate-400">Финальное закрытие процесса</div>
-          <div className="text-[14px] font-semibold text-slate-900">Окончание стадии</div>
+          <div className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-slate-400">{t('bmrFill.finalClosure')}</div>
+          <div className="text-[14px] font-semibold text-slate-900">{t('bmrFill.stageEnd')}</div>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${unlocked ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200'}`}>
-          {unlocked ? 'Доступно' : 'После подписей ДОК'}
+          {unlocked ? t('bmrFill.available') : t('bmrFill.afterDokSign')}
         </span>
       </div>
       <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
@@ -807,7 +825,7 @@ function ProcessClosureBlock({
           const inputType = field.type === 'datetime' ? 'datetime-local' : field.type === 'date' ? 'date' : 'text'
           return (
             <div key={`${sid}:${fieldIndex}`} className="rounded-lg border border-slate-200 bg-white p-3">
-              <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{field.label || 'Дата-время окончания'}</div>
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{field.label || t('bmrFill.endDatetime')}</div>
               <input
                 disabled={closed || !itemUnlocked}
                 type={inputType}
@@ -816,7 +834,7 @@ function ProcessClosureBlock({
                 className="h-10 w-full rounded-md border border-slate-300 bg-white px-2.5 text-[13px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500"
               />
               <div className="mt-2 text-[11.5px] text-slate-500">
-                Заполняется только после завершения предыдущих пунктов и подписей контролера ДОК.
+                {t('bmrFill.endFieldHint')}
               </div>
             </div>
           )
@@ -832,6 +850,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   canDp: boolean; canDok: boolean; canWh: boolean; onSetVal: (sid: string, fi: number, v: string) => void
   onSign: (fi: number, role: SignRole, label: string) => void
 }) {
+  const { t } = useI18n()
   const sid = String(section.id)
   const kind = sectionKind(section)
   const Head = (
@@ -862,20 +881,20 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     const regularFields = fields.map((f, fi) => ({ f, fi })).filter((item) => !isProcessEndField(section, item.f))
     return wrap(
       <div className="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-2">
-        <Meta label="Процесс" value={section.config?.process || section.title} />
-        <Meta label="Комната / №" value={`${section.config?.room || '—'}${section.config?.room_no ? ` / ${section.config.room_no}` : ''}`} />
+        <Meta label={t('bmrFill.process')} value={section.config?.process || section.title} />
+        <Meta label={t('bmrFill.roomNo')} value={`${section.config?.room || '—'}${section.config?.room_no ? ` / ${section.config.room_no}` : ''}`} />
         {regularFields.map(({ f, fi }) => (
           <div key={fi}>
             <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{f.label}</div>
             {inputFor(fi, f.type)}
             {String(f.label || '').toLowerCase().includes('предыдущ') && (
-              <div className="mt-1 text-[11px] text-slate-400">Подставляется из истории комнаты, можно исправить вручную.</div>
+              <div className="mt-1 text-[11px] text-slate-400">{t('bmrFill.prefilledFromHistory')}</div>
             )}
           </div>
         ))}
         {regularFields.length !== fields.length && (
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[12px] text-blue-700 sm:col-span-2">
-            Дата-время окончания заполняется в финальном блоке после выполнения и проверки всех предыдущих этапов.
+            {t('bmrFill.endInFinalBlock')}
           </div>
         )}
       </div>
@@ -888,8 +907,8 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     return wrap(
       <table className="w-full">
         <thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
-          <th className="w-10 px-3 py-2 text-center">№</th><th className="px-3 py-2">Технологический этап</th>
-          <th className="w-[170px] px-3 py-2">Выполнено · ДП</th><th className="w-[170px] px-3 py-2">Проверено · ДОК</th>
+          <th className="w-10 px-3 py-2 text-center">№</th><th className="px-3 py-2">{t('bmrFill.processStep')}</th>
+          <th className="w-[170px] px-3 py-2">{t('bmrFill.doneDp')}</th><th className="w-[170px] px-3 py-2">{t('bmrFill.checkedDok')}</th>
         </tr></thead>
         <tbody>
           {steps.map((st, i) => {
@@ -901,8 +920,8 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
               <tr key={i} className="border-b border-slate-100 align-middle">
                 <td className="px-3 py-2 text-center mono text-[12px] font-semibold text-slate-400">{st.no || i + 1}</td>
                 <td className="px-3 py-2 text-[13px] text-slate-800">{st.text}</td>
-                <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(2 * i, 'dp', `этап ${st.no || i + 1}`) : undefined} /></td>
-                <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', dokUnlocked)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && dokUnlocked ? () => onSign(2 * i + 1, 'dok', `этап ${st.no || i + 1}`) : undefined} /></td>
+                <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(2 * i, 'dp', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} /></td>
+                <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', dokUnlocked)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && dokUnlocked ? () => onSign(2 * i + 1, 'dok', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} /></td>
               </tr>
             )
           })}
@@ -920,13 +939,13 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         <table className="w-full min-w-[760px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
-              <th rowSpan={2} className="w-[220px] border-r border-slate-200 px-3 py-2 text-left align-bottom">Параметр</th>
-              <th colSpan={3} className="border-b border-r border-slate-200 px-3 py-1.5 text-center text-blue-700">Начало стадии</th>
-              <th colSpan={3} className="border-b border-slate-200 px-3 py-1.5 text-center text-slate-600">Окончание стадии</th>
+              <th rowSpan={2} className="w-[220px] border-r border-slate-200 px-3 py-2 text-left align-bottom">{t('bmrFill.parameter')}</th>
+              <th colSpan={3} className="border-b border-r border-slate-200 px-3 py-1.5 text-center text-blue-700">{t('bmrFill.stageStart')}</th>
+              <th colSpan={3} className="border-b border-slate-200 px-3 py-1.5 text-center text-slate-600">{t('bmrFill.stageEndCol')}</th>
             </tr>
             <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-medium uppercase tracking-wide text-slate-400">
-              <th className="px-3 py-1.5 text-left">Наблюдение</th><th className="px-3 py-1.5">ДП</th><th className="border-r border-slate-200 px-3 py-1.5">ДОК</th>
-              <th className="px-3 py-1.5 text-left">Наблюдение</th><th className="px-3 py-1.5">ДП</th><th className="px-3 py-1.5">ДОК</th>
+              <th className="px-3 py-1.5 text-left">{t('bmrFill.observation')}</th><th className="px-3 py-1.5">{t('bmrFill.role.dp')}</th><th className="border-r border-slate-200 px-3 py-1.5">{t('bmrFill.role.dok')}</th>
+              <th className="px-3 py-1.5 text-left">{t('bmrFill.observation')}</th><th className="px-3 py-1.5">{t('bmrFill.role.dp')}</th><th className="px-3 py-1.5">{t('bmrFill.role.dok')}</th>
             </tr>
           </thead>
           <tbody>
@@ -939,7 +958,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
               const dpCell = (fi: number) => { const e = entries[key(sid, fi)]; const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi); return <SignCell role="dp" state={sigState(e, false, 'dp', unlocked)} who={e?.value?.signed_by} at={fmtTime(e?.value?.signed_at)} onSign={canDp && !closed && unlocked ? () => onSign(fi, 'dp', p.name) : undefined} /> }
               return (
                 <tr key={i} className="border-b border-slate-100">
-                  <td className="px-3 py-2.5"><div className="flex items-center gap-2 text-[13px] font-medium text-slate-800">{icon(i)}{p.name}</div>{p.limit && <div className="mono mt-0.5 text-[10.5px] text-slate-400">предел: {p.limit}</div>}</td>
+                  <td className="px-3 py-2.5"><div className="flex items-center gap-2 text-[13px] font-medium text-slate-800">{icon(i)}{p.name}</div>{p.limit && <div className="mono mt-0.5 text-[10.5px] text-slate-400">{t('bmrFill.limit')}: {p.limit}</div>}</td>
                   <td className="px-3 py-2.5">{inputFor(b + 0, 'number', p.unit)}</td>
                   <td className="px-3 py-2.5">{dpCell(b + 1)}</td>
                   <td className="border-r border-slate-200 px-3 py-2.5">{dokCell(b + 2, startDpSigned)}</td>
@@ -961,7 +980,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     return wrap(
       <table className="w-full">
         <thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
-          <th className="px-3 py-2">Название</th><th className="px-3 py-2">Модель</th><th className="px-3 py-2">№ серии</th><th className="px-3 py-2">СОП</th><th className="px-3 py-2">Поверка</th>
+          <th className="px-3 py-2">{t('bmrFill.eqName')}</th><th className="px-3 py-2">{t('bmrFill.eqModel')}</th><th className="px-3 py-2">{t('bmrFill.eqSerial')}</th><th className="px-3 py-2">{t('bmrFill.eqSop')}</th><th className="px-3 py-2">{t('bmrFill.eqCalib')}</th>
         </tr></thead>
         <tbody>{rows.map((r, i) => (
           <tr key={i} className="border-b border-slate-100 text-[12.5px] text-slate-700">
@@ -982,7 +1001,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px]">
             <thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-2">Состав</th><th className="px-3 py-2">Спецификация</th><th className="px-3 py-2">На таблетку</th><th className="px-3 py-2">На серию</th>
+              <th className="px-3 py-2">{t('bmrFill.composition')}</th><th className="px-3 py-2">{t('bmrFill.specification')}</th><th className="px-3 py-2">{t('bmrFill.perTablet')}</th><th className="px-3 py-2">{t('bmrFill.perSeries')}</th>
             </tr></thead>
             <tbody>{rows.map((r, i) => (
               <tr key={i} className="border-b border-slate-100 text-[12.5px] text-slate-700">
@@ -1012,26 +1031,26 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     return wrap(
       <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
         <div>
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{cfg.planned_label || 'По плану'}</div>
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{cfg.planned_label || t('bmrFill.planned')}</div>
           {inputFor(0, 'number', unit)}
         </div>
         <div>
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{cfg.actual_label || 'Фактически'}</div>
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{cfg.actual_label || t('bmrFill.actual')}</div>
           {inputFor(1, 'number', unit)}
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 sm:col-span-2">
           <div className="flex flex-wrap items-center gap-4">
-            <div><div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Выход</div><div className="mono text-[17px] font-bold text-slate-900">{yieldPct != null ? `${yieldPct.toFixed(2)} %` : '—'}</div></div>
-            <div><div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Потери</div><div className={`mono text-[17px] font-bold ${lossPct != null && lossPct > 5 ? 'text-rose-600' : 'text-slate-900'}`}>{lossPct != null ? `${lossPct.toFixed(2)} %` : '—'}</div></div>
-            <span className="ml-auto text-[11px] text-slate-400">Авто-расчёт: факт ÷ план × 100</span>
+            <div><div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{t('bmrFill.yieldOut')}</div><div className="mono text-[17px] font-bold text-slate-900">{yieldPct != null ? `${yieldPct.toFixed(2)} %` : '—'}</div></div>
+            <div><div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{t('bmrFill.losses')}</div><div className={`mono text-[17px] font-bold ${lossPct != null && lossPct > 5 ? 'text-rose-600' : 'text-slate-900'}`}>{lossPct != null ? `${lossPct.toFixed(2)} %` : '—'}</div></div>
+            <span className="ml-auto text-[11px] text-slate-400">{t('bmrFill.autoCalc')}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-500">Рассчитал · ДП</span>
+          <span className="text-[11px] text-slate-500">{t('bmrFill.calculatedDp')}</span>
           <SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && uDp ? () => onSign(2, 'dp', section.title) : undefined} />
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-500">Проверил · ДОК</span>
+          <span className="text-[11px] text-slate-500">{t('bmrFill.checkedDokShort')}</span>
           <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(3, 'dok', section.title) : undefined} />
         </div>
       </div>
@@ -1058,7 +1077,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
             const avgOut = outOfLimit(avg, p.lo, p.hi)
             return (
               <tr key={ppi} className="border-b border-slate-100 align-top">
-                <td className="px-2 py-2 text-[12.5px] font-medium text-slate-800">{p.name}{p.limit && <div className="mono text-[10px] text-slate-400">предел: {p.limit}</div>}</td>
+                <td className="px-2 py-2 text-[12.5px] font-medium text-slate-800">{p.name}{p.limit && <div className="mono text-[10px] text-slate-400">{t('bmrFill.limit')}: {p.limit}</div>}</td>
                 <td className="px-2 py-2">
                   <div className="flex flex-wrap gap-1.5">
                     {Array.from({ length: n }, (_, s) => {
@@ -1075,7 +1094,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                 </td>
                 <td className="px-2 py-2 whitespace-nowrap">
                   <span className={`mono rounded-md px-2 py-1 text-[12px] font-semibold ring-1 ring-inset ${avg == null ? 'bg-slate-100 text-slate-400 ring-slate-200' : avgOut ? 'bg-rose-50 text-rose-700 ring-rose-200' : 'bg-emerald-50 text-emerald-700 ring-emerald-200'}`}>
-                    {avg == null ? 'ср. —' : `ср. ${avg.toFixed(2)}`}{p.unit ? ` ${p.unit}` : ''}
+                    {avg == null ? `${t('bmrFill.avg')} —` : `${t('bmrFill.avg')} ${avg.toFixed(2)}`}{p.unit ? ` ${p.unit}` : ''}
                   </span>
                 </td>
               </tr>
@@ -1090,22 +1109,22 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
           return (
             <div key={ph.key} className="overflow-hidden rounded-lg border border-slate-200">
               <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
-                <span className="text-[12.5px] font-semibold text-slate-800">В процессе · {ph.title}</span>
+                <span className="text-[12.5px] font-semibold text-slate-800">{t('bmrFill.inProcess')} · {ph.title}</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px]">
                   <thead><tr className="border-b border-slate-200 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                    <th className="px-2 py-1.5">Параметр</th><th className="px-2 py-1.5">Пробы</th><th className="px-2 py-1.5">Среднее</th>
+                    <th className="px-2 py-1.5">{t('bmrFill.parameter')}</th><th className="px-2 py-1.5">{t('bmrFill.samples')}</th><th className="px-2 py-1.5">{t('bmrFill.average')}</th>
                   </tr></thead>
                   <tbody>{paramRows}</tbody>
                 </table>
               </div>
               <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-white px-3 py-2">
-                <div className="flex items-center gap-2"><span className="text-[11px] text-slate-500">Испытал · ДП</span>
-                  <SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && uDp ? () => onSign(dpFi, 'dp', `ВПК ${ph.title}`) : undefined} />
+                <div className="flex items-center gap-2"><span className="text-[11px] text-slate-500">{t('bmrFill.testedDp')}</span>
+                  <SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && uDp ? () => onSign(dpFi, 'dp', t('bmrFill.reasonIpc', { phase: ph.title })) : undefined} />
                 </div>
-                <div className="flex items-center gap-2"><span className="text-[11px] text-slate-500">Утвердил · ДОК</span>
-                  <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(dokFi, 'dok', `ВПК ${ph.title}`) : undefined} />
+                <div className="flex items-center gap-2"><span className="text-[11px] text-slate-500">{t('bmrFill.approvedDok')}</span>
+                  <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(dokFi, 'dok', t('bmrFill.reasonIpc', { phase: ph.title })) : undefined} />
                 </div>
               </div>
             </div>
@@ -1141,10 +1160,10 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
             <td className="mono px-3 py-2 text-[12px] text-slate-500">{it.qty || '—'}</td>
             <td className="px-3 py-2">{inputFor(b + 0, 'text')}</td>
             <td className="px-3 py-2">{inputFor(b + 1, 'text')}</td>
-            <td className="px-3 py-2">{inputFor(b + 2, 'number', 'кг')}</td>
-            <td className="px-3 py-2"><SignCell role="wh" state={sigState(whE, false, 'wh', uWh)} who={whE?.value?.signed_by} at={fmtTime(whE?.value?.signed_at)} onSign={(canWh || canDp) && !closed && uWh ? () => onSign(b + 3, 'wh', `${it.name} · выдача`) : undefined} /></td>
-            <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && whSigned && uDp ? () => onSign(b + 4, 'dp', `${it.name} · проверка ДП`) : undefined} /></td>
-            <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(b + 5, 'dok', `${it.name} · проверка ДОК`) : undefined} /></td>
+            <td className="px-3 py-2">{inputFor(b + 2, 'number', t('bmrFill.kg'))}</td>
+            <td className="px-3 py-2"><SignCell role="wh" state={sigState(whE, false, 'wh', uWh)} who={whE?.value?.signed_by} at={fmtTime(whE?.value?.signed_at)} onSign={(canWh || canDp) && !closed && uWh ? () => onSign(b + 3, 'wh', t('bmrFill.reasonIssue', { name: it.name })) : undefined} /></td>
+            <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && whSigned && uDp ? () => onSign(b + 4, 'dp', t('bmrFill.reasonCheckDp', { name: it.name })) : undefined} /></td>
+            <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(b + 5, 'dok', t('bmrFill.reasonCheckDok', { name: it.name })) : undefined} /></td>
           </tr>
         )
       })
@@ -1154,14 +1173,14 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         <table className="w-full min-w-[1040px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-2">Наименование ингредиента</th>
-              <th className="w-[110px] px-3 py-2">Кол-во на серию, кг</th>
-              <th className="w-[140px] px-3 py-2">№ серии сырья</th>
-              <th className="w-[140px] px-3 py-2">№ аналит. листа</th>
-              <th className="w-[130px] px-3 py-2">Вес нетто</th>
-              <th className="w-[150px] px-3 py-2">Выдал · Склад</th>
-              <th className="w-[150px] px-3 py-2">Проверил · ДП</th>
-              <th className="w-[150px] px-3 py-2">Проверил · ДОК</th>
+              <th className="px-3 py-2">{t('bmrFill.ingredientName')}</th>
+              <th className="w-[110px] px-3 py-2">{t('bmrFill.qtyPerSeriesKg')}</th>
+              <th className="w-[140px] px-3 py-2">{t('bmrFill.rawLotNo')}</th>
+              <th className="w-[140px] px-3 py-2">{t('bmrFill.analSheetNo')}</th>
+              <th className="w-[130px] px-3 py-2">{t('bmrFill.netWeight')}</th>
+              <th className="w-[150px] px-3 py-2">{t('bmrFill.issuedWh')}</th>
+              <th className="w-[150px] px-3 py-2">{t('bmrFill.checkedDpCol')}</th>
+              <th className="w-[150px] px-3 py-2">{t('bmrFill.checkedDokCol')}</th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>
@@ -1171,7 +1190,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   }
 
   /* ---- fallback ---- */
-  return wrap(<div className="p-4 text-[13px] text-slate-400">Блок «{section.section_type}» — рендер в разработке.</div>)
+  return wrap(<div className="p-4 text-[13px] text-slate-400">{t('bmrFill.blockWip', { type: section.section_type })}</div>)
 }
 
 function Meta({ label, value }: { label: string; value: string }) {
