@@ -63,6 +63,18 @@ const copy = {
     required: 'обяз.',
     templateApproved: 'Шаблон BMR утверждён. Предыдущая утверждённая версия по этому ЛС переведена в архив.',
     sections: 'секций',
+    approveTemplateFailed: 'Не удалось утвердить шаблон BMR',
+    colBmrZps: 'BMR / ЗПС',
+    colVersion: 'Версия',
+    colStructure: 'Структура',
+    draftPrefix: 'Черновик',
+    unit: 'Ед.',
+    summarySteps: 'Шаги',
+    summaryParams: 'Параметры',
+    summaryEquipment: 'Оборудование',
+    summaryMaterials: 'Материалы',
+    summaryPhasesIpc: 'Фазы IPC',
+    summaryNote: 'Примечание',
   },
   uz: {
     kicker: 'SKA / SOP-11',
@@ -115,6 +127,18 @@ const copy = {
     required: 'majburiy',
     templateApproved: 'BMR shabloni tasdiqlandi. Shu dori vositasi bo‘yicha oldingi tasdiqlangan versiya arxivga o‘tkazildi.',
     sections: 'bo‘lim',
+    approveTemplateFailed: 'BMR shablonini tasdiqlab bo‘lmadi',
+    colBmrZps: 'BMR / ZPS',
+    colVersion: 'Versiya',
+    colStructure: 'Tuzilma',
+    draftPrefix: 'Qoralama',
+    unit: 'Birlik',
+    summarySteps: 'Qadamlar',
+    summaryParams: 'Parametrlar',
+    summaryEquipment: 'Uskunalar',
+    summaryMaterials: 'Materiallar',
+    summaryPhasesIpc: 'IPC fazalari',
+    summaryNote: 'Izoh',
   },
   en: {
     kicker: 'QA / SOP-11',
@@ -167,6 +191,18 @@ const copy = {
     required: 'req.',
     templateApproved: 'BMR template approved. The previous approved version for this product was archived.',
     sections: 'sections',
+    approveTemplateFailed: 'Failed to approve the BMR template',
+    colBmrZps: 'BMR / ZPS',
+    colVersion: 'Version',
+    colStructure: 'Structure',
+    draftPrefix: 'Draft',
+    unit: 'Unit',
+    summarySteps: 'Steps',
+    summaryParams: 'Parameters',
+    summaryEquipment: 'Equipment',
+    summaryMaterials: 'Materials',
+    summaryPhasesIpc: 'IPC phases',
+    summaryNote: 'Note',
   },
 } as const
 
@@ -264,7 +300,7 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
       closeTemplatePreview()
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось утвердить шаблон BMR')
+      setError(err instanceof Error ? err.message : text.approveTemplateFailed)
     } finally {
       setSubmitting(false)
     }
@@ -295,8 +331,8 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
       await issueProductionBmr(token, active.id, {
         username: user.username,
         password,
-        meaning: 'Выдача ЗПС/BMR по запросу производства',
-        reason: 'Реквизиты серии проверены ДОК по СОП-11',
+        meaning: text.meaning,
+        reason: text.reason,
         bmr_no: bmrNo || null,
       })
       closeModal()
@@ -346,9 +382,9 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
             <thead className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
                 <th className="px-4 py-3">{text.product}</th>
-                <th className="px-4 py-3">BMR / ЗПС</th>
-                <th className="px-4 py-3">Версия</th>
-                <th className="px-4 py-3">Структура</th>
+                <th className="px-4 py-3">{text.colBmrZps}</th>
+                <th className="px-4 py-3">{text.colVersion}</th>
+                <th className="px-4 py-3">{text.colStructure}</th>
                 <th className="px-4 py-3 text-right"></th>
               </tr>
             </thead>
@@ -368,7 +404,7 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
                       <div className="font-medium text-slate-900">{template.title}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Черновик v{template.version}</span>
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">{text.draftPrefix} v{template.version}</span>
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-700">{template.sections_count} {text.sections}</td>
                     <td className="px-4 py-3 text-right">
@@ -433,7 +469,7 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
                   <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-4 py-3">
                       <div className="font-mono font-semibold text-slate-950">{item.batch_no}</div>
-                      <div className="text-xs text-slate-500">код {item.product_code}</div>
+                      <div className="text-xs text-slate-500">{text.codePrefix} {item.product_code}</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900">{item.product_name}</div>
@@ -483,8 +519,8 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
               <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-4">
                 <Info label={text.product} value={previewTemplate.product_name || '-'} />
                 <Info label={text.codePrefix} value={`${previewTemplate.product_code || '-'} · ${previewTemplate.market_code || '-'}`} mono />
-                <Info label="BMR / ЗПС" value={previewTemplate.title} />
-                <Info label="Версия" value={`v${previewTemplate.version} · ${previewTemplate.status}`} mono />
+                <Info label={text.colBmrZps} value={previewTemplate.title} />
+                <Info label={text.colVersion} value={`v${previewTemplate.version} · ${previewTemplate.status}`} mono />
               </div>
 
               <div className="mt-5 flex items-center justify-between">
@@ -638,7 +674,7 @@ function TemplateSectionPreview({ section, text }: { section: BmrSectionItem; te
                 <tr>
                   <th className="px-3 py-2">{text.field}</th>
                   <th className="px-3 py-2">{text.type}</th>
-                  <th className="px-3 py-2">Ед.</th>
+                  <th className="px-3 py-2">{text.unit}</th>
                   <th className="px-3 py-2">{text.required}</th>
                 </tr>
               </thead>
@@ -660,12 +696,12 @@ function TemplateSectionPreview({ section, text }: { section: BmrSectionItem; te
 
         {(steps.length > 0 || params.length > 0 || rows.length > 0 || groups.length > 0 || phases.length > 0 || config.note) && (
           <div className="grid grid-cols-1 gap-2 text-xs text-slate-600 md:grid-cols-2">
-            {steps.length > 0 && <Summary label="Шаги" value={steps.map((step) => step.text).join('; ')} />}
-            {params.length > 0 && <Summary label="Параметры" value={params.map((param) => param.name).join(', ')} />}
-            {rows.length > 0 && <Summary label="Оборудование" value={rows.map((row) => row.name).join(', ')} />}
-            {groups.length > 0 && <Summary label="Материалы" value={groups.map((group) => `${group.title}: ${group.items.length}`).join('; ')} />}
-            {phases.length > 0 && <Summary label="Фазы IPC" value={phases.map((phase) => phase.title).join(', ')} />}
-            {config.note && <Summary label="Примечание" value={config.note} />}
+            {steps.length > 0 && <Summary label={text.summarySteps} value={steps.map((step) => step.text).join('; ')} />}
+            {params.length > 0 && <Summary label={text.summaryParams} value={params.map((param) => param.name).join(', ')} />}
+            {rows.length > 0 && <Summary label={text.summaryEquipment} value={rows.map((row) => row.name).join(', ')} />}
+            {groups.length > 0 && <Summary label={text.summaryMaterials} value={groups.map((group) => `${group.title}: ${group.items.length}`).join('; ')} />}
+            {phases.length > 0 && <Summary label={text.summaryPhasesIpc} value={phases.map((phase) => phase.title).join(', ')} />}
+            {config.note && <Summary label={text.summaryNote} value={config.note} />}
           </div>
         )}
       </div>
