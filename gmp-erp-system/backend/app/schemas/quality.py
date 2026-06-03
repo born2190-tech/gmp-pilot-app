@@ -46,6 +46,8 @@ class QualityLotItem(BaseModel):
     sample_archive_qty: float | None = None
     sample_stability_qty: float | None = None
     sample_unit: str | None = None
+    qc_notification_no: str | None = None
+    qc_notification_status: str | None = None
 
 
 class QualityLotsResponse(BaseModel):

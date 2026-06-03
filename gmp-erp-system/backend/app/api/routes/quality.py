@@ -87,6 +87,7 @@ def _qc_report_list_item(db: Session, report_id: UUID) -> QCReportListItem:
 
 
 def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
+    qc_notification_no_col, qc_notification_status_col = _qc_notification_lot_columns(db)
     row = (
         db.query(
             Lot.id,
@@ -113,6 +114,8 @@ def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
             Material.sample_archive_qty,
             Material.sample_stability_qty,
             Material.sample_unit,
+            qc_notification_no_col,
+            qc_notification_status_col,
         )
         .join(Material, Material.id == Lot.material_id)
         .outerjoin(Supplier, Supplier.id == Lot.supplier_id)
@@ -123,6 +126,30 @@ def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
         .one()
     )
     return QualityLotItem.model_validate(row)
+
+
+def _qc_notification_lot_columns(db: Session):
+    notification_base = (
+        db.query(QCNotification.id)
+        .join(QCNotificationLine, QCNotificationLine.notification_id == QCNotification.id)
+        .filter(QCNotificationLine.lot_id == Lot.id)
+        .order_by(QCNotification.updated_at.desc())
+        .limit(1)
+        .correlate(Lot)
+        .scalar_subquery()
+    )
+    return (
+        db.query(QCNotification.notification_no)
+        .filter(QCNotification.id == notification_base)
+        .correlate(Lot)
+        .scalar_subquery()
+        .label("qc_notification_no"),
+        db.query(QCNotification.status)
+        .filter(QCNotification.id == notification_base)
+        .correlate(Lot)
+        .scalar_subquery()
+        .label("qc_notification_status"),
+    )
 
 
 def qc_report_item(db: Session, report_id: UUID) -> QCReportItem:
@@ -196,6 +223,7 @@ def list_qc_lots(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> QualityLotsResponse:
     require_permission(current_user, "VIEW_QC")
+    qc_notification_no_col, qc_notification_status_col = _qc_notification_lot_columns(db)
     rows = (
         db.query(
             Lot.id,
@@ -222,6 +250,8 @@ def list_qc_lots(
             Material.sample_archive_qty,
             Material.sample_stability_qty,
             Material.sample_unit,
+            qc_notification_no_col,
+            qc_notification_status_col,
         )
         .join(Material, Material.id == Lot.material_id)
         .outerjoin(Supplier, Supplier.id == Lot.supplier_id)

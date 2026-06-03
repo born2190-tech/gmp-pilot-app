@@ -31,7 +31,7 @@ from app.core.config import settings
 from app.models.identity import User
 from app.models.inventory import InventoryMovement, Lot
 from app.models.master_data import Manufacturer, Material, Warehouse
-from app.models.quality import SamplingAct, SamplingLine, SamplingScan
+from app.models.quality import QCNotification, QCNotificationLine, SamplingAct, SamplingLine, SamplingScan
 from app.schemas.quality import SamplingActCreate
 from app.services.audit import write_audit
 from app.services.document_qr import DOC_SAMPLING_ACT, canonical_hash, validate_scan_document_qr
@@ -44,6 +44,7 @@ SCAN_MIMES = {"image/jpeg", "image/jpg", "image/png", "application/pdf"}
 
 # Назначения проб, которые физически списываются с партии.
 DEBIT_PURPOSES = {"PHYSICOCHEMICAL", "MICROBIOLOGICAL", "ARCHIVE", "STABILITY"}
+QC_NOTIFICATION_REQUIRED_WAREHOUSES = {"SUBSTANCE_WAREHOUSE", "PACKAGING_WAREHOUSE"}
 
 
 def now_utc() -> datetime:
@@ -135,6 +136,29 @@ def _get_lot(db: Session, lot_id: UUID) -> Lot:
     return lot
 
 
+def _verified_notification_for_lot(db: Session, lot: Lot) -> QCNotification | None:
+    warehouse = db.get(Warehouse, lot.warehouse_id)
+    if not warehouse or warehouse.warehouse_type not in QC_NOTIFICATION_REQUIRED_WAREHOUSES:
+        return None
+
+    notification = (
+        db.query(QCNotification)
+        .join(QCNotificationLine, QCNotificationLine.notification_id == QCNotification.id)
+        .filter(QCNotificationLine.lot_id == lot.id, QCNotification.status == "verified")
+        .order_by(QCNotification.updated_at.desc())
+        .first()
+    )
+    if not notification:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Акт отбора Ф-10 можно сформировать только после того, как "
+                "ДОК верифицирует подписанное извещение Ф-14 по этой партии."
+            ),
+        )
+    return notification
+
+
 def _apply_fields(act: SamplingAct, payload: SamplingActCreate) -> None:
     act.head_qc_user_id = payload.head_qc_user_id
     act.warehouse_member_user_id = payload.warehouse_member_user_id
@@ -207,6 +231,7 @@ def _learn_norms(db: Session, lot: Lot, payload: SamplingActCreate) -> None:
 def create_sampling_act(db: Session, user: CurrentUser, payload: SamplingActCreate) -> SamplingAct:
     require_permission(user, "ENTER_QC_RESULT")
     lot = _get_lot(db, payload.lot_id)
+    notification = _verified_notification_for_lot(db, lot)
 
     existing = (
         db.query(SamplingAct)
@@ -225,6 +250,7 @@ def create_sampling_act(db: Session, user: CurrentUser, payload: SamplingActCrea
     act = SamplingAct(
         act_no=_generate_act_no(db),
         lot_id=lot.id,
+        qc_notification_id=notification.id if notification else None,
         sop_form=sop_form,
         status="draft",
         created_by=user.id,
@@ -252,9 +278,13 @@ def update_sampling_act(db: Session, user: CurrentUser, act_id: UUID, payload: S
     act = _get(db, act_id)
     if act.status == "verified":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Verified act cannot be edited")
+    lot = db.get(Lot, act.lot_id)
+    if lot:
+        notification = _verified_notification_for_lot(db, lot)
+        if notification and not act.qc_notification_id:
+            act.qc_notification_id = notification.id
     _apply_fields(act, payload)
     _replace_lines(db, act, payload)
-    lot = db.get(Lot, act.lot_id)
     if lot:
         _learn_norms(db, lot, payload)
     write_audit(
@@ -587,6 +617,9 @@ def post_sampling_act(db: Session, user: CurrentUser, act_id: UUID, payload) -> 
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Act has no sample lines")
 
     lot = _get_lot(db, act.lot_id)
+    notification = _verified_notification_for_lot(db, lot)
+    if notification and not act.qc_notification_id:
+        act.qc_notification_id = notification.id
     total = sum(line.quantity for line in act.lines if line.purpose in DEBIT_PURPOSES)
     if total <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Total sampled quantity must be > 0")

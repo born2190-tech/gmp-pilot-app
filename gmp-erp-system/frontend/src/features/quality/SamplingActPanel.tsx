@@ -240,6 +240,9 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
 
   const status = act?.status ?? null
   const isVerified = status === 'verified'
+  const notificationGateApplies = lot.warehouse_type === 'SUBSTANCE_WAREHOUSE' || lot.warehouse_type === 'PACKAGING_WAREHOUSE'
+  const notificationVerified = lot.qc_notification_status === 'verified'
+  const samplingPreflightBlocked = notificationGateApplies && !notificationVerified && !isVerified
 
   if (loading) {
     return <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">{t('common.loadingRecords')}</div>
@@ -269,6 +272,18 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
 
       {error && (
         <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-800">{error}</div>
+      )}
+
+      {samplingPreflightBlocked && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+          <div className="font-semibold">{t('sampling.notificationBlockedTitle')}</div>
+          <div className="mt-0.5">
+            {t('sampling.notificationBlockedHint', {
+              no: lot.qc_notification_no || '—',
+              status: lot.qc_notification_status || 'not_created',
+            })}
+          </div>
+        </div>
       )}
 
       {/* Quantities table — editable in draft, read-only after */}
@@ -365,7 +380,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
         {!act && (
-          <button type="button" disabled={busy || totalSampled <= 0} onClick={handleCreate}
+          <button type="button" disabled={busy || totalSampled <= 0 || samplingPreflightBlocked} onClick={handleCreate}
             className="inline-flex h-9 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-[13px] font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300">
             <FileText size={15} /> {t('sampling.create')}
           </button>
@@ -373,21 +388,21 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
 
         {act && !isVerified && (
           <>
-            <button type="button" disabled={busy} onClick={handleSave}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50">
+            <button type="button" disabled={busy || samplingPreflightBlocked} onClick={handleSave}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">
               <Download size={15} /> {t('sampling.save')}
             </button>
-            <button type="button" onClick={handlePreviewPdf}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50">
+            <button type="button" disabled={samplingPreflightBlocked} onClick={handlePreviewPdf}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">
               <FileText size={15} /> {t('sampling.previewPdf')}
             </button>
-            <button type="button" onClick={handlePrintPdf}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50">
+            <button type="button" disabled={samplingPreflightBlocked} onClick={handlePrintPdf}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">
               <Printer size={15} /> {t('sampling.printPdf')}
             </button>
-            <ScanButton onScanned={(file) => void handleUpload(file)} onError={setError} disabled={busy} asPdf />
-            <button type="button" disabled={busy} onClick={() => fileRef.current?.click()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50">
+            <ScanButton onScanned={(file) => void handleUpload(file)} onError={setError} disabled={busy || samplingPreflightBlocked} asPdf />
+            <button type="button" disabled={busy || samplingPreflightBlocked} onClick={() => fileRef.current?.click()}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">
               <Upload size={15} /> {t('sampling.uploadScan')}
             </button>
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,application/pdf" className="hidden"

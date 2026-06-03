@@ -100,6 +100,8 @@ export interface LotItem {
   sample_archive_qty?: number | null
   sample_stability_qty?: number | null
   sample_unit?: string | null
+  qc_notification_no?: string | null
+  qc_notification_status?: string | null
   incoming_control_notified_at: string | null
   sampling_date: string | null
   qc_result_received_at: string | null
