@@ -12,43 +12,35 @@ import {
   listProducts,
   updateBmrTemplate,
 } from '../../lib/api'
+import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 import type { BmrTemplateItem, BmrTemplateListItem, MaterialItem, ProductItem } from '../../types/inventory'
 
 interface Props { token: string; user: CurrentUser }
 
-const SECTION_TYPES: { value: string; label: string }[] = [
-  { value: 'product_header', label: 'Шапка / реквизиты' },
-  { value: 'production_formula', label: 'Производственная формула' },
-  { value: 'distribution_list', label: 'Лист распределения (подписи)' },
-  { value: 'stage', label: 'Технологическая стадия' },
-  { value: 'environment', label: 'Условия окружающей среды' },
-  { value: 'equipment', label: 'Оборудование (КИП)' },
-  { value: 'checklist', label: 'Контрольный список' },
-  { value: 'process_steps', label: 'Шаги процесса (ДП/ДОК)' },
-  { value: 'in_process_control', label: 'Межоперационный контроль' },
-  { value: 'yield', label: 'Расчёт выхода' },
-  { value: 'materials_used', label: 'Использованные материалы' },
-  { value: 'attachments', label: 'Прикрепляемые документы' },
-  { value: 'free_text', label: 'Произвольный текст' },
-]
-const SECTION_LABEL: Record<string, string> = Object.fromEntries(SECTION_TYPES.map((s) => [s.value, s.label]))
+type Translate = ReturnType<typeof useI18n>['t']
 
-const FIELD_TYPES: { value: string; label: string }[] = [
-  { value: 'text', label: 'Текст' },
-  { value: 'number', label: 'Число' },
-  { value: 'checkbox', label: 'Чек-бокс' },
-  { value: 'select', label: 'Выбор' },
-  { value: 'datetime', label: 'Дата/время' },
-  { value: 'signature_operator', label: 'Подпись оператора (ДП)' },
-  { value: 'signature_qa', label: 'Подпись контролёра (ДОК)' },
-  { value: 'calc', label: 'Расчёт' },
+const SECTION_TYPE_VALUES = [
+  'product_header', 'production_formula', 'distribution_list', 'stage', 'environment',
+  'equipment', 'checklist', 'process_steps', 'in_process_control', 'yield',
+  'materials_used', 'attachments', 'free_text',
 ]
-
-const STATUS: Record<string, { label: string; cls: string }> = {
-  draft: { label: 'Черновик', cls: 'border-amber-200 bg-amber-50 text-amber-700' },
-  approved: { label: 'Утверждён', cls: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-  obsolete: { label: 'Архив', cls: 'border-slate-200 bg-slate-100 text-slate-500' },
+const FIELD_TYPE_VALUES = [
+  'text', 'number', 'checkbox', 'select', 'datetime', 'signature_operator', 'signature_qa', 'calc',
+]
+const STATUS_CLS: Record<string, string> = {
+  draft: 'border-amber-200 bg-amber-50 text-amber-700',
+  approved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  obsolete: 'border-slate-200 bg-slate-100 text-slate-500',
+}
+function sectionLabel(v: string, t: Translate): string {
+  return SECTION_TYPE_VALUES.includes(v) ? t(`bmrTpl.sectionType.${v}` as Parameters<Translate>[0]) : v
+}
+function fieldTypeLabel(v: string, t: Translate): string {
+  return FIELD_TYPE_VALUES.includes(v) ? t(`bmrTpl.fieldType.${v}` as Parameters<Translate>[0]) : v
+}
+function statusLabel(v: string, t: Translate): string {
+  return ['draft', 'approved', 'obsolete'].includes(v) ? t(`bmrTpl.status.${v}` as Parameters<Translate>[0]) : v
 }
 
 interface FieldDef { label: string; type: string; unit?: string; required?: boolean }
@@ -109,6 +101,7 @@ function distConfig(sec: SecForm): Record<string, unknown> {
 }
 
 export function BmrTemplatesPage({ token, user }: Props) {
+  const { t } = useI18n()
   const canEdit = user.permissions.includes('MANAGE_BMR_TEMPLATES') || user.role === 'SYS_ADMIN'
   const canApprove = user.permissions.includes('QA_DECISION') || user.role === 'SYS_ADMIN'
 
@@ -122,18 +115,18 @@ export function BmrTemplatesPage({ token, user }: Props) {
 
   const reload = useCallback(async () => {
     try {
-      const [t, p, m] = await Promise.all([
+      const [tpls, p, m] = await Promise.all([
         listBmrTemplates(token),
         listProducts(token).catch(() => ({ products: [] as ProductItem[] })),
         listMaterials(token).catch(() => ({ materials: [] as MaterialItem[] })),
       ])
-      setList(t.templates)
+      setList(tpls.templates)
       setProducts(p.products)
       setMaterials(m.materials)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить шаблоны')
+      setError(err instanceof Error ? err.message : t('bmrTpl.loadFailed'))
     }
-  }, [token])
+  }, [token, t])
 
   useEffect(() => { void reload() }, [reload])
 
@@ -168,31 +161,31 @@ export function BmrTemplatesPage({ token, user }: Props) {
 
   async function save() {
     if (!form) return
-    if (!form.product_id || !form.title.trim()) { setError('Выберите ЛС и укажите название шаблона'); return }
+    if (!form.product_id || !form.title.trim()) { setError(t('bmrTpl.errProductTitle')); return }
     setBusy(true); setError(null)
     try {
       const saved = form.id ? await updateBmrTemplate(token, form.id, buildInput()) : await createBmrTemplate(token, buildInput())
-      setForm(fromItem(saved)); await reload(); setSuccess('Шаблон сохранён')
+      setForm(fromItem(saved)); await reload(); setSuccess(t('bmrTpl.savedOk'))
     } catch (err) { setError(err instanceof Error ? err.message : 'save failed') } finally { setBusy(false) }
   }
 
   async function doDuplicate() {
     if (!form?.id) return
     setBusy(true); setError(null)
-    try { const c = await duplicateBmrTemplate(token, form.id); setForm(fromItem(c)); await reload(); setSuccess('Создана новая версия (черновик)') }
+    try { const c = await duplicateBmrTemplate(token, form.id); setForm(fromItem(c)); await reload(); setSuccess(t('bmrTpl.newVersionOk')) }
     catch (err) { setError(err instanceof Error ? err.message : 'failed') } finally { setBusy(false) }
   }
 
   async function doApprove() {
     if (!form?.id) return
     setBusy(true); setError(null)
-    try { const a = await approveBmrTemplate(token, form.id, null); setForm(fromItem(a)); await reload(); setSuccess('Шаблон утверждён ДОК') }
+    try { const a = await approveBmrTemplate(token, form.id, null); setForm(fromItem(a)); await reload(); setSuccess(t('bmrTpl.approvedOk')) }
     catch (err) { setError(err instanceof Error ? err.message : 'failed') } finally { setBusy(false) }
   }
 
   // section/field mutations
   function patchSec(i: number, p: Partial<SecForm>) { setForm((f) => f ? { ...f, sections: f.sections.map((s, x) => x === i ? { ...s, ...p } : s) } : f) }
-  function addSection(type: string) { setForm((f) => f ? { ...f, sections: [...f.sections, { section_type: type, title: SECTION_LABEL[type], fields: [], dist: type === 'distribution_list' ? [] : undefined }] } : f) }
+  function addSection(type: string) { setForm((f) => f ? { ...f, sections: [...f.sections, { section_type: type, title: sectionLabel(type, t), fields: [], dist: type === 'distribution_list' ? [] : undefined }] } : f) }
   function addDistRow(i: number) { patchSec(i, { dist: [...(form!.sections[i].dist ?? []), { id: rid(), group: 'Материалы для смешивания', material_code: '', name: '', qty: '' }] }) }
   function patchDistRow(i: number, rowId: string, p: Partial<DistRow>) {
     patchSec(i, { dist: (form!.sections[i].dist ?? []).map((r) => {
@@ -218,13 +211,13 @@ export function BmrTemplatesPage({ token, user }: Props) {
     <section className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">СОП-11 · Электронный BMR</p>
-          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-slate-950">Шаблоны BMR / ЗПС</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-600">Конструктор master-copy на продукт: стадии, шаги, поля и подписи. Технолог собирает, ДОК утверждает.</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('bmrTpl.eyebrow')}</p>
+          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-slate-950">{t('bmrTpl.title')}</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-600">{t('bmrTpl.subtitle')}</p>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={() => void reload()} className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"><RefreshCw size={15} />Обновить</button>
-          {canEdit && <button type="button" onClick={startNew} className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"><Plus size={16} />Новый шаблон</button>}
+          <button type="button" onClick={() => void reload()} className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"><RefreshCw size={15} />{t('common.refresh')}</button>
+          {canEdit && <button type="button" onClick={startNew} className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"><Plus size={16} />{t('bmrTpl.newTemplate')}</button>}
         </div>
       </div>
 
@@ -234,21 +227,21 @@ export function BmrTemplatesPage({ token, user }: Props) {
       <div className="grid grid-cols-12 gap-4">
         <aside className="col-span-12 lg:col-span-4 xl:col-span-3">
           <div className="rounded-xl border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Реестр шаблонов · {list.length}</div>
+            <div className="border-b border-slate-200 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t('bmrTpl.registry')} · {list.length}</div>
             <ul className="max-h-[72vh] divide-y divide-slate-100 overflow-y-auto">
-              {list.map((t) => (
-                <li key={t.id}>
-                  <button type="button" onClick={() => void open(t.id)} className={`block w-full px-4 py-2.5 text-left hover:bg-slate-50 ${form?.id === t.id ? 'bg-slate-50' : ''}`}>
+              {list.map((tpl) => (
+                <li key={tpl.id}>
+                  <button type="button" onClick={() => void open(tpl.id)} className={`block w-full px-4 py-2.5 text-left hover:bg-slate-50 ${form?.id === tpl.id ? 'bg-slate-50' : ''}`}>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[12px] text-slate-500">{t.product_code} · {t.market_code}</span>
-                      <span className={`ml-auto inline-flex rounded-full border px-2 py-0.5 text-[10.5px] font-medium ${STATUS[t.status]?.cls ?? ''}`}>{STATUS[t.status]?.label ?? t.status} v{t.version}</span>
+                      <span className="font-mono text-[12px] text-slate-500">{tpl.product_code} · {tpl.market_code}</span>
+                      <span className={`ml-auto inline-flex rounded-full border px-2 py-0.5 text-[10.5px] font-medium ${STATUS_CLS[tpl.status] ?? ''}`}>{statusLabel(tpl.status, t)} v{tpl.version}</span>
                     </div>
-                    <div className="mt-0.5 text-[13px] font-medium text-slate-900">{t.title}</div>
-                    <div className="text-[11px] text-slate-500">{t.product_name} · {t.sections_count} секций</div>
+                    <div className="mt-0.5 text-[13px] font-medium text-slate-900">{tpl.title}</div>
+                    <div className="text-[11px] text-slate-500">{tpl.product_name} · {t('bmrTpl.sectionsCount', { n: tpl.sections_count })}</div>
                   </button>
                 </li>
               ))}
-              {list.length === 0 && <li className="px-4 py-10 text-center text-sm text-slate-400">Шаблонов пока нет.</li>}
+              {list.length === 0 && <li className="px-4 py-10 text-center text-sm text-slate-400">{t('bmrTpl.emptyList')}</li>}
             </ul>
           </div>
         </aside>
@@ -257,31 +250,31 @@ export function BmrTemplatesPage({ token, user }: Props) {
           {!form ? (
             <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-20 text-center">
               <FileText size={28} className="text-slate-300" />
-              <p className="text-sm font-medium text-slate-700">Выберите шаблон или создайте новый</p>
+              <p className="text-sm font-medium text-slate-700">{t('bmrTpl.selectOrCreate')}</p>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${STATUS[form.status]?.cls ?? ''}`}>{STATUS[form.status]?.label ?? form.status}{form.version ? ` · v${form.version}` : ''}</span>
+                  <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${STATUS_CLS[form.status] ?? ''}`}>{statusLabel(form.status, t)}{form.version ? ` · v${form.version}` : ''}</span>
                   <div className="ml-auto flex gap-2">
-                    {editable && <button type="button" disabled={busy} onClick={() => void save()} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-emerald-700 px-3 text-[13px] font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"><CheckCircle2 size={15} />Сохранить</button>}
-                    {form.id && canEdit && <button type="button" disabled={busy} onClick={() => void doDuplicate()} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 hover:bg-slate-50"><Copy size={15} />Новая версия</button>}
-                    {form.id && isDraft && canApprove && <button type="button" disabled={busy} onClick={() => void doApprove()} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><ShieldCheck size={15} />Утвердить (ДОК)</button>}
-                    <button type="button" onClick={() => setForm(null)} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-600 hover:bg-slate-50"><X size={15} />Закрыть</button>
+                    {editable && <button type="button" disabled={busy} onClick={() => void save()} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-emerald-700 px-3 text-[13px] font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"><CheckCircle2 size={15} />{t('common.save')}</button>}
+                    {form.id && canEdit && <button type="button" disabled={busy} onClick={() => void doDuplicate()} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 hover:bg-slate-50"><Copy size={15} />{t('bmrTpl.newVersion')}</button>}
+                    {form.id && isDraft && canApprove && <button type="button" disabled={busy} onClick={() => void doApprove()} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><ShieldCheck size={15} />{t('bmrTpl.approve')}</button>}
+                    <button type="button" onClick={() => setForm(null)} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-600 hover:bg-slate-50"><X size={15} />{t('common.close')}</button>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                   <label className="block">
-                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Лекарственное средство (ЛС)</span>
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('bmrTpl.product')}</span>
                     <select className="h-9 w-full rounded-md border border-slate-300 px-2 text-sm disabled:bg-slate-50" value={form.product_id} disabled={!!form.id} onChange={(e) => setForm({ ...form, product_id: e.target.value })}>
-                      <option value="">— выберите ЛС —</option>
+                      <option value="">{t('bmrTpl.selectProduct')}</option>
                       {activeProducts.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.market_code} · {p.name}</option>)}
                     </select>
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Название шаблона</span>
-                    <input className="h-9 w-full rounded-md border border-slate-300 px-2 text-sm disabled:bg-slate-50" value={form.title} disabled={!editable} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="BMR — Дапига 10 мг (роллер-компактор)" />
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('bmrTpl.templateName')}</span>
+                    <input className="h-9 w-full rounded-md border border-slate-300 px-2 text-sm disabled:bg-slate-50" value={form.title} disabled={!editable} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t('bmrTpl.templateNamePlaceholder')} />
                   </label>
                 </div>
               </div>
@@ -290,7 +283,7 @@ export function BmrTemplatesPage({ token, user }: Props) {
                 <div key={i} className="rounded-xl border border-slate-200 bg-white">
                   <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-2">
                     <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-200 font-mono text-[11px] font-semibold text-slate-700">{i + 1}</span>
-                    <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600">{SECTION_LABEL[sec.section_type] ?? sec.section_type}</span>
+                    <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600">{sectionLabel(sec.section_type, t)}</span>
                     <input className="h-8 min-w-[200px] flex-1 rounded border border-slate-200 px-2 text-[13px] disabled:bg-slate-50" value={sec.title} disabled={!editable} onChange={(e) => patchSec(i, { title: e.target.value })} />
                     {editable && (
                       <div className="flex items-center gap-0.5">
@@ -302,65 +295,65 @@ export function BmrTemplatesPage({ token, user }: Props) {
                   </div>
                   <div className="space-y-3 p-3">
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <label className="block"><span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Комната (scope)</span>
-                        <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={sec.room ?? ''} disabled={!editable} onChange={(e) => patchSec(i, { room: e.target.value })} placeholder="Комн. 39" /></label>
-                      <label className="block"><span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Код этапа</span>
+                      <label className="block"><span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('bmrTpl.roomScope')}</span>
+                        <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={sec.room ?? ''} disabled={!editable} onChange={(e) => patchSec(i, { room: e.target.value })} placeholder={t('bmrTpl.roomPlaceholder')} /></label>
+                      <label className="block"><span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('bmrTpl.stageCode')}</span>
                         <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={sec.stage ?? ''} disabled={!editable} onChange={(e) => patchSec(i, { stage: e.target.value })} placeholder="weighing" /></label>
-                      <label className="block"><span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Название этапа</span>
-                        <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={sec.stage_title ?? ''} disabled={!editable} onChange={(e) => patchSec(i, { stage_title: e.target.value })} placeholder="Взвешивание" /></label>
+                      <label className="block"><span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t('bmrTpl.stageName')}</span>
+                        <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={sec.stage_title ?? ''} disabled={!editable} onChange={(e) => patchSec(i, { stage_title: e.target.value })} placeholder={t('bmrTpl.stagePlaceholder')} /></label>
                     </div>
 
                     {sec.section_type === 'distribution_list' ? (
                       <div>
                         <table className="w-full text-left text-[12.5px]">
                           <thead className="text-[10px] uppercase tracking-wide text-slate-500">
-                            <tr><th className="px-2 py-1">Группа</th><th className="px-2 py-1">Материал (справочник)</th><th className="px-2 py-1">Наименование в ЗПС</th><th className="w-28 px-2 py-1">Кол-во/серию</th>{editable && <th className="w-8" />}</tr>
+                            <tr><th className="px-2 py-1">{t('bmrTpl.colGroup')}</th><th className="px-2 py-1">{t('bmrTpl.colMaterialRef')}</th><th className="px-2 py-1">{t('bmrTpl.colNameInZps')}</th><th className="w-28 px-2 py-1">{t('bmrTpl.colQtyPerSeries')}</th>{editable && <th className="w-8" />}</tr>
                           </thead>
                           <tbody>
                             {(sec.dist ?? []).map((r) => (
                               <tr key={r.id} className="border-t border-slate-100">
-                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={r.group} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { group: e.target.value })} placeholder="Материалы для смешивания 1" /></td>
+                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={r.group} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { group: e.target.value })} placeholder={t('bmrTpl.groupPlaceholder')} /></td>
                                 <td className="px-2 py-1">
                                   <select className="w-full rounded border border-slate-200 px-1 py-1 disabled:bg-slate-50" value={r.material_code} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { material_code: e.target.value })}>
-                                    <option value="">— выбрать —</option>
+                                    <option value="">{t('bmrTpl.selectOption')}</option>
                                     {materials.map((m) => <option key={m.id} value={m.code}>{m.code} · {m.name}</option>)}
                                   </select>
                                 </td>
-                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={r.name} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { name: e.target.value })} placeholder="как в листе распределения" /></td>
+                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={r.name} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { name: e.target.value })} placeholder={t('bmrTpl.namePlaceholder')} /></td>
                                 <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={r.qty} disabled={!editable} onChange={(e) => patchDistRow(i, r.id, { qty: e.target.value })} placeholder="3,690" /></td>
                                 {editable && <td className="px-2 py-1"><button type="button" onClick={() => removeDistRow(i, r.id)} className="rounded p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button></td>}
                               </tr>
                             ))}
-                            {(sec.dist ?? []).length === 0 && <tr><td colSpan={5} className="px-2 py-2 text-[12px] text-slate-400">Материалы не заданы.</td></tr>}
+                            {(sec.dist ?? []).length === 0 && <tr><td colSpan={5} className="px-2 py-2 text-[12px] text-slate-400">{t('bmrTpl.noMaterials')}</td></tr>}
                           </tbody>
                         </table>
-                        {editable && <button type="button" onClick={() => addDistRow(i)} className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-slate-50"><Plus size={12} />Материал</button>}
-                        <p className="mt-2 text-[11px] text-slate-400">Поля (№ серии сырья, № аналит. листа, вес нетто, подписи Склад/ДП/ДОК) формируются автоматически по каждому материалу. Привязка к справочнику даёт автозаполнение требования и FEFO.</p>
+                        {editable && <button type="button" onClick={() => addDistRow(i)} className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-slate-50"><Plus size={12} />{t('bmrTpl.addMaterial')}</button>}
+                        <p className="mt-2 text-[11px] text-slate-400">{t('bmrTpl.distHint')}</p>
                       </div>
                     ) : (
                       <div>
                         <table className="w-full text-left text-[12.5px]">
                           <thead className="text-[10px] uppercase tracking-wide text-slate-500">
-                            <tr><th className="px-2 py-1">Поле / колонка</th><th className="w-44 px-2 py-1">Тип</th><th className="w-24 px-2 py-1">Ед.</th><th className="w-20 px-2 py-1 text-center">Обяз.</th>{editable && <th className="w-8" />}</tr>
+                            <tr><th className="px-2 py-1">{t('bmrTpl.colFieldColumn')}</th><th className="w-44 px-2 py-1">{t('bmrTpl.colType')}</th><th className="w-24 px-2 py-1">{t('bmrTpl.colUnit')}</th><th className="w-20 px-2 py-1 text-center">{t('bmrTpl.colRequired')}</th>{editable && <th className="w-8" />}</tr>
                           </thead>
                           <tbody>
                             {sec.fields.map((fl, fi) => (
                               <tr key={fi} className="border-t border-slate-100">
-                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={fl.label} disabled={!editable} onChange={(e) => patchField(i, fi, { label: e.target.value })} placeholder="Напр.: Температура помещения" /></td>
+                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={fl.label} disabled={!editable} onChange={(e) => patchField(i, fi, { label: e.target.value })} placeholder={t('bmrTpl.fieldLabelPlaceholder')} /></td>
                                 <td className="px-2 py-1">
                                   <select className="w-full rounded border border-slate-200 px-1 py-1 disabled:bg-slate-50" value={fl.type} disabled={!editable} onChange={(e) => patchField(i, fi, { type: e.target.value })}>
-                                    {FIELD_TYPES.map((ft) => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
+                                    {FIELD_TYPE_VALUES.map((ft) => <option key={ft} value={ft}>{fieldTypeLabel(ft, t)}</option>)}
                                   </select>
                                 </td>
-                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={fl.unit ?? ''} disabled={!editable} onChange={(e) => patchField(i, fi, { unit: e.target.value })} placeholder="°C, кг…" /></td>
+                                <td className="px-2 py-1"><input className="w-full rounded border border-slate-200 px-1.5 py-1 disabled:bg-slate-50" value={fl.unit ?? ''} disabled={!editable} onChange={(e) => patchField(i, fi, { unit: e.target.value })} placeholder={t('bmrTpl.unitPlaceholder')} /></td>
                                 <td className="px-2 py-1 text-center"><input type="checkbox" checked={!!fl.required} disabled={!editable} onChange={(e) => patchField(i, fi, { required: e.target.checked })} className="h-4 w-4" /></td>
                                 {editable && <td className="px-2 py-1"><button type="button" onClick={() => removeField(i, fi)} className="rounded p-1 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button></td>}
                               </tr>
                             ))}
-                            {sec.fields.length === 0 && <tr><td colSpan={5} className="px-2 py-2 text-[12px] text-slate-400">Поля не заданы.</td></tr>}
+                            {sec.fields.length === 0 && <tr><td colSpan={5} className="px-2 py-2 text-[12px] text-slate-400">{t('bmrTpl.noFields')}</td></tr>}
                           </tbody>
                         </table>
-                        {editable && <button type="button" onClick={() => addField(i)} className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-slate-50"><Plus size={12} />Поле</button>}
+                        {editable && <button type="button" onClick={() => addField(i)} className="mt-2 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-slate-50"><Plus size={12} />{t('bmrTpl.addField')}</button>}
                       </div>
                     )}
                   </div>
@@ -369,9 +362,9 @@ export function BmrTemplatesPage({ token, user }: Props) {
 
               {editable && (
                 <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-3">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Layers size={13} />Добавить секцию:</span>
-                  {SECTION_TYPES.map((s) => (
-                    <button key={s.value} type="button" onClick={() => addSection(s.value)} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700">+ {s.label}</button>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Layers size={13} />{t('bmrTpl.addSection')}</span>
+                  {SECTION_TYPE_VALUES.map((s) => (
+                    <button key={s} type="button" onClick={() => addSection(s)} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11.5px] font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700">+ {sectionLabel(s, t)}</button>
                   ))}
                 </div>
               )}
