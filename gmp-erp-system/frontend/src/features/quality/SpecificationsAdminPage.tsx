@@ -90,6 +90,15 @@ const STR: Record<string, Record<string, string>> = {
     f11_pc: 'Раздел 1. Физико-химические показатели', f11_micro: 'Раздел 2. Микробиологические показатели',
     f11_to_fill: 'заполняется при анализе', f11_form: 'Форма', f11_source: 'Источник: НД',
     yes: 'Да', no: 'Нет',
+    micro_badge: 'микро', count_nd: 'НД', dup_suffix: '-копия',
+    nd_code_ph: 'НД-SPC/СУБ/000/00', micro_ref_ph: 'ОФС.1.2.4.0002, СОП-514',
+    target_fg: 'ГП · Ф-11', target_sub: 'Субстанция / упак. · Ф-11',
+    f11_doc_fg: 'АНАЛИТИЧЕСКИЙ ПАСПОРТ НА ГОТОВЫЙ ПРОДУКТ', f11_doc_sub: 'АНАЛИТИЧЕСКИЙ ЛИСТ ВХОДНОГО КОНТРОЛЯ',
+    f11_company: 'ИП ООО «NOVUGEN PHARMA» · ДКК',
+    f11_material_lbl: 'Материал: ', f11_batch_lbl: 'Серия / лот: ',
+    f11_fill_note: 'Поля «Результат» и «Откл.» заполняются оператором ДКК при анализе.',
+    sig_chemist: 'Исполнитель (химик)', sig_micro: 'Микробиолог', sig_approver: 'Утвердил (нач. ДКК)', sig_date: 'Дата',
+    badge_pc: 'ФХ', sop514: 'СОП-514', sop533: 'СОП-533', sop548: 'СОП-548', f11_code: 'Ф-11',
   },
   uz: {
     eyebrow: 'DKK · Sifat nazorati', h1: 'Spetsifikatsiyalar (ND)',
@@ -136,6 +145,70 @@ const STR: Record<string, Record<string, string>> = {
     f11_pc: '1-bo‘lim. Fizik-kimyoviy ko‘rsatkichlar', f11_micro: '2-bo‘lim. Mikrobiologik ko‘rsatkichlar',
     f11_to_fill: 'tahlilda to‘ldiriladi', f11_form: 'Shakl', f11_source: 'Manba: ND',
     yes: 'Ha', no: 'Yo‘q',
+    micro_badge: 'mikro', count_nd: 'ND', dup_suffix: '-nusxa',
+    nd_code_ph: 'ND-SPC/SUB/000/00', micro_ref_ph: 'OFS.1.2.4.0002, SOP-514',
+    target_fg: 'TM · F-11', target_sub: 'Substansiya / qadoq · F-11',
+    f11_doc_fg: 'TAYYOR MAHSULOT ANALITIK PASPORTI', f11_doc_sub: 'KIRISH NAZORATI TAHLIL VARAQASI',
+    f11_company: 'NOVUGEN PHARMA MChJ · DKK',
+    f11_material_lbl: 'Material: ', f11_batch_lbl: 'Seriya / lot: ',
+    f11_fill_note: '«Natija» va «Ogʻ.» maydonlari OKK operatori tomonidan tahlilda to‘ldiriladi.',
+    sig_chemist: 'Ijrochi (kimyogar)', sig_micro: 'Mikrobiolog', sig_approver: 'Tasdiqladi (DKK boshlig‘i)', sig_date: 'Sana',
+    badge_pc: 'FK', sop514: 'SOP-514', sop533: 'SOP-533', sop548: 'SOP-548', f11_code: 'F-11',
+  },
+  en: {
+    eyebrow: 'QC · Quality control', h1: 'Specifications (ND)',
+    lede: 'Register of normative documentation for raw materials, packaging and finished products. Each ND is the reference against which the F-11 analytical sheet is assembled during incoming control.',
+    reg_title: 'ND register', search_ph: 'Search: name, ND code, keywords…',
+    f_status_lbl: 'Status', f_form: 'SOP form',
+    all: 'All', active: 'Active', archived: 'Archived',
+    micro_yes: 'With micro', micro_no: 'No micro',
+    grp_SUB: 'Raw materials / substances', grp_PKG: 'Packaging materials', grp_FG: 'Finished products',
+    kpi_total: 'Total ND', kpi_active: 'Active', kpi_arch: 'Archived', kpi_micro: 'With microbiology',
+    params_short: 'param.', revision: 'rev.', new_nd: 'New ND', empty_reg_title: 'Register is empty',
+    empty_reg_sub: 'No specifications created yet. Start with the first ND.',
+    no_results: 'Nothing found', no_results_sub: 'Change the query or reset the filters.',
+    reset_filters: 'Reset filters',
+    ph_title: 'Select an ND from the register', ph_sub: 'On the left is the specifications register. Open a record to view parameters or create a new ND.',
+    sec_header: 'ND header', sec_pc: 'Physicochemical parameters', sec_micro: 'Microbiological parameters',
+    sec_f11: 'Link to form F-11', f_nd_code: 'ND code', f_revision: 'Revision',
+    f_material: 'Material name', f_material_id: 'Material (code)',
+    f_keywords: 'Keywords (auto-match)', f_sop: 'SOP form', f_micro_req: 'Microbiology (SOP-514)',
+    f_micro_ref: 'Method reference (micro)', f_status: 'Status', f_eff_date: 'Effective date',
+    f_notes: 'Notes', f_free_text: 'free text',
+    th_ord: '№', th_test: 'Test', th_spec: 'Limit / ND requirement', th_method: 'Method reference', th_unit: 'Unit',
+    add_param: 'Add parameter', no_params: 'No parameters defined',
+    no_micro: 'Microbiology is not required for this ND', micro_off_hint: 'Enable "Microbiology" in the header to add parameters.',
+    edit: 'Edit', save: 'Save', cancel: 'Cancel',
+    archive: 'Archive', restore: 'Restore to active', delete: 'Delete', duplicate: 'Duplicate',
+    print_f11: 'Print F-11', view_f11: 'Preview F-11', readonly: 'Read-only',
+    editing: 'Edit mode', creating: 'New specification',
+    locked_title: 'Active ND is protected from edits',
+    locked_sub: 'This specification is used in incoming-control protocols. Direct editing is locked.',
+    unlock_edit: 'Edit ND', unlock_warn_title: 'Edit the active ND?',
+    unlock_warn_body: 'The ND is used as a reference in F-11 analytical sheets. Changing parameters will affect the compliance assessment of future series. The action is recorded in the audit log (ALCOA+).',
+    unlock_confirm: 'Yes, edit', reason_label: 'Reason for change (required)',
+    reason_ph: 'e.g.: update per EP 11.0, fix a typo in the limit…',
+    val_title: 'Check the fields', val_nd_code: 'ND code is required and must be unique',
+    val_material: 'Material name is required', val_micro_ref: 'Specify the method reference for microbiology',
+    saved_ok: 'Specification saved',
+    archived_ok: 'ND moved to archive', restored_ok: 'ND restored to active',
+    deleted_ok: 'ND deleted',
+    f11_eyebrow: 'Analytical sheet preview', f11_title: 'How parameters map into form F-11',
+    f11_sub: 'Each specification row becomes an analytical-sheet row. The "Result" column is filled by the QC operator during incoming control.',
+    f11_col_test: 'Parameter name', f11_col_spec: 'Limit per ND', f11_col_method: 'Method',
+    f11_col_unit: 'Unit', f11_col_result: 'Result', f11_col_verdict: 'Dev.',
+    f11_pc: 'Section 1. Physicochemical parameters', f11_micro: 'Section 2. Microbiological parameters',
+    f11_to_fill: 'filled during analysis', f11_form: 'Form', f11_source: 'Source: ND',
+    yes: 'Yes', no: 'No',
+    micro_badge: 'micro', count_nd: 'ND', dup_suffix: '-copy',
+    nd_code_ph: 'ND-SPC/SUB/000/00', micro_ref_ph: 'OFS.1.2.4.0002, SOP-514',
+    target_fg: 'FG · F-11', target_sub: 'Substance / packaging · F-11',
+    f11_doc_fg: 'FINISHED PRODUCT ANALYTICAL PASSPORT', f11_doc_sub: 'INCOMING CONTROL ANALYTICAL SHEET',
+    f11_company: 'NOVUGEN PHARMA LLC · QC',
+    f11_material_lbl: 'Material: ', f11_batch_lbl: 'Series / lot: ',
+    f11_fill_note: 'The "Result" and "Dev." fields are filled by the QC operator during analysis.',
+    sig_chemist: 'Performer (chemist)', sig_micro: 'Microbiologist', sig_approver: 'Approved (head of QC)', sig_date: 'Date',
+    badge_pc: 'PC', sop514: 'SOP-514', sop533: 'SOP-533', sop548: 'SOP-548', f11_code: 'F-11',
   },
 }
 type Dict = Record<string, string>
@@ -376,7 +449,7 @@ export function SpecificationsAdminPage({ token, user }: Props) {
 
   const doDuplicate = useCallback(() => {
     if (!detail) return
-    const copy: UiSpec = { ...JSON.parse(JSON.stringify(detail)), id: 'new', nd_code: `${detail.nd_code}-копия`, revision: '', is_active: false }
+    const copy: UiSpec = { ...JSON.parse(JSON.stringify(detail)), id: 'new', nd_code: `${detail.nd_code}${t.dup_suffix}`, revision: '', is_active: false }
     setSelectedId(null); setDetail(null); setDraft(copy); setMode('create'); showToast(t.duplicate, 'info')
   }, [detail, showToast, t])
 
@@ -477,14 +550,18 @@ function StatusPill({ status, t, size = 'md' }: { status: Status; t: Dict; size?
 }
 
 function FormPill({ form, size = 'md' }: { form: string; size?: 'sm' | 'md' }) {
+  const { language } = useI18n()
+  const s = STR[language] || STR.ru
   const pad = size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'
-  if (form === '548') return <span className={`inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 font-medium text-violet-700 ${pad}`}><Beaker size={11} />СОП-548</span>
-  return <span className={`inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 font-medium text-sky-700 ${pad}`}><FlaskConical size={11} />СОП-533</span>
+  if (form === '548') return <span className={`inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 font-medium text-violet-700 ${pad}`}><Beaker size={11} />{s.sop548}</span>
+  return <span className={`inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 font-medium text-sky-700 ${pad}`}><FlaskConical size={11} />{s.sop533}</span>
 }
 
 function MicroPill({ size = 'md' }: { size?: 'sm' | 'md' }) {
+  const { language } = useI18n()
+  const s = STR[language] || STR.ru
   const pad = size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'
-  return <span className={`inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 font-medium text-cyan-700 ${pad}`}><Microscope size={11} />микро</span>
+  return <span className={`inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 font-medium text-cyan-700 ${pad}`}><Microscope size={11} />{s.micro_badge}</span>
 }
 
 function GroupIcon({ group, size = 16 }: { group: Group; size?: number }) {
@@ -758,7 +835,7 @@ function Registry({ list, t, canManage, selectedId, onSelect, onNew, query, setQ
       </div>
 
       <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2 text-[11px] text-slate-500">
-        <span>{filtered.length} / {items.length} НД</span>
+        <span>{filtered.length} / {items.length} {t.count_nd}</span>
         {microFilter !== 'all' && <button onClick={() => setMicroFilter('all')} className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800"><Microscope size={11} />{microFilter === 'yes' ? t.micro_yes : t.micro_no}<X size={11} /></button>}
       </div>
     </Card>
@@ -866,7 +943,7 @@ function ParamSection({ kind, d, editing, t, errors, on, accent, icon }: {
   if (kind === 'micro' && !d.micro_required) {
     return (
       <Card>
-        <SectionHead icon={Microscope} eyebrow="СОП-514" title={t.sec_micro} accent="cyan" />
+        <SectionHead icon={Microscope} eyebrow={t.sop514} title={t.sec_micro} accent="cyan" />
         <div className="flex items-center gap-3 px-4 py-5 text-slate-400">
           <Lock size={15} />
           <div>
@@ -879,7 +956,7 @@ function ParamSection({ kind, d, editing, t, errors, on, accent, icon }: {
   }
   return (
     <Card>
-      <SectionHead icon={icon} eyebrow={kind === 'micro' ? 'СОП-514' : null} title={kind === 'micro' ? t.sec_micro : t.sec_pc} accent={accent} count={rows.length} />
+      <SectionHead icon={icon} eyebrow={kind === 'micro' ? t.sop514 : null} title={kind === 'micro' ? t.sec_micro : t.sec_pc} accent={accent} count={rows.length} />
       <ParamTable rows={rows} kind={kind} editable={editing} t={t} errors={errors}
         onChange={(i, f, v) => on.change(kind, i, f, v)} onAdd={() => on.add(kind)} onRemove={(i) => on.remove(kind, i)} onMove={(i, dir) => on.move(kind, i, dir)} />
     </Card>
@@ -896,7 +973,7 @@ function HeaderBlock({ spec, draft, editing, t, errors, onField }: {
       <div className="space-y-4 p-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-12">
           <LabeledInput className="sm:col-span-5" label={t.f_nd_code} value={d.nd_code} mono required
-            error={errors.nd_code && t.val_nd_code} placeholder="НД-SPC/СУБ/000/00" onChange={(v) => onField('nd_code', v)} />
+            error={errors.nd_code && t.val_nd_code} placeholder={t.nd_code_ph} onChange={(v) => onField('nd_code', v)} />
           <LabeledInput className="sm:col-span-2" label={t.f_revision} value={d.revision} mono placeholder="01" onChange={(v) => onField('revision', v)} />
           <div className="space-y-1 sm:col-span-5">
             <MetaLabel>{t.f_status}</MetaLabel>
@@ -913,7 +990,7 @@ function HeaderBlock({ spec, draft, editing, t, errors, onField }: {
           <div className="space-y-1 sm:col-span-3">
             <MetaLabel>{t.f_sop}</MetaLabel>
             <Segmented value={d.sop_form} onChange={(v) => onField('sop_form', v)} options={[{ value: '533', label: '533' }, { value: '548', label: '548' }]} />
-            <p className="text-[10.5px] text-slate-400">{d.sop_form === '548' ? 'ГП · Ф-11' : 'Субстанция / упак. · Ф-11'}</p>
+            <p className="text-[10.5px] text-slate-400">{d.sop_form === '548' ? t.target_fg : t.target_sub}</p>
           </div>
           <div className="space-y-1 sm:col-span-3">
             <MetaLabel>{t.f_micro_req}</MetaLabel>
@@ -924,7 +1001,7 @@ function HeaderBlock({ spec, draft, editing, t, errors, onField }: {
           </div>
           <LabeledInput className="sm:col-span-6" label={t.f_micro_ref} value={d.micro_method_ref}
             required={d.micro_required} error={d.micro_required && errors.micro_ref && t.val_micro_ref}
-            placeholder="ОФС.1.2.4.0002, СОП-514" onChange={(v) => onField('micro_method_ref', v)} />
+            placeholder={t.micro_ref_ph} onChange={(v) => onField('micro_method_ref', v)} />
           <LabeledInput className="sm:col-span-4" label={t.f_eff_date} type="date" value={d.effective_date || ''} mono onChange={(v) => onField('effective_date', v || null)} />
           <LabeledInput className="sm:col-span-8" label={t.f_notes} value={d.notes} onChange={(v) => onField('notes', v)} />
         </div>
@@ -1023,8 +1100,8 @@ function Editor({ spec, draft, mode, t, canManage, errors, busy, paramHandlers, 
 //  Ф-11 preview
 // ─────────────────────────────────────────────────────────────────────────────
 function F11Sheet({ d, t }: { d: UiSpec; t: Dict }) {
-  const formMark = d.sop_form === '548' ? 'СОП-548 Ф-11' : 'СОП-533 Ф-11'
-  const formTitle = d.sop_form === '548' ? 'АНАЛИТИЧЕСКИЙ ПАСПОРТ НА ГОТОВЫЙ ПРОДУКТ' : 'АНАЛИТИЧЕСКИЙ ЛИСТ ВХОДНОГО КОНТРОЛЯ'
+  const formMark = `${d.sop_form === '548' ? t.sop548 : t.sop533} ${t.f11_code}`
+  const formTitle = d.sop_form === '548' ? t.f11_doc_fg : t.f11_doc_sub
 
   const Section = ({ titleKey, rows, kind }: { titleKey: string; rows: UiParam[]; kind: 'pc' | 'micro' }) => (
     <div className="mt-4 first:mt-0">
@@ -1064,7 +1141,7 @@ function F11Sheet({ d, t }: { d: UiSpec; t: Dict }) {
     <div className="rounded-lg border border-slate-200 bg-white p-5">
       <div className="flex items-start justify-between gap-4 border-b-2 border-slate-900 pb-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">ИП ООО «NOVUGEN PHARMA» · ДКК</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t.f11_company}</p>
           <h3 className="mt-1 text-[14px] font-bold uppercase leading-tight tracking-tight text-slate-900">{formTitle}</h3>
         </div>
         <div className="shrink-0 rounded border border-slate-300 px-2.5 py-1 text-center">
@@ -1073,23 +1150,23 @@ function F11Sheet({ d, t }: { d: UiSpec; t: Dict }) {
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-[11px] sm:grid-cols-3">
-        <div><span className="text-slate-400">Материал: </span><span className="font-medium text-slate-800">{d.material_name}</span></div>
+        <div><span className="text-slate-400">{t.f11_material_lbl}</span><span className="font-medium text-slate-800">{d.material_name}</span></div>
         <div><span className="text-slate-400">{t.f11_source}: </span><span className="font-mono text-slate-700">{d.nd_code}{d.revision ? ` · ${t.revision}${d.revision}` : ''}</span></div>
-        <div><span className="text-slate-400">Серия / лот: </span><span className="font-mono text-slate-400">______________</span></div>
+        <div><span className="text-slate-400">{t.f11_batch_lbl}</span><span className="font-mono text-slate-400">______________</span></div>
       </div>
       <div className="mt-4">
         <Section titleKey="f11_pc" rows={d.pc} kind="pc" />
         {d.micro_required && d.micro.length > 0 && <Section titleKey="f11_micro" rows={d.micro} kind="micro" />}
       </div>
       <div className="mt-4 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-800">
-        <Info size={13} /><span>Поля «{t.f11_col_result}» и «{t.f11_col_verdict}» {t.f11_to_fill} — оператором ДКК.</span>
+        <Info size={13} /><span>{t.f11_fill_note}</span>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-6 border-t border-slate-200 pt-3 text-[10.5px] sm:grid-cols-3">
         {[
-          'Исполнитель (химик)',
-          ...(d.micro_required ? ['Микробиолог'] : []),
-          'Утвердил (нач. ДКК)',
-          'Дата',
+          t.sig_chemist,
+          ...(d.micro_required ? [t.sig_micro] : []),
+          t.sig_approver,
+          t.sig_date,
         ].map((s) => (
           <div key={s}><p className="text-slate-400">{s}</p><p className="mt-3 border-b border-dotted border-slate-300" /></div>
         ))}
@@ -1110,8 +1187,8 @@ function F11LinkCard({ d, t, onOpen }: { d: UiSpec; t: Dict; onOpen: () => void 
         <p className="mt-0.5 text-[13.5px] font-semibold tracking-tight text-slate-900">{t.f11_title}</p>
         <p className="mt-0.5 text-[11.5px] text-slate-500">{t.f11_sub}</p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-slate-600"><FlaskConical size={11} />{pcN} ФХ</span>
-          {microN > 0 && <span className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-cyan-700"><Microscope size={11} />{microN} микро</span>}
+          <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-slate-600"><FlaskConical size={11} />{pcN} {t.badge_pc}</span>
+          {microN > 0 && <span className="inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-cyan-700"><Microscope size={11} />{microN} {t.micro_badge}</span>}
           <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-medium text-slate-600 group-hover:text-slate-900">{t.view_f11}<ArrowRight size={13} /></span>
         </div>
       </div>
