@@ -80,7 +80,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
   // editable draft fields
   const [lines, setLines] = useState<ActLine[]>([])
   const [samplingDate, setSamplingDate] = useState('')
-  const [location, setLocation] = useState('Пробоотборник №1')
+  const [location, setLocation] = useState(t('sampling.samplerDefault'))
   const [temperature, setTemperature] = useState('')
   const [humidity, setHumidity] = useState('')
   const [specRef, setSpecRef] = useState('')
@@ -102,7 +102,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
             : defaultLines(found.sop_form, lot),
         )
         setSamplingDate(found.sampling_date ?? new Date().toISOString().slice(0, 10))
-        setLocation(found.sampling_location ?? 'Пробоотборник №1')
+        setLocation(found.sampling_location ?? t('sampling.samplerDefault'))
         setTemperature(found.temperature_c != null ? String(found.temperature_c) : '')
         setHumidity(found.humidity_pct != null ? String(found.humidity_pct) : '')
         setSpecRef(found.specification_ref ?? '')
@@ -356,7 +356,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
           </Labeled>
           <Labeled label={t('sampling.nd')} full>
             <input value={specRef} onChange={(e) => setSpecRef(e.target.value)} disabled={busy}
-              placeholder={sopForm === '548' ? 'ФСП 42 Уз-... / Рег.уд. R-DV/M-...' : 'EP / USP / ГФ'}
+              placeholder={sopForm === '548' ? t('sampling.ndPlaceholder548') : t('sampling.ndPlaceholderDefault')}
               className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-[12.5px] outline-none focus:border-slate-400" />
           </Labeled>
         </div>
@@ -405,7 +405,7 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
         <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2 text-[12px] text-slate-700">
           <CheckCircle2 size={14} className="text-emerald-600" />
           <span className="font-mono">
-            {t('sampling.scanUploaded')} · sha256: {act.scans[0].sha256_hash.slice(0, 12)}… · {(act.scans[0].file_size / 1024).toFixed(0)} КБ
+            {t('sampling.scanUploaded')} · sha256: {act.scans[0].sha256_hash.slice(0, 12)}… · {(act.scans[0].file_size / 1024).toFixed(0)} {t('common.kb')}
           </span>
         </div>
       )}

@@ -70,7 +70,7 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
     if (next) {
       setError(null)
       try { setEligible((await listEligibleNotificationReceipts(token)).receipts) }
-      catch (e) { setError(e instanceof Error ? e.message : 'Ошибка загрузки приходов') }
+      catch (e) { setError(e instanceof Error ? e.message : t('qcNotifications.loadEligibleFailed')) }
     }
   }
 
@@ -81,7 +81,7 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
       await createQcNotification(token, { receipt_id: receiptId })
       setCreateOpen(false)
       await loadData()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось создать извещение') }
+    } catch (e) { setError(e instanceof Error ? e.message : t('qcNotifications.createFailed')) }
     finally { setCreatingId(null) }
   }
 
@@ -179,7 +179,7 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
               className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700"
             >
               <Plus size={14} />
-              Создать извещение
+              {t('qcNotifications.create')}
             </button>
           )}
           <button
@@ -197,22 +197,22 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
       {canCreate && createOpen && (
         <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[13px] font-semibold text-slate-800">Проведённые приходы субстанций без извещения</p>
-            <button type="button" onClick={() => setCreateOpen(false)} className="text-[12px] text-slate-500 hover:text-slate-800">Закрыть</button>
+            <p className="text-[13px] font-semibold text-slate-800">{t('qcNotifications.eligibleTitle')}</p>
+            <button type="button" onClick={() => setCreateOpen(false)} className="text-[12px] text-slate-500 hover:text-slate-800">{t('common.close')}</button>
           </div>
           {eligible.length === 0 ? (
-            <p className="text-[12.5px] text-slate-500">Нет приходов, ожидающих извещения. Извещение формируется по проведённому приходу склада субстанций.</p>
+            <p className="text-[12.5px] text-slate-500">{t('qcNotifications.eligibleEmpty')}</p>
           ) : (
             <div className="space-y-1.5">
               {eligible.map((r) => (
                 <div key={r.receipt_id} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
                   <div className="min-w-0 flex-1">
                     <span className="text-[13px] font-semibold text-slate-900">{r.document_no}</span>
-                    <span className="mono ml-2 text-[11px] text-slate-400">{formatDate(r.received_date, locale)} · позиций: {r.lines}</span>
+                    <span className="mono ml-2 text-[11px] text-slate-400">{formatDate(r.received_date, locale)} · {t('qcNotifications.positionsCount', { n: r.lines })}</span>
                   </div>
                   <button type="button" disabled={creatingId === r.receipt_id} onClick={() => void createForReceipt(r.receipt_id)}
                     className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[12.5px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                    <Plus size={13} /> {creatingId === r.receipt_id ? 'Создание…' : 'Создать и отправить'}
+                    <Plus size={13} /> {creatingId === r.receipt_id ? t('qcNotifications.creating') : t('qcNotifications.createAndSend')}
                   </button>
                 </div>
               ))}

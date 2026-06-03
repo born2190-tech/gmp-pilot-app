@@ -784,12 +784,12 @@ function DetailView({
             </button>
           )}
           {req.scan_verified_at ? (
-            <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-700" title="Накладная подтверждена сканом КР-кода">
-              <CheckCircle2 size={15} /> Скан подтверждён
+            <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-700" title={t('requisitions.scanVerifiedTitle')}>
+              <CheckCircle2 size={15} /> {t('requisitions.scanVerified')}
             </span>
           ) : ['issued', 'partially_issued'].includes(req.status) && canVerifyScan ? (
-            <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-3 text-sm font-medium text-blue-700 hover:bg-blue-100" title="Загрузите скан печатной накладной с КР-кодом">
-              <ScanLine size={15} /> Подтвердить сканом
+            <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-3 text-sm font-medium text-blue-700 hover:bg-blue-100" title={t('requisitions.verifyByScanTitle')}>
+              <ScanLine size={15} /> {t('requisitions.verifyByScan')}
               <input
                 type="file"
                 accept="application/pdf,image/*"
@@ -800,7 +800,7 @@ function DetailView({
                   if (!f) return
                   setScanErr(null)
                   try { onVerified(await verifyRequisitionScan(token, req.id, f)) }
-                  catch (err) { setScanErr(err instanceof Error ? err.message : 'Скан не принят') }
+                  catch (err) { setScanErr(err instanceof Error ? err.message : t('requisitions.scanRejected')) }
                 }}
               />
             </label>
@@ -1256,11 +1256,11 @@ function CreateView({
       if (pf.production_order_no) setProductionOrderNo(pf.production_order_no)
       if (pf.lines.length) {
         setLines(pf.lines.map((l) => ({ id: makeId(), material_id: l.material_id, requested_quantity: String(l.requested_quantity), unit: l.unit })))
-        setAutofillNote(`Строки подставлены из BMR-рецепта (${pf.lines.length}). Проверьте и при необходимости поправьте.`)
+        setAutofillNote(t('requisitions.prefillFromBmr', { n: pf.lines.length }))
       } else if (pf.has_template) {
-        setAutofillNote('У BMR-шаблона нет позиций листа распределения — добавьте строки вручную.')
+        setAutofillNote(t('requisitions.prefillNoLines'))
       } else {
-        setAutofillNote('Нет утверждённого BMR-шаблона продукта — заполните строки вручную.')
+        setAutofillNote(t('requisitions.prefillNoTemplate'))
       }
     } catch {
       setAutofillNote(null)
@@ -1324,13 +1324,13 @@ function CreateView({
         <h3 className="text-[15px] font-semibold text-slate-900">{t('requisitions.headerCardTitle')}</h3>
         <p className="mb-4 mt-0.5 text-[12px] text-slate-500">{t('requisitions.headerCardHint')}</p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <FormField label="Производственная серия (СОП-409, опц.)">
+          <FormField label={t('requisitions.productionBatchLabel')}>
             <select
               value={productionBatchId}
               onChange={(event) => { void selectBatch(event.target.value) }}
               className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60"
             >
-              <option value="">— без привязки к серии —</option>
+              <option value="">{t('requisitions.noBatchLink')}</option>
               {batches.map((b) => (
                 <option key={b.id} value={b.id}>{b.batch_no} · {b.product_name}</option>
               ))}
