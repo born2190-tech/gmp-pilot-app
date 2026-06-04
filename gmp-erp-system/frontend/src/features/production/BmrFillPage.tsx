@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronRight, ClipboardCheck, Clock,
   DoorOpen, Droplet, Eye, FileDown, Gauge, Layers, Loader2, Lock, Map, Pen, Save, ShieldCheck,
-  Thermometer, Users, Wifi, X,
+  Thermometer, Users, Wifi, WifiOff, X,
 } from 'lucide-react'
 import { BmrAssignDialog } from './BmrAssignDialog'
 import {
@@ -201,6 +201,24 @@ export function BmrFillPage({ token, user }: Props) {
   )
 }
 
+/* Индикатор автосохранения: сохранено / не сохранено / сохранение / нет связи / ошибка. */
+function SaveStatusChip({ state, savedAt }: { state: 'saved' | 'dirty' | 'saving' | 'offline' | 'error'; savedAt: string | null }) {
+  const { t } = useI18n()
+  if (state === 'saving') {
+    return <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10.5px] text-slate-500"><Loader2 size={11} className="animate-spin" /> {t('bmrFill.saving')}</span>
+  }
+  if (state === 'dirty') {
+    return <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10.5px] font-medium text-amber-700"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> {t('bmrFill.unsaved')}</span>
+  }
+  if (state === 'offline') {
+    return <span className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[10.5px] font-medium text-rose-700"><WifiOff size={11} /> {t('bmrFill.offline')}</span>
+  }
+  if (state === 'error') {
+    return <span className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[10.5px] font-medium text-rose-700"><AlertTriangle size={11} /> {t('bmrFill.saveError')}</span>
+  }
+  return <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10.5px] text-slate-500"><Wifi size={11} className="text-emerald-500" /> {savedAt ? t('bmrFill.savedAt', { at: savedAt }) : t('bmrFill.allSaved')}</span>
+}
+
 /* ============================ FILL VIEW (Каркас C) ============================ */
 export function FillView({ token, user, instanceId, onBack, readOnly = false, backLabel }: { token: string; user: CurrentUser | null; instanceId: string; onBack: () => void; readOnly?: boolean; backLabel?: string }) {
   const { t } = useI18n()
@@ -210,6 +228,12 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  // Статус автосохранения: saved | dirty | saving | offline | error.
+  type SaveState = 'saved' | 'dirty' | 'saving' | 'offline' | 'error'
+  const [saveState, setSaveState] = useState<SaveState>('saved')
+  const draftRef = useRef<Record<string, string>>({})
+  const dirtyRef = useRef(false)
+  const autosaveTimer = useRef<number | null>(null)
   const [dock, setDock] = useState<{ sectionId: string; fieldIndex: number; role: SignRole; label: string } | null>(null)
   const [action, setAction] = useState<null | 'complete' | 'review'>(null)
   const [pwd, setPwd] = useState('')
@@ -234,6 +258,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
         if (e.value && 'v' in e.value && e.value.v != null) d[key(e.section_id, e.field_index)] = String(e.value.v)
       }
       setDraft(d)
+      draftRef.current = d
     } catch (e) { setError(e instanceof Error ? e.message : t('common.error')) }
   }, [token, instanceId, t])
   useEffect(() => { void load() }, [load])
@@ -245,22 +270,71 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   }, [inst])
 
   const closed = readOnly || inst?.status === 'completed' || inst?.status === 'reviewed'
-  const setVal = (sid: string, fi: number, v: string) => setDraft((p) => ({ ...p, [key(sid, fi)]: v }))
 
-  async function saveAll() {
-    if (!inst) return
-    setBusy(true); setError(null)
+  // Сохранение черновика (используется автосейвом и кнопкой «Сохранить»).
+  const persist = useCallback(async (manual = false): Promise<void> => {
+    const instId = inst?.id
+    if (!instId) return
+    if (autosaveTimer.current) { window.clearTimeout(autosaveTimer.current); autosaveTimer.current = null }
+    if (!navigator.onLine) { setSaveState('offline'); return }
+    const payload = Object.entries(draftRef.current).map(([k, v]) => {
+      const [sid, fi] = k.split(':')
+      return { section_id: sid, field_index: Number(fi), value: v }
+    })
+    if (manual) setBusy(true)
+    setSaveState('saving'); setError(null)
     try {
-      const payload: { section_id: string; field_index: number; value: unknown }[] = []
-      for (const [k, v] of Object.entries(draft)) {
-        const [sid, fi] = k.split(':')
-        payload.push({ section_id: sid, field_index: Number(fi), value: v })
+      const updated = await saveBmrEntries(token, instId, payload)
+      setInst(updated)
+      setSavedAt(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))
+      dirtyRef.current = false
+      setSaveState('saved')
+    } catch (e) {
+      // Сетевой сбой (нет связи) отличаем от прикладной ошибки.
+      if (!navigator.onLine || e instanceof TypeError) {
+        setSaveState('offline')
+      } else {
+        setSaveState('error'); setError(e instanceof Error ? e.message : t('bmrFill.saveFailed'))
       }
-      const updated = await saveBmrEntries(token, inst.id, payload)
-      setInst(updated); setSavedAt(new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }))
-    } catch (e) { setError(e instanceof Error ? e.message : t('bmrFill.saveFailed')) }
-    finally { setBusy(false) }
+    } finally {
+      if (manual) setBusy(false)
+    }
+  }, [inst?.id, token, t])
+
+  const scheduleAutosave = useCallback(() => {
+    if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
+    autosaveTimer.current = window.setTimeout(() => { void persist(false) }, 1500)
+  }, [persist])
+
+  const setVal = (sid: string, fi: number, v: string) => {
+    setDraft((p) => { const n = { ...p, [key(sid, fi)]: v }; draftRef.current = n; return n })
+    if (closed) return
+    dirtyRef.current = true
+    setSaveState('dirty')
+    scheduleAutosave()
   }
+
+  // Автосейв незаписанных правок при восстановлении связи; offline-метка при разрыве.
+  useEffect(() => {
+    const onOnline = () => { if (dirtyRef.current) void persist(false); else setSaveState('saved') }
+    const onOffline = () => setSaveState('offline')
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+      if (autosaveTimer.current) window.clearTimeout(autosaveTimer.current)
+    }
+  }, [persist])
+
+  // Предупреждение о несохранённых правках при закрытии вкладки.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { if (dirtyRef.current) { e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
+
+  const saveAll = () => persist(true)
 
   async function confirmSign() {
     if (!inst || !dock || !signer.trim() || !pwd) return
@@ -352,7 +426,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
             <button onClick={() => setAssignOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-2.5 text-[12px] font-semibold text-blue-700 hover:bg-blue-100"><Users size={14} /> {t('bmrFill.operatorsByStage')}</button>
           )}
           <StatusChip status={inst.status} />
-          {savedAt && <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10.5px] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {t('bmrFill.savedAt', { at: savedAt })}</span>}
+          {!closed && <SaveStatusChip state={saveState} savedAt={savedAt} />}
         </div>
       </div>
       {assignOpen && <BmrAssignDialog token={token} instance={inst} onClose={() => setAssignOpen(false)} onSaved={(u) => setInst(u)} />}
