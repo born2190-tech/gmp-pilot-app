@@ -95,6 +95,8 @@ def quality_lot_item(db: Session, lot_id: UUID) -> QualityLotItem:
             func.coalesce(Lot.supplier_lot, literal("")).label("supplier_lot"),
             Material.code.label("material_code"),
             func.coalesce(func.nullif(Material.name, ""), Material.code).label("material_name"),
+            Material.item_type,
+            Material.packaging_type,
             func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Warehouse.warehouse_type,
@@ -231,6 +233,8 @@ def list_qc_lots(
             func.coalesce(Lot.supplier_lot, literal("")).label("supplier_lot"),
             Material.code.label("material_code"),
             func.coalesce(func.nullif(Material.name, ""), Material.code).label("material_name"),
+            Material.item_type,
+            Material.packaging_type,
             func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Warehouse.warehouse_type,
@@ -278,6 +282,8 @@ def list_qa_lots(
             func.coalesce(Lot.supplier_lot, literal("")).label("supplier_lot"),
             Material.code.label("material_code"),
             func.coalesce(func.nullif(Material.name, ""), Material.code).label("material_name"),
+            Material.item_type,
+            Material.packaging_type,
             func.coalesce(Supplier.name, "-").label("supplier_name"),
             Manufacturer.name.label("manufacturer_name"),
             Warehouse.warehouse_type,
@@ -366,6 +372,14 @@ def _build_qc_report_data(db: Session, report) -> dict:
     manufacturer = db.get(Manufacturer, lot.manufacturer_id) if lot else None
     warehouse = db.get(Warehouse, lot.warehouse_id) if lot else None
     sop_form = "548" if (warehouse and warehouse.warehouse_type == "FG_WAREHOUSE") else "533"
+    # Метаданные ВУМ (СОП-543) для «Заключения» Ф-2 — по типу упаковки материала.
+    _PKG_LABELS = {
+        "label": ("Самоклеящиеся этикетки", "ГОСТ 20477-86; ГОСТ 7625-86; ТУ 9570-001-52689689-2014"),
+        "carton": ("Пеналы", "ГОСТ 7933-89; ГОСТ 33781-2016"),
+        "corrugated_box": ("Короба из гофрокартона", "ГОСТ 9142-2014"),
+        "leaflet": ("Инструкции по применению", "ГОСТ 18510-87; In House"),
+    }
+    pkg_label, pkg_nd = _PKG_LABELS.get((material.packaging_type or "") if material else "", (None, None))
     params = (
         db.query(QCReportParameter)
         .filter(QCReportParameter.report_id == report.id)
@@ -420,6 +434,9 @@ def _build_qc_report_data(db: Session, report) -> dict:
         "sampling_date": lot.sampling_date if lot else None,
         "lot_size": lot_size,
         "sampling_location": sampling_location,
+        "warehouse_type": warehouse.warehouse_type if warehouse else None,
+        "packaging_type_label": pkg_label,
+        "packaging_nd_ref": pkg_nd,
         # Обратная совместимость: общий список + раздельные ФХ/микро.
         "parameters": pc_params + micro_params,
         "pc_parameters": pc_params,
@@ -438,7 +455,20 @@ def _qc_report_pdf_response(db: Session, report, inline: bool) -> Response:
         compute_qc_report_state_hash(db, report),
         lot_id=report.lot_id,
     )
-    pdf_bytes = render_qc_report_pdf(_build_qc_report_data(db, report), qr_payload=qr_payload)
+    data = _build_qc_report_data(db, report)
+    # Упаковочный материал → «Заключение на ВУМ» (Ф-2 к СОП-543);
+    # сырьё/ГП → аналитический лист Ф-11.
+    if data.get("warehouse_type") == "PACKAGING_WAREHOUSE":
+        from app.services.packaging_conclusion_pdf import render_packaging_conclusion_pdf
+        pdf_bytes = render_packaging_conclusion_pdf(data, qr_payload=qr_payload)
+        filename = f"vum-conclusion-{report.report_no}.pdf"
+        disposition = "inline" if inline else "attachment"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"{disposition}; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"},
+        )
+    pdf_bytes = render_qc_report_pdf(data, qr_payload=qr_payload)
     filename = f"analytical-sheet-{report.report_no}.pdf"
     disposition = "inline" if inline else "attachment"
     return Response(

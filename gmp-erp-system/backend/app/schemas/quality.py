@@ -26,6 +26,10 @@ class QualityLotItem(BaseModel):
     supplier_lot: str
     material_code: str
     material_name: str
+    # Вид материала и тип ВУМ — для выбора методов входного контроля в ОКК
+    # (субстанция → Ф-11 СОП-533/548; упаковка → методы СОП-543 по типу).
+    item_type: str | None = None
+    packaging_type: str | None = None
     supplier_name: str
     manufacturer_name: str
     warehouse_type: str
@@ -194,7 +198,7 @@ class VerificationQueueResponse(BaseModel):
 
 
 class QCReportParameterCreate(BaseModel):
-    category: str = Field(default="physicochemical", pattern="^(physicochemical|microbiological)$")
+    category: str = Field(default="physicochemical", pattern="^(physicochemical|microbiological|packaging)$")
     parameter_name: str = Field(min_length=1, max_length=255)
     specification: str = Field(min_length=1)
     result_value: str = Field(min_length=1)
@@ -302,7 +306,7 @@ class QCReportsListResponse(BaseModel):
 
 
 class SpecificationParameterInput(BaseModel):
-    category: str = Field(default="physicochemical", pattern="^(physicochemical|microbiological)$")
+    category: str = Field(default="physicochemical", pattern="^(physicochemical|microbiological|packaging)$")
     parameter_name: str = Field(min_length=1, max_length=255)
     specification: str = Field(min_length=1)
     method_reference: str | None = Field(default=None, max_length=255)

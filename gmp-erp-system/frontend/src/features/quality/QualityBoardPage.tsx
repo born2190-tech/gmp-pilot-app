@@ -55,6 +55,7 @@ import type { CurrentUser } from '../../types/auth'
 import type { LotItem, OOSItem, QcReportListItem, SamplingActItem } from '../../types/inventory'
 import { SamplingActPanel } from './SamplingActPanel'
 import { QcAnalysisWorkspace } from './QcAnalysisWorkspace'
+import { QcPackagingWorkspace } from './QcPackagingWorkspace'
 
 type Phase = 'AWAITING_SAMPLING' | 'DRAFT' | 'SCAN_UPLOADED' | 'SAMPLING_VERIFIED' | 'RESULT_READY'
 
@@ -391,13 +392,23 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
 
         {/* Аналитический лист — рабочее место ОКК (после подтверждения акта отбора) */}
         {selectedLot && (lotPhases.get(selectedLot.id) === 'SAMPLING_VERIFIED' || lotPhases.get(selectedLot.id) === 'RESULT_READY') && (
-          <QcAnalysisWorkspace
-            key={selectedLot.id}
-            token={token}
-            user={user}
-            lot={selectedLot}
-            onSubmitted={() => void loadLots()}
-          />
+          selectedLot.warehouse_type === 'PACKAGING_WAREHOUSE' ? (
+            <QcPackagingWorkspace
+              key={selectedLot.id}
+              token={token}
+              user={user}
+              lot={selectedLot}
+              onSubmitted={() => void loadLots()}
+            />
+          ) : (
+            <QcAnalysisWorkspace
+              key={selectedLot.id}
+              token={token}
+              user={user}
+              lot={selectedLot}
+              onSubmitted={() => void loadLots()}
+            />
+          )
         )}
 
         {reportsModalOpen && (

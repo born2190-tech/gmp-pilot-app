@@ -76,6 +76,9 @@ export interface LotItem {
   supplier_lot: string
   material_code: string
   material_name: string
+  // Вид материала и тип ВУМ — для выбора методов входного контроля в ОКК.
+  item_type?: string | null
+  packaging_type?: string | null
   supplier_name: string
   manufacturer_name: string
   warehouse_id?: string
@@ -263,7 +266,7 @@ export interface QCResultRequest extends SignatureRequest {
   result_summary: string
 }
 
-export type QCParamCategory = 'physicochemical' | 'microbiological'
+export type QCParamCategory = 'physicochemical' | 'microbiological' | 'packaging'
 
 export interface QCReportParameterCreate {
   category?: QCParamCategory

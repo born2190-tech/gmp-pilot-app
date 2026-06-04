@@ -67,6 +67,10 @@ class Material(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     item_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Тип вторичного упаковочного материала (ВУМ) для подбора методов входного
+    # контроля по СОП-543: label | carton | corrugated_box | leaflet. NULL —
+    # не упаковка или тип не задан (определяется эвристикой по названию).
+    packaging_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     default_unit: Mapped[str] = mapped_column(String(32), nullable=False)
     # Счёт учёта по виду материала (АФИ/вспомогательные/упаковочные). Партия
     # при приёмке наследует этот счёт; далее счёт может меняться перемещением.
