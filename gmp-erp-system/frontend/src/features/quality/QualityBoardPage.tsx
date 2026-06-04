@@ -401,10 +401,10 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
     <section className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">ДОК · ОБЕСПЕЧЕНИЕ КАЧЕСТВА</p>
-          <h1 className="mt-1 text-[26px] font-semibold leading-tight tracking-tight text-slate-900">Решения ДОК</h1>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-slate-500">{t('qaBoard.eyebrow')}</p>
+          <h1 className="mt-1 text-[26px] font-semibold leading-tight tracking-tight text-slate-900">{t('qaBoard.title')}</h1>
           <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-slate-500">
-            Финальное качественное решение по серии — допуск к выпуску или отклонение. Партия попадает на доску только после получения и подписи аналитического листа Ф-11.
+            {t('qaBoard.subtitle')}
           </p>
         </div>
       </div>
@@ -461,7 +461,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
             />
           ) : (
             <QaCard className="flex min-h-[640px] items-center justify-center">
-              <QaEmptyState icon={Gavel} title="Выберите серию" sub="Слева отображаются партии, по которым ДОК может принять решение." />
+              <QaEmptyState icon={Gavel} title={t('qaBoard.selectLot')} sub={t('qaBoard.selectLotSub')} />
             </QaCard>
           )}
         </div>
@@ -490,10 +490,10 @@ function qaQty(value: number) {
   return value === Math.trunc(value) ? String(Math.trunc(value)) : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
 }
 
-function qaWarehouseLabel(type: string) {
-  if (type === 'FG_WAREHOUSE') return 'ГП'
-  if (type === 'PACKAGING_WAREHOUSE') return 'Упаковка'
-  return 'Субстанции'
+function qaWarehouseLabel(type: string, t: Translate) {
+  if (type === 'FG_WAREHOUSE') return t('qaBoard.whFg')
+  if (type === 'PACKAGING_WAREHOUSE') return t('qaBoard.whPackaging')
+  return t('qaBoard.whSubstance')
 }
 
 function qaWarehouseShort(type: string) {
@@ -502,12 +502,12 @@ function qaWarehouseShort(type: string) {
   return 'SUBSTANCE'
 }
 
-function qaStatusLabel(status: string) {
-  if (status === 'released') return 'Допущено'
-  if (status === 'rejected') return 'Брак'
-  if (status === 'under_test') return 'Под анализом'
-  if (status === 'sampled') return 'Отобрано'
-  return 'Карантин'
+function qaStatusLabel(status: string, t: Translate) {
+  if (status === 'released') return t('qaBoard.lotReleased')
+  if (status === 'rejected') return t('qaBoard.lotRejected')
+  if (status === 'under_test') return t('qaBoard.lotUnderTest')
+  if (status === 'sampled') return t('qaBoard.lotSampled')
+  return t('qaBoard.lotQuarantine')
 }
 
 function QaMetaLabel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -556,6 +556,7 @@ function QaPillButton({
 }
 
 function QaQualityPill({ status, size = 'md' }: { status: string; size?: 'sm' | 'md' }) {
+  const { t } = useI18n()
   const map: Record<string, { cls: string; dot: string }> = {
     released: { cls: 'border-emerald-200 bg-emerald-50 text-emerald-800', dot: 'bg-emerald-500' },
     rejected: { cls: 'border-rose-200 bg-rose-50 text-rose-800', dot: 'bg-rose-500' },
@@ -567,12 +568,13 @@ function QaQualityPill({ status, size = 'md' }: { status: string; size?: 'sm' | 
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border font-medium ${pad} ${item.cls}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />
-      {qaStatusLabel(status)}
+      {qaStatusLabel(status, t)}
     </span>
   )
 }
 
 function QaWarehousePill({ type, size = 'md' }: { type: string; size?: 'sm' | 'md' }) {
+  const { t } = useI18n()
   const isFg = type === 'FG_WAREHOUSE'
   const isPack = type === 'PACKAGING_WAREHOUSE'
   const Icon = isFg ? Package : isPack ? Package : FlaskConical
@@ -582,7 +584,7 @@ function QaWarehousePill({ type, size = 'md' }: { type: string; size?: 'sm' | 'm
       ? 'border-sky-200 bg-sky-50 text-sky-700'
       : 'border-slate-200 bg-slate-50 text-slate-600'
   const pad = size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'
-  return <span className={`inline-flex items-center gap-1 rounded-md border font-medium ${pad} ${cls}`}><Icon size={size === 'sm' ? 10 : 11} />{qaWarehouseLabel(type)}</span>
+  return <span className={`inline-flex items-center gap-1 rounded-md border font-medium ${pad} ${cls}`}><Icon size={size === 'sm' ? 10 : 11} />{qaWarehouseLabel(type, t)}</span>
 }
 
 function QaSegmented<T extends string>({ value, onChange, options }: { value: T; onChange: (value: T) => void; options: { value: T; label: string }[] }) {
@@ -650,44 +652,45 @@ function QaQueuePanel({
   onUrgencyFilter: (value: QaUrgencyFilter) => void
   onSelect: (id: string) => void
 }) {
+  const { t } = useI18n()
   const hasFilters = Boolean(query) || warehouseFilter !== 'all' || urgencyFilter !== 'all'
   return (
     <QaCard className="flex h-[calc(100vh-188px)] min-h-[640px] flex-col overflow-hidden">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700"><Gavel size={15} /></span>
         <div className="min-w-0 flex-1">
-          <QaMetaLabel>Готовы к допуску</QaMetaLabel>
-          <h2 className="text-[14px] font-semibold tracking-tight text-slate-900">Очередь на решение</h2>
+          <QaMetaLabel>{t('qaBoard.readyForRelease')}</QaMetaLabel>
+          <h2 className="text-[14px] font-semibold tracking-tight text-slate-900">{t('qaBoard.decisionQueue')}</h2>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 border-b border-slate-200 px-3 py-3">
-        <QaKpiTile label="Ожидают решения" value={kpi.pending} icon={Gavel} tone="amber" active={queueFilter === 'pending'} onClick={() => onQueueFilter('pending')} />
-        <QaKpiTile label="Допущено сегодня" value={kpi.released} icon={ShieldCheck} tone="emerald" active={queueFilter === 'released'} onClick={() => onQueueFilter('released')} />
-        <QaKpiTile label="Отклонено" value={kpi.rejected} icon={Ban} tone="rose" active={queueFilter === 'rejected'} onClick={() => onQueueFilter('rejected')} />
-        <QaKpiTile label="На расследовании OOS" value={kpi.oos} icon={AlertTriangle} tone="rose" active={queueFilter === 'oos'} onClick={() => onQueueFilter('oos')} />
+        <QaKpiTile label={t('qaBoard.kpiPending')} value={kpi.pending} icon={Gavel} tone="amber" active={queueFilter === 'pending'} onClick={() => onQueueFilter('pending')} />
+        <QaKpiTile label={t('qaBoard.kpiReleasedToday')} value={kpi.released} icon={ShieldCheck} tone="emerald" active={queueFilter === 'released'} onClick={() => onQueueFilter('released')} />
+        <QaKpiTile label={t('qaBoard.kpiRejected')} value={kpi.rejected} icon={Ban} tone="rose" active={queueFilter === 'rejected'} onClick={() => onQueueFilter('rejected')} />
+        <QaKpiTile label={t('qaBoard.kpiOos')} value={kpi.oos} icon={AlertTriangle} tone="rose" active={queueFilter === 'oos'} onClick={() => onQueueFilter('oos')} />
       </div>
 
       <div className="space-y-2.5 border-b border-slate-200 px-3 py-3">
         <div className="relative">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Поиск: серия, материал, производитель..." className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-8 text-[12.5px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60" />
+          <input value={query} onChange={(e) => onQuery(e.target.value)} placeholder={t('qaBoard.searchPlaceholder')} className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-8 text-[12.5px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60" />
           {query && <button type="button" onClick={() => onQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={14} /></button>}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400"><Filter size={11} />Склад</span>
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400"><Filter size={11} />{t('qaBoard.warehouse')}</span>
           <QaSegmented value={warehouseFilter} onChange={onWarehouseFilter} options={[
-            { value: 'all', label: 'Все' },
-            { value: 'SUBSTANCE_WAREHOUSE', label: 'Субстанции' },
-            { value: 'PACKAGING_WAREHOUSE', label: 'Упаковка' },
-            { value: 'FG_WAREHOUSE', label: 'ГП' },
+            { value: 'all', label: t('qaBoard.all') },
+            { value: 'SUBSTANCE_WAREHOUSE', label: t('qaBoard.whSubstance') },
+            { value: 'PACKAGING_WAREHOUSE', label: t('qaBoard.whPackaging') },
+            { value: 'FG_WAREHOUSE', label: t('qaBoard.whFg') },
           ]} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400"><Clock size={11} />Срочность</span>
-          <QaSegmented value={urgencyFilter} onChange={onUrgencyFilter} options={[{ value: 'all', label: 'Все' }, { value: 'urgent', label: 'Срочные' }]} />
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400"><Clock size={11} />{t('qaBoard.urgency')}</span>
+          <QaSegmented value={urgencyFilter} onChange={onUrgencyFilter} options={[{ value: 'all', label: t('qaBoard.all') }, { value: 'urgent', label: t('qaBoard.urgent') }]} />
           {hasFilters && (
-            <button type="button" onClick={() => { onQuery(''); onWarehouseFilter('all'); onUrgencyFilter('all') }} className="ml-auto text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline">Сбросить</button>
+            <button type="button" onClick={() => { onQuery(''); onWarehouseFilter('all'); onUrgencyFilter('all') }} className="ml-auto text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline">{t('qaBoard.reset')}</button>
           )}
         </div>
       </div>
@@ -696,7 +699,7 @@ function QaQueuePanel({
         {loading ? (
           <div className="space-y-2 px-1 py-1">{[0, 1, 2, 3].map((i) => <QaLotSkeleton key={i} />)}</div>
         ) : lots.length === 0 ? (
-          <QaEmptyState icon={queueFilter === 'oos' ? AlertTriangle : Inbox} title="Очередь пуста" sub={hasFilters ? 'По выбранным фильтрам партий нет.' : 'Нет партий, ожидающих решения ДОК.'} />
+          <QaEmptyState icon={queueFilter === 'oos' ? AlertTriangle : Inbox} title={t('qaBoard.queueEmpty')} sub={hasFilters ? t('qaBoard.queueEmptyFiltered') : t('qaBoard.queueEmptyAll')} />
         ) : (
           <div className="space-y-1.5">
             {lots.map((lot) => <QaLotCard key={lot.id} lot={lot} selected={lot.id === selectedId} onSelect={() => onSelect(lot.id)} />)}
@@ -705,14 +708,15 @@ function QaQueuePanel({
       </div>
 
       <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2 text-[11px] text-slate-500">
-        <span>{loading ? '...' : `${lots.length} партий`}</span>
-        {warehouseFilter !== 'all' && <button type="button" onClick={() => onWarehouseFilter('all')} className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800">{qaWarehouseLabel(warehouseFilter)}<X size={11} /></button>}
+        <span>{loading ? '...' : t('qaBoard.lotsCount', { n: lots.length })}</span>
+        {warehouseFilter !== 'all' && <button type="button" onClick={() => onWarehouseFilter('all')} className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800">{qaWarehouseLabel(warehouseFilter, t)}<X size={11} /></button>}
       </div>
     </QaCard>
   )
 }
 
 function QaLotCard({ lot, selected, onSelect }: { lot: LotItem; selected: boolean; onSelect: () => void }) {
+  const { t } = useI18n()
   const days = daysSince(lot.qc_result_received_at)
   const decided = lot.quality_status === 'released' || lot.quality_status === 'rejected'
   return (
@@ -727,9 +731,9 @@ function QaLotCard({ lot, selected, onSelect }: { lot: LotItem; selected: boolea
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <QaWarehousePill type={lot.warehouse_type} size="sm" />
-        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"><FileText size={10} />Ф-11</span>
+        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"><FileText size={10} />{t('qaBoard.f11')}</span>
         <span className="ml-auto font-mono text-[10px] text-slate-400">
-          {decided ? qaDate(lot.qa_decision_at) : days === 0 ? 'ждёт сегодня' : `ждёт ${days ?? 0} д`}
+          {decided ? qaDate(lot.qa_decision_at) : days === 0 ? t('qaBoard.waitsToday') : t('qaBoard.waitsDays', { n: days ?? 0 })}
         </span>
       </div>
     </button>
@@ -767,6 +771,7 @@ function QaDecisionCard({
   onRunAction: (action: 'release' | 'reject') => Promise<void>
   onOpenReport: () => void
 }) {
+  const { t } = useI18n()
   const decided = lot.quality_status === 'released' || lot.quality_status === 'rejected'
   const resultReady = Boolean(lot.qc_result_received_at)
   const canRelease = resultReady && !decided
@@ -778,38 +783,38 @@ function QaDecisionCard({
       {!decided && <QaGatesSection resultReady={resultReady} canRelease={canRelease} />}
       {decided ? <QaDecidedBlock lot={lot} /> : canDecide ? (
         <QaCard className="overflow-hidden">
-          <QaSectionHead icon={Gavel} eyebrow="Карта решения" title="Решение ДОК" />
+          <QaSectionHead icon={Gavel} eyebrow={t('qaBoard.decisionCardEyebrow')} title={t('qaBoard.decisionCardTitle')} />
           {action === null ? (
             <div className="space-y-2 p-4">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <QaPillButton tone="confirm" icon={ShieldCheck} size="lg" disabled={!canRelease} onClick={() => onAction('release')} className="w-full">Разрешить</QaPillButton>
-                <QaPillButton tone="dangerGhost" icon={Ban} size="lg" onClick={() => onAction('reject')} className="w-full">Отклонить</QaPillButton>
+                <QaPillButton tone="confirm" icon={ShieldCheck} size="lg" disabled={!canRelease} onClick={() => onAction('release')} className="w-full">{t('qaBoard.release')}</QaPillButton>
+                <QaPillButton tone="dangerGhost" icon={Ban} size="lg" onClick={() => onAction('reject')} className="w-full">{t('qaBoard.reject')}</QaPillButton>
               </div>
-              {!canRelease && <p className="flex items-center gap-1.5 text-[11.5px] text-slate-500"><Lock size={12} className="text-slate-400" />Разрешение заблокировано до получения результата Ф-11.</p>}
+              {!canRelease && <p className="flex items-center gap-1.5 text-[11.5px] text-slate-500"><Lock size={12} className="text-slate-400" />{t('qaBoard.releaseBlocked')}</p>}
             </div>
           ) : (
             <div className={`border-t-2 p-4 ${action === 'release' ? 'border-emerald-500 bg-emerald-50/30' : 'border-rose-500 bg-rose-50/20'}`}>
               <div className="mb-3 flex items-center gap-2">
                 <span className={`inline-flex h-7 w-7 items-center justify-center rounded-md ${action === 'release' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>{action === 'release' ? <ShieldCheck size={15} /> : <Ban size={15} />}</span>
-                <p className="text-[13px] font-semibold text-slate-800">{action === 'release' ? 'Разрешить' : 'Отклонить'} · {lot.internal_lot}</p>
+                <p className="text-[13px] font-semibold text-slate-800">{action === 'release' ? t('qaBoard.release') : t('qaBoard.reject')} · {lot.internal_lot}</p>
                 <button type="button" onClick={onCancelAction} className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-white hover:text-slate-700"><X size={15} /></button>
               </div>
               <div className="space-y-1">
-                <QaMetaLabel>{action === 'release' ? 'Основание допуска' : 'Причина отклонения'}</QaMetaLabel>
-                <textarea value={reason} onChange={(e) => onReason(e.target.value)} rows={3} placeholder={action === 'release' ? 'Напр.: результат анализа соответствует НД, серия разрешена к выпуску.' : 'Опишите причину отклонения серии...'} className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-[12.5px] leading-relaxed text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60" />
+                <QaMetaLabel>{action === 'release' ? t('qaBoard.releaseBasis') : t('qaBoard.rejectReasonLabel')}</QaMetaLabel>
+                <textarea value={reason} onChange={(e) => onReason(e.target.value)} rows={3} placeholder={action === 'release' ? t('qaBoard.releaseReasonPh') : t('qaBoard.rejectReasonPh')} className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-[12.5px] leading-relaxed text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60" />
               </div>
               <div className="mt-2.5 space-y-1">
-                <QaMetaLabel>Пароль электронной подписи</QaMetaLabel>
+                <QaMetaLabel>{t('qaBoard.eSignPassword')}</QaMetaLabel>
                 <div className="relative">
                   <KeyRound size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type="password" value={password} onChange={(e) => onPassword(e.target.value)} placeholder="••••••" className="h-9 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 font-mono text-[13px] tracking-widest text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60" />
                 </div>
-                <p className="text-[10.5px] text-slate-400">Решение ДОК по серии · ALCOA+</p>
+                <p className="text-[10.5px] text-slate-400">{t('qaBoard.decisionAlcoa')}</p>
               </div>
               <div className="mt-3 flex items-center justify-end gap-2">
-                <QaPillButton tone="neutral" onClick={onCancelAction}>Отмена</QaPillButton>
+                <QaPillButton tone="neutral" onClick={onCancelAction}>{t('common.cancel')}</QaPillButton>
                 <QaPillButton tone={action === 'release' ? 'confirm' : 'danger'} icon={action === 'release' ? ShieldCheck : Ban} disabled={!reason.trim() || !password.trim() || isLoading} onClick={() => onConfirmOpen(true)}>
-                  Подписать
+                  {t('qaBoard.sign')}
                 </QaPillButton>
               </div>
             </div>
@@ -819,8 +824,8 @@ function QaDecisionCard({
         <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5">
           <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-500"><Lock size={17} /></span>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-slate-700">Только чтение</p>
-            <p className="text-[11.5px] text-slate-500">Для решения требуется право QA_DECISION.</p>
+            <p className="text-[13px] font-semibold text-slate-700">{t('qaBoard.readOnly')}</p>
+            <p className="text-[11.5px] text-slate-500">{t('qaBoard.readOnlySub')}</p>
           </div>
         </div>
       )}
@@ -837,6 +842,7 @@ function QaDecisionCard({
 }
 
 function QaDecisionHeader({ lot }: { lot: LotItem }) {
+  const { t } = useI18n()
   const decided = lot.quality_status === 'released' || lot.quality_status === 'rejected'
   return (
     <div className="border-b border-slate-200 p-4">
@@ -848,20 +854,20 @@ function QaDecisionHeader({ lot }: { lot: LotItem }) {
             <QaQualityPill status={lot.quality_status} />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[11.5px] text-slate-500">
-            <span>код материала: <span className="text-slate-800">{lot.material_code}</span></span>
-            <span>серия: <span className="font-semibold text-slate-900">{lot.internal_lot}</span></span>
-            {lot.supplier_lot && <span>серия пост.: <span className="text-slate-700">{lot.supplier_lot}</span></span>}
+            <span>{t('qaBoard.materialCode')}: <span className="text-slate-800">{lot.material_code}</span></span>
+            <span>{t('qaBoard.lot')}: <span className="font-semibold text-slate-900">{lot.internal_lot}</span></span>
+            {lot.supplier_lot && <span>{t('qaBoard.supplierLot')}: <span className="text-slate-700">{lot.supplier_lot}</span></span>}
           </div>
         </div>
         <QaWarehousePill type={lot.warehouse_type} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
-        <QaField label="Производитель" value={lot.manufacturer_name} icon={Building2} className="col-span-2" />
-        <QaField label="Кол-во" value={`${qaQty(lot.quantity)} ${lot.unit}`} mono icon={Boxes} />
-        <QaField label={decided ? 'Зона выпуска' : 'Зона'} value={lot.location_code} mono icon={MapPin} />
-        <QaField label="Дата произв." value={qaDate(lot.production_date)} mono icon={Calendar} />
-        <QaField label="Годен до" value={qaDate(lot.expiry_date)} mono icon={Calendar} />
-        <QaField label="Поставщик" value={lot.supplier_name} className="col-span-2" />
+        <QaField label={t('qaBoard.manufacturer')} value={lot.manufacturer_name} icon={Building2} className="col-span-2" />
+        <QaField label={t('qaBoard.quantity')} value={`${qaQty(lot.quantity)} ${lot.unit}`} mono icon={Boxes} />
+        <QaField label={decided ? t('qaBoard.releaseZone') : t('qaBoard.zone')} value={lot.location_code} mono icon={MapPin} />
+        <QaField label={t('qaBoard.prodDate')} value={qaDate(lot.production_date)} mono icon={Calendar} />
+        <QaField label={t('qaBoard.validUntil')} value={qaDate(lot.expiry_date)} mono icon={Calendar} />
+        <QaField label={t('qaBoard.supplier')} value={lot.supplier_name} className="col-span-2" />
       </div>
     </div>
   )
@@ -892,16 +898,17 @@ function QaSectionHead({ icon: Icon, eyebrow, title, right }: { icon: typeof Inb
 }
 
 function QaRouteSection({ lot }: { lot: LotItem }) {
+  const { t } = useI18n()
   const decided = lot.quality_status === 'released' || lot.quality_status === 'rejected'
   const steps = [
-    { label: 'Извещение', sub: 'приём Ф-14', date: qaDate(lot.incoming_control_notified_at), state: 'done' },
-    { label: 'Акт отбора', sub: 'отбор Ф-10', date: qaDate(lot.sampling_date), state: 'done' },
-    { label: 'Аналит. лист Ф-11', sub: 'результат ОКК внесён', date: qaDate(lot.qc_result_received_at), state: lot.qc_result_received_at ? 'done' : 'todo' },
-    { label: 'Решение ДОК', sub: decided ? 'решение принято' : 'ожидает решения', date: decided ? qaDate(lot.qa_decision_at) : null, state: decided ? 'done' : 'current' },
+    { label: t('qaBoard.routeNotice'), sub: t('qaBoard.routeNoticeSub'), date: qaDate(lot.incoming_control_notified_at), state: 'done' },
+    { label: t('qaBoard.routeSampling'), sub: t('qaBoard.routeSamplingSub'), date: qaDate(lot.sampling_date), state: 'done' },
+    { label: t('qaBoard.routeF11'), sub: t('qaBoard.routeF11Sub'), date: qaDate(lot.qc_result_received_at), state: lot.qc_result_received_at ? 'done' : 'todo' },
+    { label: t('qaBoard.routeDecision'), sub: decided ? t('qaBoard.routeDecisionDone') : t('qaBoard.routeDecisionWait'), date: decided ? qaDate(lot.qa_decision_at) : null, state: decided ? 'done' : 'current' },
   ]
   return (
     <QaCard className="overflow-hidden">
-      <QaSectionHead icon={ArrowRightLeft} eyebrow="Путь партии от извещения о приёмке до решения ДОК" title="Маршрут серии" />
+      <QaSectionHead icon={ArrowRightLeft} eyebrow={t('qaBoard.routeEyebrow')} title={t('qaBoard.routeTitle')} />
       <div className="flex items-stretch gap-0 px-4 py-4">
         {steps.map((step, i) => {
           const last = i === steps.length - 1
@@ -927,19 +934,20 @@ function QaRouteSection({ lot }: { lot: LotItem }) {
 }
 
 function QaF11Block({ lot, onOpenReport }: { lot: LotItem; onOpenReport: () => void }) {
+  const { t } = useI18n()
   const ready = Boolean(lot.qc_result_received_at)
   return (
     <QaCard className="overflow-hidden">
-      <QaSectionHead icon={FlaskConical} eyebrow="Аналитический лист" title="Результат анализа (Ф-11)" right={<QaPillButton tone="neutral" icon={Eye} size="sm" onClick={onOpenReport}>Открыть Ф-11</QaPillButton>} />
+      <QaSectionHead icon={FlaskConical} eyebrow={t('qaBoard.f11Eyebrow')} title={t('qaBoard.f11Title')} right={<QaPillButton tone="neutral" icon={Eye} size="sm" onClick={onOpenReport}>{t('qaBoard.openF11')}</QaPillButton>} />
       <div className={`flex items-center gap-3 px-4 py-3.5 ${ready ? 'bg-emerald-50/60' : 'bg-amber-50/60'}`}>
         <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${ready ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}`}>{ready ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}</span>
         <div className="min-w-0 flex-1">
-          <p className={`text-[18px] font-semibold leading-tight tracking-tight ${ready ? 'text-emerald-800' : 'text-amber-800'}`}>{ready ? 'Соответствует' : 'Ожидает результата'}</p>
-          <p className="mt-0.5 text-[12px] text-slate-600">{ready ? 'Все показатели в пределах норм НД' : 'Решение ДОК заблокировано до результата ОКК'}</p>
+          <p className={`text-[18px] font-semibold leading-tight tracking-tight ${ready ? 'text-emerald-800' : 'text-amber-800'}`}>{ready ? t('qaBoard.compliant') : t('qaBoard.awaitingResult')}</p>
+          <p className="mt-0.5 text-[12px] text-slate-600">{ready ? t('qaBoard.allWithinNd') : t('qaBoard.decisionBlockedUntilQc')}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="font-mono text-[11px] tabular-nums text-slate-500">лист № {lot.qc_report_no || '—'}</span>
-          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-emerald-700">норма</span>
+          <span className="font-mono text-[11px] tabular-nums text-slate-500">{t('qaBoard.sheetNo')} {lot.qc_report_no || '—'}</span>
+          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-white px-1.5 py-0.5 font-mono text-[10.5px] tabular-nums text-emerald-700">{t('qaBoard.norm')}</span>
         </div>
       </div>
     </QaCard>
@@ -947,14 +955,15 @@ function QaF11Block({ lot, onOpenReport }: { lot: LotItem; onOpenReport: () => v
 }
 
 function QaGatesSection({ resultReady, canRelease }: { resultReady: boolean; canRelease: boolean }) {
+  const { t } = useI18n()
   return (
     <QaCard className="overflow-hidden">
-      <QaSectionHead icon={ListChecks} eyebrow="Все условия должны быть выполнены для кнопки «Разрешить»" title="Предусловия допуска" />
+      <QaSectionHead icon={ListChecks} eyebrow={t('qaBoard.gatesEyebrow')} title={t('qaBoard.gatesTitle')} />
       <div className="space-y-2 p-4">
-        <QaGateRow state={resultReady ? 'ok' : 'amber'} title="Результат анализа получен" sub={resultReady ? 'Ф-11 внесён и подписан ОКК' : 'Ожидается подписанный результат Ф-11'} />
-        <QaGateRow state={resultReady ? 'ok' : 'amber'} title="Аналитический лист Ф-11 верифицирован ДОК" sub={resultReady ? 'Подписи на скане Ф-11 подтверждены' : 'Перейдите во вкладку верификации документов ДОК'} />
-        <QaGateRow state="ok" title="Нет открытого OOS / РНС расследования" sub="Открытых расследований по серии нет" />
-        {!canRelease && <p className="px-1 pt-1 text-[11.5px] text-slate-500">Кнопка допуска станет активной после выполнения всех условий.</p>}
+        <QaGateRow state={resultReady ? 'ok' : 'amber'} title={t('qaBoard.gateResult')} sub={resultReady ? t('qaBoard.gateResultOk') : t('qaBoard.gateResultWait')} />
+        <QaGateRow state={resultReady ? 'ok' : 'amber'} title={t('qaBoard.gateVerified')} sub={resultReady ? t('qaBoard.gateVerifiedOk') : t('qaBoard.gateVerifiedWait')} />
+        <QaGateRow state="ok" title={t('qaBoard.gateNoOos')} sub={t('qaBoard.gateNoOosSub')} />
+        {!canRelease && <p className="px-1 pt-1 text-[11.5px] text-slate-500">{t('qaBoard.gatesHint')}</p>}
       </div>
     </QaCard>
   )
@@ -979,25 +988,27 @@ function QaGateRow({ state, title, sub }: { state: 'ok' | 'amber' | 'red'; title
 }
 
 function QaDecidedBlock({ lot }: { lot: LotItem }) {
+  const { t } = useI18n()
   const released = lot.quality_status === 'released'
   return (
     <QaCard className="overflow-hidden">
       <div className={`flex items-start gap-3 p-4 ${released ? 'bg-emerald-50/50' : 'bg-rose-50/40'}`}>
         <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${released ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>{released ? <ShieldCheck size={22} /> : <Ban size={22} />}</span>
         <div className="min-w-0 flex-1">
-          <p className={`text-[15px] font-semibold tracking-tight ${released ? 'text-emerald-800' : 'text-rose-800'}`}>{released ? 'Серия допущена' : 'Серия отклонена'}</p>
-          <p className="mt-0.5 inline-flex items-center gap-1.5 text-[11.5px] text-slate-500"><CheckCircle2 size={12} className={released ? 'text-emerald-600' : 'text-rose-600'} />Электронно подписано · ALCOA+</p>
+          <p className={`text-[15px] font-semibold tracking-tight ${released ? 'text-emerald-800' : 'text-rose-800'}`}>{released ? t('qaBoard.lotReleasedFull') : t('qaBoard.lotRejectedFull')}</p>
+          <p className="mt-0.5 inline-flex items-center gap-1.5 text-[11.5px] text-slate-500"><CheckCircle2 size={12} className={released ? 'text-emerald-600' : 'text-rose-600'} />{t('qaBoard.eSigned')}</p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-slate-200 p-4">
-        <QaField label="Дата решения" value={qaDateTime(lot.qa_decision_at)} mono icon={Calendar} />
-        <QaField label="Зона" value={lot.location_code} mono icon={MapPin} />
+        <QaField label={t('qaBoard.decisionDate')} value={qaDateTime(lot.qa_decision_at)} mono icon={Calendar} />
+        <QaField label={t('qaBoard.zone')} value={lot.location_code} mono icon={MapPin} />
       </div>
     </QaCard>
   )
 }
 
 function QaConfirmDialog({ action, lot, onCancel, onConfirm }: { action: 'release' | 'reject'; lot: LotItem; onCancel: () => void; onConfirm: () => void }) {
+  const { t } = useI18n()
   const release = action === 'release'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
@@ -1006,16 +1017,16 @@ function QaConfirmDialog({ action, lot, onCancel, onConfirm }: { action: 'releas
         <div className="flex items-start gap-3 p-5">
           <span className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${release ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{release ? <ShieldCheck size={18} /> : <Ban size={18} />}</span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">{release ? 'Подписать допуск серии?' : 'Подписать отклонение серии?'}</h3>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-slate-600">Действие перенесёт серию в финальный статус и зафиксируется в GMP audit trail.</p>
+            <h3 className="text-[15px] font-semibold tracking-tight text-slate-900">{release ? t('qaBoard.confirmReleaseTitle') : t('qaBoard.confirmRejectTitle')}</h3>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-slate-600">{t('qaBoard.confirmBody')}</p>
             <div className="mt-3 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 font-mono text-[11.5px] text-slate-600">
               {lot.internal_lot} · {lot.material_name}
             </div>
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
-          <QaPillButton tone="neutral" onClick={onCancel}>Отмена</QaPillButton>
-          <QaPillButton tone={release ? 'confirm' : 'danger'} onClick={onConfirm}>{release ? 'Разрешить' : 'Отклонить'}</QaPillButton>
+          <QaPillButton tone="neutral" onClick={onCancel}>{t('common.cancel')}</QaPillButton>
+          <QaPillButton tone={release ? 'confirm' : 'danger'} onClick={onConfirm}>{release ? t('qaBoard.release') : t('qaBoard.reject')}</QaPillButton>
         </div>
       </div>
     </div>
@@ -1160,7 +1171,7 @@ function QcTaskCard({
         <div className="min-w-[220px] flex-1">
           <div className="mb-1 flex items-center gap-2">
             <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10.5px] font-medium ${sopForm === '548' ? 'bg-violet-50 text-violet-700' : 'bg-amber-50 text-amber-700'}`}>
-              СОП-{sopForm} Ф-10
+              {t('qaBoard.sopF10', { form: sopForm })}
             </span>
             <span className="text-[10.5px] uppercase tracking-wider text-slate-400">
               {lot.warehouse_type === 'FG_WAREHOUSE' ? t('role.scope.FG_WAREHOUSE') : lot.warehouse_type === 'PACKAGING_WAREHOUSE' ? t('role.scope.PACKAGING_WAREHOUSE') : t('role.scope.SUBSTANCE_WAREHOUSE')}
@@ -1168,13 +1179,13 @@ function QcTaskCard({
           </div>
           <h4 className="text-[15px] font-semibold tracking-tight text-slate-950">{lot.material_name}</h4>
           <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[11px] text-slate-600">
-            <span>код: <span className="text-slate-900">{lot.material_code}</span></span>
-            <span>серия: <span className="font-semibold text-slate-900">{lot.internal_lot}</span></span>
+            <span>{t('qaBoard.codeColon')} <span className="text-slate-900">{lot.material_code}</span></span>
+            <span>{t('qaBoard.lotColon')} <span className="font-semibold text-slate-900">{lot.internal_lot}</span></span>
             <span>{lot.manufacturer_name}</span>
           </div>
           <div className="mt-1 font-mono text-[11px] text-slate-500">
             {lot.quantity.toLocaleString(locale)} {lot.unit}
-            {act && <span> · акт {act.act_no}</span>}
+            {act && <span> · {t('qaBoard.actN', { no: act.act_no })}</span>}
           </div>
         </div>
 
@@ -1195,7 +1206,7 @@ function QcTaskCard({
           <div className="text-right">
             {overdue ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] font-medium text-rose-700">
-                <AlertTriangle size={11} /> SLA &gt; 5 дн.
+                <AlertTriangle size={11} /> {t('qaBoard.slaOver')}
               </span>
             ) : (
               <span className="text-[11px] text-slate-500">
@@ -1312,7 +1323,7 @@ function QcReportsModal({
                       </div>
                       <div className="mt-0.5 flex flex-wrap gap-x-3 font-mono text-[11px] text-slate-500">
                         <span className="text-slate-800">{r.material_name || '—'}</span>
-                        <span>серия: {r.internal_lot || '—'}</span>
+                        <span>{t('qaBoard.lotColon')} {r.internal_lot || '—'}</span>
                         <span>{r.submitted_at ? new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(r.submitted_at)) : ''}</span>
                       </div>
                     </div>
