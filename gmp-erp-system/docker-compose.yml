@@ -47,7 +47,39 @@ services:
       - backend
     restart: unless-stopped
 
+  # Ежедневный бэкап PostgreSQL (pg_dump -Fc) + ротация. На проде том
+  # gmp_erp_backups привязать к бэкапируемому/внешнему диску (off-site).
+  db-backup:
+    image: postgres:16-alpine
+    container_name: gmp-erp-db-backup
+    environment:
+      PGPASSWORD: gmp_pass
+      BACKUP_KEEP_DAYS: "14"
+    volumes:
+      - gmp_erp_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "[db-backup] started; daily pg_dump, keep $${BACKUP_KEEP_DAYS}d"
+        while true; do
+          ts=$$(date +%Y%m%d_%H%M%S)
+          out="/backups/gmp_erp_$${ts}.dump"
+          if pg_dump -h postgres -U gmp_user -d gmp_erp -Fc -f "$${out}"; then
+            echo "[db-backup] ok $${out} ($$(du -h "$${out}" | cut -f1))"
+          else
+            echo "[db-backup] FAILED at $${ts}" >&2
+            rm -f "$${out}"
+          fi
+          find /backups -name 'gmp_erp_*.dump' -mtime +$${BACKUP_KEEP_DAYS} -delete 2>/dev/null || true
+          sleep 86400
+        done
+    restart: unless-stopped
+
 volumes:
   gmp_erp_postgres_data:
   gmp_erp_qc_scans:
   gmp_erp_defect_photos:
+  gmp_erp_backups:
