@@ -231,7 +231,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
   const [analysisFinished, setAnalysisFinished] = useState('')
   const [microStarted, setMicroStarted] = useState('')
   const [microFinished, setMicroFinished] = useState('')
-  const [microMethodRef, setMicroMethodRef] = useState('ОФС.1.2.4.0002, СОП-514')
+  const [microMethodRef, setMicroMethodRef] = useState(() => t('qcws.microMethodDefault'))
   const [microRequired, setMicroRequired] = useState(!isFg)
 
   // Реестр КИП (загружается единожды при монтировании).
@@ -588,7 +588,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
             <SectionHead
               icon={FlaskConical}
               accent="cyan"
-              eyebrow={`СОП-${sopForm} Ф-11 · ${t('qcws.sectionA')}`}
+              eyebrow={`${t('qcws.sopF11', { form: sopForm })} · ${t('qcws.sectionA')}`}
               title={t('qcws.pcTitle')}
               sub={tpl ? `${t('qcws.templateMatched')}: ${tpl.label} · ${tpl.specRef}` : undefined}
               right={
@@ -616,7 +616,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                     <th className="px-3 py-2">{t('qcws.colMethod')}</th>
                     <th className="px-3 py-2">{t('qcws.colResult')}</th>
                     <th className="w-16 px-3 py-2">{t('qcws.colUnit')}</th>
-                    <th className="w-40 px-3 py-2">Прибор</th>
+                    <th className="w-40 px-3 py-2">{t('qcws.colInstrument')}</th>
                     <th className="w-28 px-3 py-2">{t('qcws.colCompliance')}</th>
                     {!locked && <th className="w-8 px-2 py-2" />}
                   </tr>
@@ -694,7 +694,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
             <SectionHead
               icon={Microscope}
               accent="violet"
-              eyebrow={`СОП-514 · ${t('qcws.sectionB')}`}
+              eyebrow={`${t('qcws.sop514')} · ${t('qcws.sectionB')}`}
               title={t('qcws.microTitle')}
               sub={microMethodRef}
               right={
@@ -887,7 +887,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
               <ul className="mt-2 space-y-1.5 text-[12px]">
                 <li className="flex items-center gap-2"><FileText size={13} className="text-slate-400" /><span className="font-mono text-slate-700">{lot.internal_lot}</span><span className="text-slate-400">· {t('qcws.relatedSeries')}</span></li>
                 {lot.qc_report_no && (
-                  <li className="flex items-center gap-2"><FileText size={13} className="text-slate-400" /><span className="font-mono text-slate-700">{lot.qc_report_no}</span><span className="text-slate-400">· Ф-11</span></li>
+                  <li className="flex items-center gap-2"><FileText size={13} className="text-slate-400" /><span className="font-mono text-slate-700">{lot.qc_report_no}</span><span className="text-slate-400">· {t('qcws.f11')}</span></li>
                 )}
               </ul>
             </div>
@@ -1169,6 +1169,7 @@ function EquipmentPicker({
   onChange: (ids: string[]) => void
   disabled: boolean
 }) {
+  const { t } = useI18n()
   const selected = available.filter((e) => selectedIds.includes(e.id))
   const expired = selected.filter((e) => e.calibration_status === 'expired' || e.calibration_status === 'missing')
   const expiring = selected.filter((e) => e.calibration_status === 'expiring')
@@ -1180,14 +1181,13 @@ function EquipmentPicker({
   return (
     <div className="rounded-md border border-slate-200 bg-white p-3">
       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-        Приборы анализа (реестр КИП)
+        {t('qcws.equipmentPickerTitle')}
       </p>
       <p className="mt-0.5 text-[11px] text-slate-400">
-        Выберите все приборы, использованные при анализе. Просроченная или отсутствующая
-        калибровка блокирует сохранение протокола (GMP Annex 15).
+        {t('qcws.equipmentPickerHint')}
       </p>
       {available.length === 0 ? (
-        <p className="mt-2 text-[11.5px] text-slate-400">Справочник КИП пуст — добавьте приборы в разделе «Реестр КИП».</p>
+        <p className="mt-2 text-[11.5px] text-slate-400">{t('qcws.equipmentEmpty')}</p>
       ) : (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {available.map((eq) => {
@@ -1215,12 +1215,12 @@ function EquipmentPicker({
       )}
       {expired.length > 0 && (
         <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700">
-          <strong>Просроченная калибровка:</strong> {expired.map((e) => e.code).join(', ')}. Сохранение протокола заблокировано.
+          <strong>{t('qcws.calExpiredLabel')}</strong> {expired.map((e) => e.code).join(', ')}. {t('qcws.calBlocked')}
         </p>
       )}
       {expiring.length > 0 && (
         <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-          <strong>Скоро истекает:</strong> {expiring.map((e) => `${e.code} (до ${e.calibration_valid_until})`).join(', ')}.
+          <strong>{t('qcws.calExpiringLabel')}</strong> {expiring.map((e) => `${e.code} (${t('qcws.until')} ${e.calibration_valid_until})`).join(', ')}.
         </p>
       )}
     </div>
