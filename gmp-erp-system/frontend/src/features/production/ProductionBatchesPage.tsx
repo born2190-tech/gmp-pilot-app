@@ -16,12 +16,6 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { Ban, Boxes, FileText, History, Package } from 'lucide-react'
 
-const BMR_INSTANCE_STATUS: Record<string, string> = {
-  issued: 'Создан (ожидает заполнения)',
-  in_progress: 'Заполняется',
-  completed: 'Заполнен',
-  reviewed: 'Проверен',
-}
 import {
   assignProductionBatch,
   cancelProductionBatch,
@@ -39,17 +33,24 @@ import {
   updateProduct,
   updateProductionBatchChecklist,
 } from '../../lib/api'
+import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
 import type { BmrInstanceItem, ProductionBatchAuditItem, ProductionBatchItem, ProductItem, RequisitionItem } from '../../types/inventory'
 import { BmrFillModal } from './BmrFillModal'
 
-const REQ_STATUS_LABEL: Record<string, string> = {
-  draft: 'Черновик',
-  submitted: 'Подано',
-  processing: 'В обработке',
-  partially_issued: 'Частично выдано',
-  issued: 'Выдано',
-  cancelled: 'Отменено',
+type Translate = ReturnType<typeof useI18n>['t']
+function bmrInstanceStatus(s: string, t: Translate): string {
+  return ['issued', 'in_progress', 'completed', 'reviewed'].includes(s) ? t(`prodBatch.bmrInst.${s}` as Parameters<Translate>[0]) : s
+}
+function reqStatusLabel(s: string, t: Translate): string {
+  return ['draft', 'submitted', 'processing', 'partially_issued', 'issued', 'cancelled'].includes(s) ? t(`prodBatch.reqStatus.${s}` as Parameters<Translate>[0]) : s
+}
+function actionLabel(a: string, t: Translate): string {
+  const known = ['SAVE_DRAFT_BATCH', 'ASSIGN_BATCH_NO', 'REQUEST_BMR', 'ISSUE_BMR', 'UPDATE_START_CHECKLIST', 'START_PRODUCTION_BATCH', 'COMPLETE_PRODUCTION_BATCH', 'CANCEL_PRODUCTION_BATCH']
+  return known.includes(a) ? t(`prodBatch.action.${a}` as Parameters<Translate>[0]) : a
+}
+function statusLabel(s: string, t: Translate): string {
+  return STATUS_FILTERS.includes(s) && s ? t(`prodBatch.status.${s}` as Parameters<Translate>[0]) : s
 }
 
 const REQ_STATUS_STYLE: Record<string, string> = {
@@ -60,17 +61,6 @@ const REQ_STATUS_STYLE: Record<string, string> = {
   cancelled: 'border-rose-200 bg-rose-50 text-rose-700',
 }
 
-const ACTION_LABEL: Record<string, string> = {
-  SAVE_DRAFT_BATCH: 'Сохранён черновик серии',
-  ASSIGN_BATCH_NO: 'Присвоен номер серии (СОП-409)',
-  REQUEST_BMR: 'Запрошена ЗПС/BMR у ДОК',
-  ISSUE_BMR: 'Выдана ЗПС/BMR (ДОК)',
-  UPDATE_START_CHECKLIST: 'Обновлён чек-лист готовности',
-  START_PRODUCTION_BATCH: 'Начат выпуск серии',
-  COMPLETE_PRODUCTION_BATCH: 'Завершён выпуск серии',
-  CANCEL_PRODUCTION_BATCH: 'Серия отменена',
-}
-
 interface ProductionBatchesPageProps {
   token: string
   user: CurrentUser
@@ -78,13 +68,7 @@ interface ProductionBatchesPageProps {
 
 type CheckKey = 'room_ready' | 'equipment_ready' | 'scales_checked' | 'materials_ready' | 'qa_line_clearance'
 
-const CHECKS: { key: CheckKey; label: string; sop: string }[] = [
-  { key: 'room_ready', label: 'Помещение подготовлено, уборка подтверждена', sop: 'СОП-436 п.6.5, СОП-442' },
-  { key: 'equipment_ready', label: 'Оборудование готово к работе', sop: 'СОП-436 п.6.2.8, 6.6' },
-  { key: 'scales_checked', label: 'Весы проверены / калибровка внесена', sop: 'СОП-436 п.6.3.2-6.3.4' },
-  { key: 'materials_ready', label: 'Сырьё и вспомогательные материалы готовы к выдаче', sop: 'СОП-436 п.6.3, 6.8.1.1' },
-  { key: 'qa_line_clearance', label: 'Контролёр ДОК подтвердил line clearance', sop: 'СОП-436 п.6.2.9, СОП-442 п.6.4' },
-]
+const CHECK_KEYS: CheckKey[] = ['room_ready', 'equipment_ready', 'scales_checked', 'materials_ready', 'qa_line_clearance']
 
 const STATUS_STYLE: Record<string, string> = {
   draft: 'border-slate-200 bg-slate-100 text-slate-600',
@@ -97,16 +81,6 @@ const STATUS_STYLE: Record<string, string> = {
   cancelled: 'border-rose-200 bg-rose-50 text-rose-700',
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  draft: 'Черновик',
-  assigned: 'Серия присвоена',
-  bmr_requested: 'ЗПС запрошена',
-  bmr_issued: 'ЗПС выдана',
-  ready_to_start: 'Готово к старту',
-  in_production: 'В производстве',
-  completed: 'Завершена',
-  cancelled: 'Отменена',
-}
 
 const STATUS_FILTERS = ['', 'draft', 'assigned', 'bmr_requested', 'bmr_issued', 'ready_to_start', 'in_production', 'completed', 'cancelled']
 
@@ -124,14 +98,14 @@ function formatDateTime(value: string | null): string {
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
 }
 
-function makeInitialForm() {
+function makeInitialForm(unit = 'pcs') {
   return {
     product_id: '',
     product_code: '',
     product_name: '',
     dosage_form: '',
     batch_size: '10000',
-    batch_size_unit: 'упак',
+    batch_size_unit: unit,
     production_date: todayIso(),
     shelf_life_months: '24',
     notes: '',
@@ -144,6 +118,7 @@ function makeInitialForm() {
 type BatchForm = ReturnType<typeof makeInitialForm>
 
 export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProps) {
+  const { t } = useI18n()
   const canCreate = user.permissions.includes('MANAGE_PRODUCTION')
   const canRequestBmr = user.permissions.includes('MANAGE_PRODUCTION') || user.role === 'SYS_ADMIN'
   const canExecute = user.permissions.includes('EXECUTE_BMR') || user.permissions.includes('MANAGE_PRODUCTION')
@@ -161,12 +136,12 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [form, setForm] = useState(makeInitialForm)
+  const [form, setForm] = useState(() => makeInitialForm(t('prodBatch.defaultUnit')))
   const [preview, setPreview] = useState<{ batch_no: string; expiry_date: string; serial_no: number } | null>(null)
   const [startPassword, setStartPassword] = useState('')
-  const [startReason, setStartReason] = useState('Начало выпуска серии после проверки готовности')
+  const [startReason, setStartReason] = useState(() => t('prodBatch.startReasonDefault'))
   const [completePassword, setCompletePassword] = useState('')
-  const [completeReason, setCompleteReason] = useState('Производство серии завершено')
+  const [completeReason, setCompleteReason] = useState(() => t('prodBatch.completeReasonDefault'))
   const [cancelPassword, setCancelPassword] = useState('')
   const [cancelReason, setCancelReason] = useState('')
   const [audit, setAudit] = useState<ProductionBatchAuditItem[]>([])
@@ -215,7 +190,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
         return batchResp.batches[0]?.id ?? null
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить серии')
+      setError(err instanceof Error ? err.message : t('prodBatch.loadError'))
     } finally {
       setIsLoading(false)
     }
@@ -281,7 +256,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       setSuccess(done)
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Операция не выполнена')
+      setError(err instanceof Error ? err.message : t('prodBatch.opFailed'))
     } finally {
       setIsLoading(false)
     }
@@ -304,15 +279,15 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       })
       setSelectedId(created.id)
       setShowCreate(false)
-      setForm(makeInitialForm())
-    }, asDraft ? 'Черновик серии сохранён' : 'Серия присвоена по СОП-409')
+      setForm(makeInitialForm(t('prodBatch.defaultUnit')))
+    }, asDraft ? t('prodBatch.draftSaved') : t('prodBatch.assignedSop'))
   }
 
   async function handleAssign(batch: ProductionBatchItem) {
     await runAction(async () => {
       const updated = await assignProductionBatch(token, batch.id)
       setSelectedId(updated.id)
-    }, 'Серия присвоена (номер зарегистрирован)')
+    }, t('prodBatch.assignedDone'))
   }
 
   async function handleCancel(batch: ProductionBatchItem) {
@@ -320,27 +295,27 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       const updated = await cancelProductionBatch(token, batch.id, {
         username: user.username,
         password: cancelPassword,
-        meaning: 'Отмена производственной серии',
+        meaning: t('prodBatch.cancelMeaning'),
         reason: cancelReason,
       })
       setSelectedId(updated.id)
       setCancelPassword('')
       setCancelReason('')
-    }, 'Серия отменена')
+    }, t('prodBatch.cancelDone'))
   }
 
   async function handleSaveProduct(input: Parameters<typeof createProduct>[1], id: string | null) {
     await runAction(async () => {
       if (id) await updateProduct(token, id, input)
       else await createProduct(token, input)
-    }, id ? 'Продукт обновлён' : 'Продукт добавлен в справочник')
+    }, id ? t('prodBatch.productUpdated') : t('prodBatch.productAdded'))
   }
 
   async function handleRequestBmr(batch: ProductionBatchItem) {
     await runAction(async () => {
       const updated = await requestProductionBmr(token, batch.id)
       setSelectedId(updated.id)
-    }, 'ЗПС/BMR запрошена у ДОК')
+    }, t('prodBatch.bmrRequestedDone'))
   }
 
   async function patchChecklist(batch: ProductionBatchItem, key: CheckKey, value: boolean) {
@@ -353,7 +328,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
         qa_line_clearance: key === 'qa_line_clearance' ? value : batch.qa_line_clearance,
       })
       setSelectedId(updated.id)
-    }, 'Чеклист готовности обновлён')
+    }, t('prodBatch.checklistDone'))
   }
 
   async function handleStart(batch: ProductionBatchItem) {
@@ -361,12 +336,12 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       const updated = await startProductionBatch(token, batch.id, {
         username: user.username,
         password: startPassword,
-        meaning: 'Начало выпуска производственной серии',
+        meaning: t('prodBatch.startMeaning'),
         reason: startReason,
       })
       setSelectedId(updated.id)
       setStartPassword('')
-    }, 'Выпуск серии начат')
+    }, t('prodBatch.startDone'))
   }
 
   async function handleComplete(batch: ProductionBatchItem) {
@@ -374,12 +349,12 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       const updated = await completeProductionBatch(token, batch.id, {
         username: user.username,
         password: completePassword,
-        meaning: 'Завершение выпуска производственной серии',
+        meaning: t('prodBatch.completeMeaning'),
         reason: completeReason,
       })
       setSelectedId(updated.id)
       setCompletePassword('')
-    }, 'Выпуск серии завершён')
+    }, t('prodBatch.completeDone'))
   }
 
   const createInvalid =
@@ -402,10 +377,10 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">СОП-409 / ЗПС / BMR</p>
-          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-slate-950">Реестр производственных серий</h1>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('prodBatch.eyebrow')}</p>
+          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-slate-950">{t('prodBatch.title')}</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Журнал серий по ЛС: номер, дата производства, срок годности, проверка ДКК/ДОК, ЗПС и начало выпуска.
+            {t('prodBatch.subtitle')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -415,7 +390,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
             className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             <RefreshCw size={15} />
-            Обновить
+            {t('common.refresh')}
           </button>
           {canCreate && (
             <button
@@ -424,17 +399,17 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
               className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               <Package size={16} />
-              Справочник ЛС
+              {t('prodBatch.productsCatalog')}
             </button>
           )}
           {canCreate && (
             <button
               type="button"
-              onClick={() => { setForm(makeInitialForm()); setShowCreate(true) }}
+              onClick={() => { setForm(makeInitialForm(t('prodBatch.defaultUnit'))); setShowCreate(true) }}
               className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
             >
               <Plus size={16} />
-              Новая серия
+              {t('prodBatch.newBatch')}
             </button>
           )}
         </div>
@@ -444,12 +419,12 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       {success && <Notice tone="success" text={success} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard label="Черновики" value={kpiDraft} active={statusFilter === 'draft'} onClick={() => toggleFilter('draft')} />
-        <KpiCard label="Серия присвоена" value={kpiAssigned} active={statusFilter === 'assigned'} onClick={() => toggleFilter('assigned')} />
-        <KpiCard label="Ждут выдачи ЗПС (ДОК)" value={kpiBmrRequested} active={statusFilter === 'bmr_requested'} onClick={() => toggleFilter('bmr_requested')} />
-        <KpiCard label="В производстве" value={kpiActive} active={statusFilter === 'in_production'} onClick={() => toggleFilter('in_production')} />
-        <KpiCard label="Завершены" value={kpiCompleted} active={statusFilter === 'completed'} onClick={() => toggleFilter('completed')} />
-        <KpiCard label="Отменены" value={kpiCancelled} active={statusFilter === 'cancelled'} onClick={() => toggleFilter('cancelled')} />
+        <KpiCard label={t('prodBatch.kpiDraft')} value={kpiDraft} active={statusFilter === 'draft'} onClick={() => toggleFilter('draft')} />
+        <KpiCard label={t('prodBatch.kpiAssigned')} value={kpiAssigned} active={statusFilter === 'assigned'} onClick={() => toggleFilter('assigned')} />
+        <KpiCard label={t('prodBatch.kpiBmrRequested')} value={kpiBmrRequested} active={statusFilter === 'bmr_requested'} onClick={() => toggleFilter('bmr_requested')} />
+        <KpiCard label={t('prodBatch.kpiActive')} value={kpiActive} active={statusFilter === 'in_production'} onClick={() => toggleFilter('in_production')} />
+        <KpiCard label={t('prodBatch.kpiCompleted')} value={kpiCompleted} active={statusFilter === 'completed'} onClick={() => toggleFilter('completed')} />
+        <KpiCard label={t('prodBatch.kpiCancelled')} value={kpiCancelled} active={statusFilter === 'cancelled'} onClick={() => toggleFilter('cancelled')} />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -459,7 +434,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Поиск по серии, ЛС, коду продукта или ЗПС..."
+              placeholder={t('prodBatch.searchPlaceholder')}
               className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/70"
             />
           </div>
@@ -474,7 +449,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
                   statusFilter === status ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-950'
                 }`}
               >
-                {status ? STATUS_LABEL[status] : 'Все'}
+                {status ? statusLabel(status, t) : t('prodBatch.allFilter')}
               </button>
             ))}
           </div>
@@ -484,22 +459,22 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           <table className="min-w-[1240px] w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
-                <th className="px-4 py-3">Номер серии</th>
-                <th className="px-4 py-3">ЛС</th>
-                <th className="px-4 py-3">Размер</th>
-                <th className="px-4 py-3">Дата произв.</th>
-                <th className="px-4 py-3">Срок годности</th>
-                <th className="px-4 py-3">Статус</th>
-                <th className="px-4 py-3">ЗПС/BMR</th>
-                <th className="px-4 py-3">Начало</th>
-                <th className="px-4 py-3">Окончание</th>
+                <th className="px-4 py-3">{t('prodBatch.thBatchNo')}</th>
+                <th className="px-4 py-3">{t('prodBatch.thProduct')}</th>
+                <th className="px-4 py-3">{t('prodBatch.thSize')}</th>
+                <th className="px-4 py-3">{t('prodBatch.thProdDate')}</th>
+                <th className="px-4 py-3">{t('prodBatch.thExpiry')}</th>
+                <th className="px-4 py-3">{t('prodBatch.thStatus')}</th>
+                <th className="px-4 py-3">{t('prodBatch.zpsBmr')}</th>
+                <th className="px-4 py-3">{t('prodBatch.thStart')}</th>
+                <th className="px-4 py-3">{t('prodBatch.thEnd')}</th>
               </tr>
             </thead>
             <tbody>
               {filteredBatches.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">
-                    {isLoading ? 'Загрузка...' : 'Серии не найдены.'}
+                    {isLoading ? t('prodBatch.loading') : t('prodBatch.notFound')}
                   </td>
                 </tr>
               ) : (
@@ -513,7 +488,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
                   >
                     <td className="px-4 py-3">
                       <div className="font-mono font-semibold text-slate-950">{batch.batch_no}</div>
-                      <div className="text-xs text-slate-500">код {batch.product_code} · № {String(batch.serial_no).padStart(3, '0')}</div>
+                      <div className="text-xs text-slate-500">{t('prodBatch.codeShort')} {batch.product_code} · № {String(batch.serial_no).padStart(3, '0')}</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900">{batch.product_name}</div>
@@ -567,7 +542,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
         />
       ) : (
         <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
-          Выберите серию из реестра или создайте новую.
+          {t('prodBatch.selectOrCreate')}
         </div>
       )}
 
@@ -666,7 +641,8 @@ function BatchDetail({
   onComplete: () => void
   isLoading: boolean
 }) {
-  const allChecks = CHECKS.every((check) => batch[check.key])
+  const { t } = useI18n()
+  const allChecks = CHECK_KEYS.every((key) => batch[key])
   const canStart = canExecute && batch.bmr_issued_at && allChecks && !['in_production', 'completed', 'cancelled'].includes(batch.status)
   const canComplete = canExecute && batch.status === 'in_production' && !batch.completed_at
   const isTerminal = ['in_production', 'completed', 'cancelled'].includes(batch.status)
@@ -676,7 +652,7 @@ function BatchDetail({
       {batch.status === 'draft' && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-50 p-4">
           <div className="text-sm text-slate-700">
-            <span className="font-semibold">Черновик серии.</span> Номер ещё не зарегистрирован официально. Присвойте серию или отмените черновик.
+            <span className="font-semibold">{t('prodBatch.draftBatch')}</span> {t('prodBatch.draftNotice')}
           </div>
           {canManage && (
             <button
@@ -686,14 +662,14 @@ function BatchDetail({
               className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >
               <ShieldCheck size={16} />
-              Присвоить серию
+              {t('prodBatch.assignBatch')}
             </button>
           )}
         </div>
       )}
       {batch.status === 'cancelled' && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-          <span className="font-semibold">Серия отменена.</span> {formatDate(batch.cancelled_at)}{batch.cancel_reason ? ` · ${batch.cancel_reason}` : ''}. Запись остаётся в журнале серий.
+          <span className="font-semibold">{t('prodBatch.cancelledLabel')}</span> {formatDate(batch.cancelled_at)}{batch.cancel_reason ? ` · ${batch.cancel_reason}` : ''}. {t('prodBatch.staysInLog')}
         </div>
       )}
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -706,10 +682,10 @@ function BatchDetail({
             <p className="mt-1 text-sm text-slate-600">{batch.product_name}{batch.dosage_form ? ` · ${batch.dosage_form}` : ''}</p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-right text-xs lg:grid-cols-4">
-            <Info label="Размер" value={`${batch.batch_size} ${batch.batch_size_unit}`} />
-            <Info label="Дата произв." value={formatDate(batch.production_date)} />
-            <Info label="Годен до" value={formatDate(batch.expiry_date)} />
-            <Info label="ЗПС" value={batch.bmr_no || '-'} />
+            <Info label={t('prodBatch.thSize')} value={`${batch.batch_size} ${batch.batch_size_unit}`} />
+            <Info label={t('prodBatch.thProdDate')} value={formatDate(batch.production_date)} />
+            <Info label={t('prodBatch.validUntil')} value={formatDate(batch.expiry_date)} />
+            <Info label={t('prodBatch.zps')} value={batch.bmr_no || '-'} />
           </div>
         </div>
       </div>
@@ -717,18 +693,18 @@ function BatchDetail({
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         {canRequestBmr && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <SectionTitle icon={FileSignature} title="Запросить ЗПС / BMR" sub="Производство → ДОК · СОП-11 п.5.1.3" />
+          <SectionTitle icon={FileSignature} title={t('prodBatch.requestBmrTitle')} sub={t('prodBatch.requestBmrSub')} />
           {batch.bmr_issued_at ? (
             <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              ЗПС выдана ДОК: <span className="font-mono">{batch.bmr_no}</span>. Можно начинать выпуск.
+              {t('prodBatch.bmrIssuedBy')} <span className="font-mono">{batch.bmr_no}</span>. {t('prodBatch.canStart')}
             </div>
           ) : batch.bmr_requested_at ? (
             <div className="mt-4 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-800">
-              ЗПС запрошена: {formatDate(batch.bmr_requested_at)}. Ожидается подготовка и выдача ДОК.
+              {t('prodBatch.bmrRequestedAt', { date: formatDate(batch.bmr_requested_at) })}
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              <p className="text-sm text-slate-600">После регистрации номера серии производство запрашивает у ДОК подготовку и выдачу ЗПС/BMR.</p>
+              <p className="text-sm text-slate-600">{t('prodBatch.requestBmrHint')}</p>
               <button
                 type="button"
                 disabled={!canRequestBmr || batch.status !== 'assigned' || isLoading}
@@ -736,9 +712,9 @@ function BatchDetail({
                 className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FileSignature size={16} />
-                Запросить ЗПС/BMR
+                {t('prodBatch.requestBmrBtn')}
               </button>
-              {batch.status === 'draft' && <p className="text-xs text-amber-700">Сначала присвойте серию (из черновика).</p>}
+              {batch.status === 'draft' && <p className="text-xs text-amber-700">{t('prodBatch.assignFirst')}</p>}
             </div>
           )}
         </div>
@@ -746,20 +722,20 @@ function BatchDetail({
 
         {canExecute && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <SectionTitle icon={ClipboardCheck} title="Готовность к старту" sub="СОП-436 / СОП-442" />
+          <SectionTitle icon={ClipboardCheck} title={t('prodBatch.readinessTitle')} sub={t('prodBatch.readinessSub')} />
           <div className="mt-4 space-y-2">
-            {CHECKS.map((check) => (
-              <label key={check.key} className="flex items-start gap-3 rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50">
+            {CHECK_KEYS.map((key) => (
+              <label key={key} className="flex items-start gap-3 rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50">
                 <input
                   type="checkbox"
-                  checked={batch[check.key]}
+                  checked={batch[key]}
                   disabled={!canExecute || batch.status === 'in_production' || batch.status === 'completed'}
-                  onChange={(e) => onChecklist(check.key, e.target.checked)}
+                  onChange={(e) => onChecklist(key, e.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-slate-300"
                 />
                 <span className="min-w-0">
-                  <span className="block text-sm font-medium text-slate-900">{check.label}</span>
-                  <span className="block text-xs text-slate-500">{check.sop}</span>
+                  <span className="block text-sm font-medium text-slate-900">{t(`prodBatch.check.${key}` as Parameters<Translate>[0])}</span>
+                  <span className="block text-xs text-slate-500">{t(`prodBatch.checkSop.${key}` as Parameters<Translate>[0])}</span>
                 </span>
               </label>
             ))}
@@ -770,12 +746,12 @@ function BatchDetail({
 
       {canExecute && (
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={Play} title="Начать выпуск серии" sub="Старт блокируется без ЗПС и полного чеклиста" />
+        <SectionTitle icon={Play} title={t('prodBatch.startTitle')} sub={t('prodBatch.startSub')} />
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-          <Field label="Пароль электронной подписи">
+          <Field label={t('prodBatch.eSignPassword')}>
             <input type="password" className="input" value={startPassword} onChange={(e) => onStartPassword(e.target.value)} disabled={!canStart} />
           </Field>
-          <Field label="Основание">
+          <Field label={t('prodBatch.basis')}>
             <input className="input" value={startReason} onChange={(e) => onStartReason(e.target.value)} disabled={!canStart} />
           </Field>
           <button
@@ -785,12 +761,12 @@ function BatchDetail({
             className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Play size={16} />
-            Начать выпуск
+            {t('prodBatch.startBtn')}
           </button>
         </div>
         {!canStart && batch.status !== 'in_production' && (
           <p className="mt-3 text-xs text-amber-700">
-            Нужно: выданная ДОК ЗПС/BMR и все пункты готовности.
+            {t('prodBatch.startNeed')}
           </p>
         )}
       </div>
@@ -798,17 +774,17 @@ function BatchDetail({
 
       {canExecute && (
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={CheckCircle2} title="Завершить выпуск серии" sub="Серия остаётся в реестре как постоянная запись" />
+        <SectionTitle icon={CheckCircle2} title={t('prodBatch.completeTitle')} sub={t('prodBatch.completeSub')} />
         {batch.completed_at ? (
           <div className="mt-4 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
-            Производство завершено: {formatDate(batch.completed_at)}. Запись остаётся в журнале серий.
+            {t('prodBatch.completedAt', { date: formatDate(batch.completed_at) })}
           </div>
         ) : (
           <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-            <Field label="Пароль электронной подписи">
+            <Field label={t('prodBatch.eSignPassword')}>
               <input type="password" className="input" value={completePassword} onChange={(e) => onCompletePassword(e.target.value)} disabled={!canComplete} />
             </Field>
-            <Field label="Основание">
+            <Field label={t('prodBatch.basis')}>
               <input className="input" value={completeReason} onChange={(e) => onCompleteReason(e.target.value)} disabled={!canComplete} />
             </Field>
             <button
@@ -818,13 +794,13 @@ function BatchDetail({
               className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <CheckCircle2 size={16} />
-              Завершить
+              {t('prodBatch.completeBtn')}
             </button>
           </div>
         )}
         {!canComplete && !batch.completed_at && (
           <p className="mt-3 text-xs text-slate-500">
-            Завершить можно только серию со статусом “В производстве”.
+            {t('prodBatch.completeOnlyInProd')}
           </p>
         )}
       </div>
@@ -832,12 +808,12 @@ function BatchDetail({
 
       {canCancel && (
         <div className="rounded-lg border border-rose-200 bg-white p-5 shadow-sm">
-          <SectionTitle icon={Ban} title="Отменить серию" sub="До начала производства · с электронной подписью" />
+          <SectionTitle icon={Ban} title={t('prodBatch.cancelTitle')} sub={t('prodBatch.cancelSub')} />
           <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-            <Field label="Причина отмены">
-              <input className="input" value={cancelReason} onChange={(e) => onCancelReason(e.target.value)} placeholder="Напр.: ошибка планирования, отмена заказа" />
+            <Field label={t('prodBatch.cancelReasonLabel')}>
+              <input className="input" value={cancelReason} onChange={(e) => onCancelReason(e.target.value)} placeholder={t('prodBatch.cancelReasonPh')} />
             </Field>
-            <Field label="Пароль электронной подписи">
+            <Field label={t('prodBatch.eSignPassword')}>
               <input type="password" className="input" value={cancelPassword} onChange={(e) => onCancelPassword(e.target.value)} />
             </Field>
             <button
@@ -847,55 +823,55 @@ function BatchDetail({
               className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-rose-600 px-5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Ban size={16} />
-              Отменить серию
+              {t('prodBatch.cancelBtn')}
             </button>
           </div>
         </div>
       )}
 
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={FileText} title="Электронный BMR" sub="Заполнение на планшете по стадиям — СОП-11" />
+        <SectionTitle icon={FileText} title={t('prodBatch.eBmrTitle')} sub={t('prodBatch.eBmrSub')} />
         {bmrInstance ? (
           <div className="mt-4 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{BMR_INSTANCE_STATUS[bmrInstance.status] ?? bmrInstance.status}</span>
-              <span className="text-sm text-slate-600">{bmrInstance.title} · шаблон v{bmrInstance.template_version} · {bmrInstance.sections.length} секций</span>
-              <button type="button" onClick={() => onOpenBmr(bmrInstance.id)} className="ml-auto inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700"><FileText size={15} />Открыть BMR</button>
+              <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{bmrInstanceStatus(bmrInstance.status, t)}</span>
+              <span className="text-sm text-slate-600">{bmrInstance.title} · {t('prodBatch.templateV', { v: bmrInstance.template_version })} · {t('prodBatch.sectionsN', { n: bmrInstance.sections.length })}</span>
+              <button type="button" onClick={() => onOpenBmr(bmrInstance.id)} className="ml-auto inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700"><FileText size={15} />{t('prodBatch.openBmr')}</button>
             </div>
             <ol className="divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
               {bmrInstance.sections.map((s) => (
                 <li key={s.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
                   <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-slate-100 font-mono text-[11px] text-slate-600">{s.ordinal}</span>
                   <span className="font-medium text-slate-900">{s.title}</span>
-                  <span className="ml-auto text-[11px] text-slate-400">{(s.config?.fields ?? []).length} полей</span>
+                  <span className="ml-auto text-[11px] text-slate-400">{t('prodBatch.fieldsN', { n: (s.config?.fields ?? []).length })}</span>
                 </li>
               ))}
             </ol>
-            <p className="text-xs text-slate-500">Пошаговое заполнение оператором и подпись ДОК — на планшете (готовится).</p>
+            <p className="text-xs text-slate-500">{t('prodBatch.eBmrTabletHint')}</p>
           </div>
         ) : (
-          <p className="mt-4 text-sm text-slate-500">Электронный BMR будет создан при выдаче ЗПС, если у продукта есть утверждённый шаблон BMR.</p>
+          <p className="mt-4 text-sm text-slate-500">{t('prodBatch.eBmrEmpty')}</p>
         )}
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={Boxes} title="Связанные требования (FEFO-выдача)" sub="Материалы в производство по этой серии — СОП-415" />
+        <SectionTitle icon={Boxes} title={t('prodBatch.linkedReqsTitle')} sub={t('prodBatch.linkedReqsSub')} />
         {linkedReqs.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">К серии пока не привязано требований на выдачу материалов.</p>
+          <p className="mt-4 text-sm text-slate-500">{t('prodBatch.linkedReqsEmpty')}</p>
         ) : (
           <div className="mt-4 space-y-3">
             {linkedReqs.map((req) => (
               <div key={req.id} className="rounded-md border border-slate-200">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
                   <span className="font-mono text-sm font-semibold text-slate-900">{req.requisition_no}</span>
-                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${REQ_STATUS_STYLE[req.status] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>{REQ_STATUS_LABEL[req.status] ?? req.status}</span>
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${REQ_STATUS_STYLE[req.status] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>{reqStatusLabel(req.status, t)}</span>
                 </div>
                 <table className="w-full text-left text-sm">
                   <thead className="text-[11px] uppercase tracking-wide text-slate-500">
                     <tr>
-                      <th className="px-3 py-1.5">Материал</th>
-                      <th className="px-3 py-1.5 text-right">Запрошено</th>
-                      <th className="px-3 py-1.5 text-right">Выдано</th>
+                      <th className="px-3 py-1.5">{t('prodBatch.thMaterial')}</th>
+                      <th className="px-3 py-1.5 text-right">{t('prodBatch.thRequested')}</th>
+                      <th className="px-3 py-1.5 text-right">{t('prodBatch.thIssued')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -916,9 +892,9 @@ function BatchDetail({
 
       {canViewAudit && (
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={History} title="Журнал серии" sub="Кто и когда — audit trail по СОП-409 / GMP" />
+        <SectionTitle icon={History} title={t('prodBatch.auditTitle')} sub={t('prodBatch.auditSub')} />
         {audit.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">Событий пока нет.</p>
+          <p className="mt-4 text-sm text-slate-500">{t('prodBatch.auditEmpty')}</p>
         ) : (
           <ol className="mt-4 space-y-0">
             {audit.map((ev, i) => (
@@ -928,7 +904,7 @@ function BatchDetail({
                   {i < audit.length - 1 && <span className="w-px flex-1 bg-slate-200" />}
                 </div>
                 <div className="pb-4">
-                  <div className="text-sm font-medium text-slate-900">{ACTION_LABEL[ev.action_type] ?? ev.action_type}</div>
+                  <div className="text-sm font-medium text-slate-900">{actionLabel(ev.action_type, t)}</div>
                   <div className="text-xs text-slate-500">
                     {formatDateTime(ev.created_at)} · {ev.user_name ?? '—'}{ev.role_code ? ` (${ev.role_code})` : ''}
                   </div>
@@ -965,6 +941,7 @@ function CreateBatchModal({
   onClose: () => void
   onCreate: (asDraft: boolean) => void
 }) {
+  const { t } = useI18n()
   const activeProducts = products.filter((p) => p.is_active || p.id === form.product_id)
 
   function selectProduct(productId: string) {
@@ -988,8 +965,8 @@ function CreateBatchModal({
       <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-slate-200 bg-white shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div>
-            <h2 className="text-[18px] font-semibold text-slate-950">Новая производственная серия</h2>
-            <p className="text-xs text-slate-500">Выберите ЛС из справочника — код и следующий номер подставятся автоматически.</p>
+            <h2 className="text-[18px] font-semibold text-slate-950">{t('prodBatch.createTitle')}</h2>
+            <p className="text-xs text-slate-500">{t('prodBatch.createSubtitle')}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
             <X size={18} />
@@ -999,13 +976,13 @@ function CreateBatchModal({
         <div className="space-y-4 p-5">
           {products.length === 0 && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              В справочнике пока нет ЛС. Сначала добавьте продукт через «Справочник ЛС».
+              {t('prodBatch.noProductsHint')}
             </div>
           )}
           <div className="grid grid-cols-[1fr_120px] gap-3">
-            <Field label="Лекарственное средство (ЛС)">
+            <Field label={t('prodBatch.product')}>
               <select className="input" value={form.product_id} onChange={(e) => selectProduct(e.target.value)}>
-                <option value="">— выберите ЛС —</option>
+                <option value="">{t('prodBatch.selectProduct')}</option>
                 {activeProducts.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.code} · {p.market_code} · {p.name}{p.dosage_form ? ` · ${p.dosage_form}` : ''}
@@ -1013,48 +990,48 @@ function CreateBatchModal({
                 ))}
               </select>
             </Field>
-            <Field label="Код продукта">
+            <Field label={t('prodBatch.productCode')}>
               <input className="input font-mono bg-slate-50" value={form.product_code} readOnly />
             </Field>
           </div>
-          <Field label="Наименование ЛС (можно править)">
+          <Field label={t('prodBatch.productNameEditable')}>
             <input className="input" value={form.product_name} onChange={(e) => onChange({ ...form, product_name: e.target.value })} />
           </Field>
-          <Field label="Лекарственная форма / дозировка">
+          <Field label={t('prodBatch.dosageForm')}>
             <input className="input" value={form.dosage_form} onChange={(e) => onChange({ ...form, dosage_form: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Дата производства">
+            <Field label={t('prodBatch.thProdDate')}>
               <input type="date" className="input" value={form.production_date} onChange={(e) => onChange({ ...form, production_date: e.target.value })} />
             </Field>
-            <Field label="Срок годности, мес.">
+            <Field label={t('prodBatch.shelfLifeMonths')}>
               <input type="number" min={1} className="input" value={form.shelf_life_months} onChange={(e) => onChange({ ...form, shelf_life_months: e.target.value })} />
             </Field>
           </div>
           <div className="grid grid-cols-[1fr_120px] gap-3">
-            <Field label="Размер серии">
+            <Field label={t('prodBatch.batchSize')}>
               <input type="number" min={0} className="input" value={form.batch_size} onChange={(e) => onChange({ ...form, batch_size: e.target.value })} />
             </Field>
-            <Field label="Ед.">
+            <Field label={t('prodBatch.unitShort')}>
               <input className="input" value={form.batch_size_unit} onChange={(e) => onChange({ ...form, batch_size_unit: e.target.value })} />
             </Field>
           </div>
-          <Field label="Примечание">
+          <Field label={t('prodBatch.note')}>
             <textarea rows={2} className="input min-h-[70px] py-2" value={form.notes} onChange={(e) => onChange({ ...form, notes: e.target.value })} />
           </Field>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Последняя серия по этому ЛС</div>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">{t('prodBatch.lastBatchForProduct')}</div>
               <div className="mt-1 font-mono text-lg font-semibold text-slate-950">{lastForProduct?.batch_no ?? '-'}</div>
               <div className="mt-1 text-xs text-slate-500">
-                {lastForProduct ? `${lastForProduct.product_name} · № ${String(lastForProduct.serial_no).padStart(3, '0')}` : 'В базе пока нет серий по этому ЛС/рынку'}
+                {lastForProduct ? `${lastForProduct.product_name} · № ${String(lastForProduct.serial_no).padStart(3, '0')}` : t('prodBatch.noBatchesYet')}
               </div>
             </div>
             <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-3">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-blue-600">Предлагаемый номер</div>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-blue-600">{t('prodBatch.suggestedNumber')}</div>
               <div className="mt-1 font-mono text-lg font-semibold text-blue-950">{preview?.batch_no ?? '-'}</div>
-              <div className="mt-1 text-xs text-blue-700">Годен до: {formatDate(preview?.expiry_date ?? null)}</div>
+              <div className="mt-1 text-xs text-blue-700">{t('prodBatch.validUntilColon', { date: formatDate(preview?.expiry_date ?? null) })}</div>
             </div>
           </div>
 
@@ -1066,15 +1043,15 @@ function CreateBatchModal({
                 checked={form.manual_number}
                 onChange={(e) => onChange({ ...form, manual_number: e.target.checked, batch_no_override: e.target.checked ? (preview?.batch_no ?? '') : '', override_reason: '' })}
               />
-              Править номер серии вручную (СОП-409 — с указанием причины)
+              {t('prodBatch.manualNumber')}
             </label>
             {form.manual_number && (
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <Field label="Номер серии (вручную)">
+                <Field label={t('prodBatch.manualNumberField')}>
                   <input className="input font-mono" value={form.batch_no_override} onChange={(e) => onChange({ ...form, batch_no_override: e.target.value })} />
                 </Field>
-                <Field label="Причина корректировки (обязательно)">
-                  <input className="input" value={form.override_reason} onChange={(e) => onChange({ ...form, override_reason: e.target.value })} placeholder="Напр.: коррекция по журналу регистрации серий" />
+                <Field label={t('prodBatch.overrideReasonField')}>
+                  <input className="input" value={form.override_reason} onChange={(e) => onChange({ ...form, override_reason: e.target.value })} placeholder={t('prodBatch.overrideReasonPh')} />
                 </Field>
               </div>
             )}
@@ -1082,10 +1059,10 @@ function CreateBatchModal({
         </div>
 
         <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4">
-          <p className="text-xs text-slate-500">Черновик можно сохранить без присвоения. Номер берётся из журнала серий (СОП-409); ручная правка — только с причиной и фиксируется в аудите.</p>
+          <p className="text-xs text-slate-500">{t('prodBatch.createFooterHint')}</p>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              Отмена
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -1093,7 +1070,7 @@ function CreateBatchModal({
               onClick={() => onCreate(true)}
               className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Сохранить черновик
+              {t('prodBatch.saveDraftBtn')}
             </button>
             <button
               type="button"
@@ -1102,7 +1079,7 @@ function CreateBatchModal({
               className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ShieldCheck size={16} />
-              Присвоить серию
+              {t('prodBatch.assignBatch')}
             </button>
           </div>
         </div>
@@ -1122,17 +1099,18 @@ function ProductsManagerModal({
   onSave: (input: { code?: string; market_code: string; market_name: string; name: string; dosage_form: string | null; default_shelf_life_months: number; batch_format: string | null; is_active: boolean; notes: string | null }, id: string | null) => void
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const [editId, setEditId] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [marketCode, setMarketCode] = useState('UZ')
-  const [marketName, setMarketName] = useState('Узбекистан')
+  const [marketName, setMarketName] = useState(() => t('prodBatch.defaultMarketName'))
   const [name, setName] = useState('')
   const [dosageForm, setDosageForm] = useState('')
   const [shelfLife, setShelfLife] = useState('24')
   const [isActive, setIsActive] = useState(true)
 
   function reset() {
-    setEditId(null); setCode(''); setMarketCode('UZ'); setMarketName('Узбекистан'); setName(''); setDosageForm(''); setShelfLife('24'); setIsActive(true)
+    setEditId(null); setCode(''); setMarketCode('UZ'); setMarketName(t('prodBatch.defaultMarketName')); setName(''); setDosageForm(''); setShelfLife('24'); setIsActive(true)
   }
   function startEdit(p: ProductItem) {
     setEditId(p.id); setCode(p.code); setMarketCode(p.market_code); setMarketName(p.market_name); setName(p.name); setDosageForm(p.dosage_form ?? '')
@@ -1159,8 +1137,8 @@ function ProductsManagerModal({
       <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-slate-200 bg-white shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div>
-            <h2 className="text-[18px] font-semibold text-slate-950">Справочник продуктов (ЛС)</h2>
-            <p className="text-xs text-slate-500">Код по СОП-409 + рынок. Нумерация серий ведётся отдельно по каждому ЛС/рынку.</p>
+            <h2 className="text-[18px] font-semibold text-slate-950">{t('prodBatch.catalogTitle')}</h2>
+            <p className="text-xs text-slate-500">{t('prodBatch.catalogSubtitle')}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
             <X size={18} />
@@ -1169,39 +1147,39 @@ function ProductsManagerModal({
 
         <div className="space-y-4 p-5">
           <div className="grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-[110px_120px_1fr_140px]">
-            <Field label="Код">
+            <Field label={t('prodBatch.fieldCode')}>
               <input className="input font-mono disabled:bg-slate-100" maxLength={8} value={code} disabled={!!editId} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} />
             </Field>
-            <Field label="Рынок">
+            <Field label={t('prodBatch.market')}>
               <input className="input font-mono uppercase" maxLength={16} value={marketCode} onChange={(e) => setMarketCode(e.target.value.toUpperCase().replace(/[^A-Z_]/g, '').slice(0, 16))} />
             </Field>
-            <Field label="Название рынка">
+            <Field label={t('prodBatch.marketName')}>
               <input className="input" value={marketName} onChange={(e) => setMarketName(e.target.value)} />
             </Field>
-            <Field label="Наименование ЛС">
+            <Field label={t('prodBatch.productName')}>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
-            <Field label="Срок хр., мес.">
+            <Field label={t('prodBatch.shelfLifeShort')}>
               <input type="number" min={1} className="input" value={shelfLife} onChange={(e) => setShelfLife(e.target.value)} />
             </Field>
-            <Field label="Лекарственная форма / дозировка">
+            <Field label={t('prodBatch.dosageForm')}>
               <input className="input" value={dosageForm} onChange={(e) => setDosageForm(e.target.value)} />
             </Field>
-            <Field label="Активен">
+            <Field label={t('prodBatch.activeLabel')}>
               <label className="flex h-10 items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-                в работе
+                {t('prodBatch.inUse')}
               </label>
             </Field>
             <div className="flex items-end gap-2">
               {editId && (
                 <button type="button" onClick={reset} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                  Сброс
+                  {t('prodBatch.reset')}
                 </button>
               )}
               <button type="button" disabled={invalid || isLoading} onClick={submit} className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
                 <Plus size={16} />
-                {editId ? 'Сохранить' : 'Добавить'}
+                {editId ? t('common.save') : t('prodBatch.addBtn')}
               </button>
             </div>
           </div>
@@ -1210,18 +1188,18 @@ function ProductsManagerModal({
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 text-[11px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Код</th>
-                  <th className="px-3 py-2">Рынок</th>
-                  <th className="px-3 py-2">Наименование</th>
-                  <th className="px-3 py-2">Форма</th>
-                  <th className="px-3 py-2">Срок хр.</th>
-                  <th className="px-3 py-2">Статус</th>
+                  <th className="px-3 py-2">{t('prodBatch.fieldCode')}</th>
+                  <th className="px-3 py-2">{t('prodBatch.market')}</th>
+                  <th className="px-3 py-2">{t('prodBatch.thName')}</th>
+                  <th className="px-3 py-2">{t('prodBatch.thForm')}</th>
+                  <th className="px-3 py-2">{t('prodBatch.thShelfLife')}</th>
+                  <th className="px-3 py-2">{t('prodBatch.thStatus')}</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
               <tbody>
                 {products.length === 0 ? (
-                  <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">Справочник пуст.</td></tr>
+                  <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">{t('prodBatch.catalogEmpty')}</td></tr>
                 ) : (
                   products.map((p) => (
                     <tr key={p.id} className="border-t border-slate-100">
@@ -1234,15 +1212,15 @@ function ProductsManagerModal({
                       </td>
                       <td className="px-3 py-2 text-slate-800">{p.name}</td>
                       <td className="px-3 py-2 text-slate-600">{p.dosage_form || '-'}</td>
-                      <td className="px-3 py-2 font-mono text-slate-600">{p.default_shelf_life_months} мес.</td>
+                      <td className="px-3 py-2 font-mono text-slate-600">{t('prodBatch.monthsN', { n: p.default_shelf_life_months })}</td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${p.is_active ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-500'}`}>
-                          {p.is_active ? 'Активен' : 'Архив'}
+                          {p.is_active ? t('prodBatch.productActive') : t('prodBatch.productArchived')}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right">
                         <button type="button" onClick={() => startEdit(p)} className="rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                          Изменить
+                          {t('common.edit')}
                         </button>
                       </td>
                     </tr>
@@ -1289,9 +1267,10 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useI18n()
   return (
     <span className={`inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[status] ?? STATUS_STYLE.assigned}`}>
-      {STATUS_LABEL[status] ?? status}
+      {statusLabel(status, t)}
     </span>
   )
 }
