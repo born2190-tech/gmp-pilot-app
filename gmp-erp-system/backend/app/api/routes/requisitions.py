@@ -29,6 +29,7 @@ from app.services.requisitions import (
     prefill_requisition,
     update_allocation,
     verify_requisition_scan,
+    view_scope_for,
 )
 
 router = APIRouter(prefix="/api/requisitions", tags=["requisitions"])
@@ -41,7 +42,7 @@ def create(
     user: CurrentUser = Depends(get_current_user),
 ) -> RequisitionItem:
     req = create_requisition(db, user, payload)
-    return RequisitionItem.model_validate(build_requisition_item(db, req))
+    return RequisitionItem.model_validate(build_requisition_item(db, req, view_scope_for(user)))
 
 
 @router.get("/prefill/{batch_id}", response_model=RequisitionPrefillResponse)
@@ -60,7 +61,8 @@ def list_all(
     user: CurrentUser = Depends(get_current_user),
 ) -> RequisitionsResponse:
     reqs = list_requisitions(db, user, status_filter=status)
-    items = [RequisitionItem.model_validate(build_requisition_item(db, r)) for r in reqs]
+    scope = view_scope_for(user)
+    items = [RequisitionItem.model_validate(build_requisition_item(db, r, scope)) for r in reqs]
     return RequisitionsResponse(requisitions=items)
 
 
@@ -71,7 +73,7 @@ def get_one(
     user: CurrentUser = Depends(get_current_user),
 ) -> RequisitionItem:
     req = get_requisition(db, user, requisition_id)
-    return RequisitionItem.model_validate(build_requisition_item(db, req))
+    return RequisitionItem.model_validate(build_requisition_item(db, req, view_scope_for(user)))
 
 
 @router.post("/{requisition_id}/allocate", response_model=RequisitionItem)
@@ -82,7 +84,7 @@ def allocate(
 ) -> RequisitionItem:
     """Run FEFO auto-allocation for this warehouse's lines."""
     req = auto_allocate(db, user, requisition_id)
-    return RequisitionItem.model_validate(build_requisition_item(db, req))
+    return RequisitionItem.model_validate(build_requisition_item(db, req, view_scope_for(user)))
 
 
 @router.patch("/{requisition_id}/allocation", response_model=RequisitionItem)
@@ -94,7 +96,7 @@ def patch_allocation(
 ) -> RequisitionItem:
     """Manually update allocation lines (add / update quantity / remove)."""
     req = update_allocation(db, user, requisition_id, payload)
-    return RequisitionItem.model_validate(build_requisition_item(db, req))
+    return RequisitionItem.model_validate(build_requisition_item(db, req, view_scope_for(user)))
 
 
 @router.post("/{requisition_id}/issue", response_model=RequisitionItem)
@@ -106,7 +108,7 @@ def issue(
 ) -> RequisitionItem:
     """Sign and issue all allocation lines for this warehouse. Creates InventoryMovements."""
     req = issue_requisition(db, user, requisition_id, payload)
-    return RequisitionItem.model_validate(build_requisition_item(db, req))
+    return RequisitionItem.model_validate(build_requisition_item(db, req, view_scope_for(user)))
 
 
 @router.post("/{requisition_id}/verify-scan", response_model=RequisitionItem)
@@ -118,7 +120,7 @@ async def verify_scan(
 ) -> RequisitionItem:
     raw = await file.read()
     req = verify_requisition_scan(db, user, requisition_id, raw, file.content_type)
-    return RequisitionItem.model_validate(build_requisition_item(db, req))
+    return RequisitionItem.model_validate(build_requisition_item(db, req, view_scope_for(user)))
 
 
 @router.get("/{requisition_id}/pdf")
@@ -137,7 +139,7 @@ def download_pdf(
     from app.services.document_qr import make_document_qr_payload
     state_hash = hashlib.sha256(f"{req.requisition_no}|{req.status}|{len(req.lines)}".encode("utf-8")).hexdigest()
     qr_payload = make_document_qr_payload("requisition", req.id, state_hash)
-    pdf_bytes = render_internal_transfer_pdf(req, materials_by_id, qr_payload=qr_payload)
+    pdf_bytes = render_internal_transfer_pdf(req, materials_by_id, qr_payload=qr_payload, scope=view_scope_for(user))
 
     filename = f"requisition-{req.requisition_no}.pdf"
     # RFC 5987 for non-ASCII filenames (Cyrillic safe).

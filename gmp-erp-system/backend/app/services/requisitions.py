@@ -47,6 +47,15 @@ def _require_any_permission(user: CurrentUser, permission_codes: tuple[str, ...]
         )
 
 
+def view_scope_for(user: CurrentUser) -> str | None:
+    """Тип склада, которым ограничено представление требования для данного
+    пользователя. Производство/ДОК видят документ целиком (None); склад-
+    пользователь — только свою часть (строки своего склада)."""
+    if "VIEW_PRODUCTION" in user.permissions or "MANAGE_PRODUCTION" in user.permissions:
+        return None
+    return user.warehouse_scope or None
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -621,6 +630,12 @@ def list_requisitions(db: Session, user: CurrentUser, status_filter: str | None 
     query = db.query(ProductionRequisition).order_by(ProductionRequisition.created_at.desc())
     if status_filter:
         query = query.filter(ProductionRequisition.status == status_filter)
+    scope = view_scope_for(user)
+    if scope:
+        # Склад видит только требования, в которых есть строки его склада.
+        query = query.filter(
+            ProductionRequisition.lines.any(RequisitionLine.warehouse_type == scope)
+        )
     return query.all()
 
 
@@ -639,10 +654,16 @@ def list_requisitions_for_batch(db: Session, user: CurrentUser, batch_id: uuid.U
     )
 
 
-def build_requisition_item(db: Session, req: ProductionRequisition) -> dict:
-    """Build full nested response dict with allocation details."""
+def build_requisition_item(db: Session, req: ProductionRequisition, scope: str | None = None) -> dict:
+    """Build full nested response dict with allocation details.
+
+    Если задан ``scope`` (тип склада), возвращаются только строки этого склада
+    — «часть требования» для склад-пользователя. Производство/ДОК получают
+    документ целиком (scope=None)."""
+    all_lines = list(req.lines)
+    visible_lines = [l for l in all_lines if l.warehouse_type == scope] if scope else all_lines
     result_lines = []
-    for line in req.lines:
+    for line in visible_lines:
         material = db.get(Material, line.material_id)
         alloc_items = []
         for alloc in line.allocation_lines:
@@ -700,4 +721,7 @@ def build_requisition_item(db: Session, req: ProductionRequisition) -> dict:
         "scan_verified_at": req.scan_verified_at,
         "created_at": req.created_at,
         "lines": result_lines,
+        "view_scope": scope,
+        "is_partial_view": bool(scope) and len(visible_lines) != len(all_lines),
+        "total_lines": len(all_lines),
     }

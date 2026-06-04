@@ -1058,6 +1058,9 @@ export interface RequisitionItem {
   scan_verified_at?: string | null
   created_at: string
   lines: RequisitionLineItem[]
+  view_scope?: string | null
+  is_partial_view?: boolean
+  total_lines?: number
 }
 
 export interface RequisitionsResponse {

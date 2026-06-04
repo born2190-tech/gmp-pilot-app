@@ -809,6 +809,22 @@ function DetailView({
         {scanErr && <div className="mt-1 rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-[12.5px] text-rose-700">{scanErr}</div>}
       </div>
 
+      {req.view_scope && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+          <ClipboardList size={15} className="shrink-0" />
+          <span className="font-medium">
+            {req.view_scope === 'PACKAGING_WAREHOUSE'
+              ? t('requisitions.partialViewPackaging')
+              : t('requisitions.partialViewSubstance')}
+          </span>
+          {req.is_partial_view && typeof req.total_lines === 'number' && (
+            <span className="text-amber-700">
+              · {t('requisitions.partialViewHidden', { n: String(req.total_lines - req.lines.length) })}
+            </span>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" />

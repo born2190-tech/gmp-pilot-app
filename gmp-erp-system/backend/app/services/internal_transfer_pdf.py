@@ -89,7 +89,14 @@ def render_internal_transfer_pdf(
     req: ProductionRequisition,
     materials_by_id: dict,
     qr_payload: str | None = None,
+    scope: str | None = None,
 ) -> bytes:
+    """``scope`` ограничивает печать частью требования для конкретного склада:
+    ``PACKAGING_WAREHOUSE`` — только секция упаковочных материалов,
+    ``SUBSTANCE_WAREHOUSE`` — только секция сырья. ``None`` — весь документ
+    (для производства)."""
+    show_raw = scope in (None, "SUBSTANCE_WAREHOUSE")
+    show_pkg = scope in (None, "PACKAGING_WAREHOUSE")
     body_font, bold_font = _register_fonts()
     buffer = io.BytesIO()
 
@@ -177,6 +184,18 @@ def render_internal_transfer_pdf(
             title_style,
         )
     )
+    if scope:
+        scope_label = (
+            "Часть требования: упаковочные материалы (склад упаковки)"
+            if scope == "PACKAGING_WAREHOUSE"
+            else "Часть требования: сырьё и вспомогательные вещества (склад субстанций)"
+        )
+        elements.append(
+            Paragraph(
+                scope_label,
+                ParagraphStyle("scope", fontName=bold_font, fontSize=9, leading=12, alignment=1, textColor=colors.HexColor("#b45309")),
+            )
+        )
     elements.append(Spacer(1, 4 * mm))
 
     # --- product / batch meta -------------------------------------------------
@@ -306,23 +325,25 @@ def render_internal_transfer_pdf(
         return t
 
     # Raw materials section
-    elements.append(_section_header("Сырьё и вспомогательные вещества / Raw materials"))
-    elements.append(_materials_table(raw_lines, is_packaging=False))
-    elements.append(Spacer(1, 2 * mm))
-    elements.append(
-        Paragraph(
-            "* Qty as per 100% potency, increase / decrease in qty to be adjusted with Lactose "
-            "monohydrate as per actual potency.<br/>"
-            "** 10% additional qty taken in order to compensate losses during coating.",
-            ParagraphStyle("note", fontName=body_font, fontSize=7.5, leading=9, textColor=colors.HexColor("#475569")),
+    if show_raw:
+        elements.append(_section_header("Сырьё и вспомогательные вещества / Raw materials"))
+        elements.append(_materials_table(raw_lines, is_packaging=False))
+        elements.append(Spacer(1, 2 * mm))
+        elements.append(
+            Paragraph(
+                "* Qty as per 100% potency, increase / decrease in qty to be adjusted with Lactose "
+                "monohydrate as per actual potency.<br/>"
+                "** 10% additional qty taken in order to compensate losses during coating.",
+                ParagraphStyle("note", fontName=body_font, fontSize=7.5, leading=9, textColor=colors.HexColor("#475569")),
+            )
         )
-    )
-    elements.append(Spacer(1, 4 * mm))
+        elements.append(Spacer(1, 4 * mm))
 
     # Packaging section
-    elements.append(_section_header("Упаковочные материалы / Packaging materials"))
-    elements.append(_materials_table(pkg_lines, is_packaging=True))
-    elements.append(Spacer(1, 6 * mm))
+    if show_pkg:
+        elements.append(_section_header("Упаковочные материалы / Packaging materials"))
+        elements.append(_materials_table(pkg_lines, is_packaging=True))
+        elements.append(Spacer(1, 6 * mm))
 
     # --- signatures -----------------------------------------------------------
     sig_data = [

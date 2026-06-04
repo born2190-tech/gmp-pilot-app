@@ -636,6 +636,11 @@ class RequisitionItem(BaseModel):
     scan_verified_at: datetime | None = None
     created_at: datetime
     lines: list[RequisitionLineItem]
+    # Скоуп представления: для склад-пользователя возвращаются только строки
+    # его склада (часть требования); для производства/ДОК — весь документ.
+    view_scope: str | None = None
+    is_partial_view: bool = False
+    total_lines: int = 0
 
 
 class RequisitionsResponse(BaseModel):
