@@ -3,7 +3,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
-from sqlalchemy import String, cast, func, literal, or_
+from sqlalchemy import String, and_, cast, func, literal, or_
 from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import CurrentUser, get_current_user
@@ -64,6 +64,7 @@ from app.schemas.inventory import (
     ReceiptCertificatesResponse,
     ReceiptCreate,
     ReceiptResponse,
+    ReceiptResponseLine,
     SignatureRequest,
     TransferLotRequest,
 )
@@ -238,7 +239,31 @@ def create_receipt(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ReceiptResponse:
     receipt = create_receipt_draft(db, current_user, payload)
-    return ReceiptResponse(id=receipt.id, document_no=receipt.document_no, status=receipt.status)
+    rows = (
+        db.query(ReceiptLine, Material, Manufacturer)
+        .join(Material, Material.id == ReceiptLine.material_id)
+        .join(Manufacturer, Manufacturer.id == ReceiptLine.manufacturer_id)
+        .filter(ReceiptLine.receipt_id == receipt.id)
+        .order_by(ReceiptLine.created_at)
+        .all()
+    )
+    return ReceiptResponse(
+        id=receipt.id,
+        document_no=receipt.document_no,
+        status=receipt.status,
+        lines=[
+            ReceiptResponseLine(
+                id=line.id,
+                material_code=material.code,
+                material_name=material.name,
+                supplier_lot=line.supplier_lot,
+                manufacturer_name=manufacturer.name,
+                quantity=line.quantity,
+                unit=line.unit,
+            )
+            for line, material, manufacturer in rows
+        ],
+    )
 
 
 @router.post("/receipts/{receipt_id}/post", response_model=PostReceiptResponse)
@@ -273,13 +298,14 @@ async def upload_receipt_certificate(
     receipt_id: UUID,
     file: UploadFile = File(...),
     certificate_no: str | None = Query(default=None),
+    receipt_line_id: UUID | None = Query(default=None),
     note: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ReceiptCertificateItem:
     from app.services.receipt_certificates import upload_certificate
 
-    cert = await upload_certificate(db, current_user, receipt_id, file, certificate_no, note)
+    cert = await upload_certificate(db, current_user, receipt_id, file, certificate_no, note, receipt_line_id)
     return _certificate_item(cert)
 
 
@@ -301,10 +327,25 @@ def download_lot_certificate(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
-    """Сертификат CoA для партии — через RECEIPT-движение находим приход и
-    отдаём последний приложенный к нему сертификат."""
+    """Сертификат CoA для партии: новые партии получают CoA по своей строке
+    прихода; старые партии без receipt_line_id используют legacy-поиск по приходу."""
     require_permission(current_user, "VIEW_WAREHOUSE")
     from app.services.receipt_certificates import load_certificate_file
+
+    lot = db.get(Lot, lot_id)
+    if not lot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lot not found")
+
+    if lot.receipt_line_id:
+        cert = (
+            db.query(ReceiptCertificate)
+            .filter(ReceiptCertificate.receipt_line_id == lot.receipt_line_id)
+            .order_by(ReceiptCertificate.uploaded_at.desc())
+            .first()
+        )
+        if cert:
+            raw, mime = load_certificate_file(db, current_user, cert.id)
+            return Response(content=raw, media_type=mime)
 
     movement = (
         db.query(InventoryMovement)
@@ -430,14 +471,28 @@ def list_lots(
         .correlate(Lot)
         .scalar_subquery()
     )
-    # Наличие сертификата CoA: партия → RECEIPT-движение (document_id =
-    # receipt) → сертификаты этого прихода.
-    has_certificate = (
+    # Наличие сертификата CoA: для новых партий проверяем сертификат строки
+    # прихода, для старых партий без receipt_line_id оставляем legacy-поиск по приходу.
+    has_line_certificate = (
         db.query(ReceiptCertificate.id)
-        .join(InventoryMovement, InventoryMovement.document_id == ReceiptCertificate.receipt_id)
-        .filter(InventoryMovement.lot_id == Lot.id, InventoryMovement.movement_type == "RECEIPT")
+        .filter(ReceiptCertificate.receipt_line_id == Lot.receipt_line_id)
         .correlate(Lot)
         .exists()
+    )
+    has_legacy_receipt_certificate = (
+        db.query(ReceiptCertificate.id)
+        .join(InventoryMovement, InventoryMovement.document_id == ReceiptCertificate.receipt_id)
+        .filter(
+            InventoryMovement.lot_id == Lot.id,
+            InventoryMovement.movement_type == "RECEIPT",
+            ReceiptCertificate.receipt_line_id.is_(None),
+        )
+        .correlate(Lot)
+        .exists()
+    )
+    has_certificate = or_(
+        and_(Lot.receipt_line_id.isnot(None), has_line_certificate),
+        and_(Lot.receipt_line_id.is_(None), has_legacy_receipt_certificate),
     )
     # № счёта-фактуры и № ГТД: партия → RECEIPT-движение → приход/декларация.
     invoice_no_sq = (

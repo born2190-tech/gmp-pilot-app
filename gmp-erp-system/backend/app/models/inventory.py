@@ -76,8 +76,8 @@ class ReceiptDefectPhoto(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class ReceiptCertificate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Сертификат качества производителя (CoA), приложенный при приёмке.
 
-    Для склада субстанций — обязателен: проведение прихода блокируется,
-    пока не приложен хотя бы один CoA. Файл хранится на диске (как и прочие
+    Для склада субстанций — обязателен по каждой строке/серии: проведение
+    прихода блокируется, пока не приложен CoA к каждой строке. Файл хранится на диске (как и прочие
     скан-копии), в БД — путь + sha256 для контроля целостности. Источник
     файла — загрузка или (в будущем) нативный сканер-агент.
     """
@@ -173,6 +173,7 @@ class Lot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "lots"
 
     material_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("materials.id"), nullable=False)
+    receipt_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("receipt_lines.id"), nullable=True)
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=True)
     manufacturer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("manufacturers.id"), nullable=False)
     supplier_lot: Mapped[str | None] = mapped_column(String(128), nullable=True)

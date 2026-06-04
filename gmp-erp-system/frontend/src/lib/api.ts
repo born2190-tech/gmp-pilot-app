@@ -681,11 +681,15 @@ export async function uploadReceiptCertificate(
   receiptId: string,
   file: File,
   certificateNo?: string,
+  receiptLineId?: string,
 ): Promise<ReceiptCertificateItem> {
   const form = new FormData()
   form.append('file', file)
-  const qs = certificateNo ? `?certificate_no=${encodeURIComponent(certificateNo)}` : ''
-  const response = await fetch(`/api/inventory/receipts/${receiptId}/certificates${qs}`, {
+  const qs = new URLSearchParams()
+  if (certificateNo) qs.set('certificate_no', certificateNo)
+  if (receiptLineId) qs.set('receipt_line_id', receiptLineId)
+  const query = qs.toString()
+  const response = await fetch(`/api/inventory/receipts/${receiptId}/certificates${query ? `?${query}` : ''}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,

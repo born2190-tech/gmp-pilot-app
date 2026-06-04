@@ -1,7 +1,7 @@
 """Сертификаты качества производителя (CoA) при приёмке.
 
-Для склада субстанций CoA обязателен — post_receipt блокируется, пока
-не приложен хотя бы один сертификат. Файлы хранятся на диске рядом с
+Для склада субстанций CoA обязателен по каждой строке приемки — post_receipt
+блокируется, пока к каждой строке не приложен свой сертификат. Файлы хранятся на диске рядом с
 прочими скан-копиями, в БД — путь + sha256.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
 from app.core.config import settings
-from app.models.inventory import ReceiptCertificate, ReceiptDocument
+from app.models.inventory import ReceiptCertificate, ReceiptDocument, ReceiptLine
 from app.services.audit import write_audit
 from app.services.permissions import require_permission
 
@@ -46,11 +46,19 @@ async def upload_certificate(
     file: UploadFile,
     certificate_no: str | None = None,
     note: str | None = None,
+    receipt_line_id: UUID | None = None,
 ) -> ReceiptCertificate:
     require_permission(user, "CREATE_RECEIPT")
     receipt = db.get(ReceiptDocument, receipt_id)
     if not receipt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt not found")
+    receipt_line = None
+    if receipt_line_id:
+        receipt_line = db.get(ReceiptLine, receipt_line_id)
+        if not receipt_line:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Receipt line not found")
+        if receipt_line.receipt_id != receipt.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Receipt line does not belong to this receipt")
     if file.content_type not in CERT_MIMES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -74,6 +82,7 @@ async def upload_certificate(
 
     cert = ReceiptCertificate(
         receipt_id=receipt.id,
+        receipt_line_id=receipt_line.id if receipt_line else None,
         certificate_no=(certificate_no or "").strip() or None,
         note=(note or "").strip() or None,
         file_path=str(file_path),
@@ -92,6 +101,7 @@ async def upload_certificate(
         action_type="UPLOAD_RECEIPT_COA",
         new_value={
             "receipt_no": receipt.document_no,
+            "receipt_line_id": str(cert.receipt_line_id) if cert.receipt_line_id else None,
             "certificate_no": cert.certificate_no,
             "sha256": sha,
             "size": len(raw),
@@ -114,6 +124,29 @@ def list_certificates(db: Session, user: CurrentUser, receipt_id: UUID) -> list[
 
 def has_certificate(db: Session, receipt_id: UUID) -> bool:
     return db.query(ReceiptCertificate.id).filter(ReceiptCertificate.receipt_id == receipt_id).first() is not None
+
+
+def missing_certificate_lines(db: Session, receipt_id: UUID) -> list[ReceiptLine]:
+    """Строки прихода, по которым нет своего CoA.
+
+    Legacy-сертификаты без receipt_line_id не засчитываются для новых
+    многострочных приходов: пользователь должен явно привязать CoA к материалу.
+    """
+    lines = db.query(ReceiptLine).filter(ReceiptLine.receipt_id == receipt_id).order_by(ReceiptLine.created_at).all()
+    covered_line_ids = {
+        row[0]
+        for row in (
+            db.query(ReceiptCertificate.receipt_line_id)
+            .filter(ReceiptCertificate.receipt_id == receipt_id, ReceiptCertificate.receipt_line_id.isnot(None))
+            .distinct()
+            .all()
+        )
+    }
+    return [line for line in lines if line.id not in covered_line_ids]
+
+
+def has_certificate_for_each_line(db: Session, receipt_id: UUID) -> bool:
+    return len(missing_certificate_lines(db, receipt_id)) == 0
 
 
 def load_certificate_file(db: Session, user: CurrentUser, certificate_id: UUID) -> tuple[bytes, str]:

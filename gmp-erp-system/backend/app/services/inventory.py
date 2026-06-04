@@ -215,16 +215,22 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
         )
 
     # СОП-533: для склада субстанций обязателен сертификат качества
-    # производителя (CoA). Проведение прихода без приложенного CoA запрещено.
+    # производителя (CoA) по каждой строке/серии прихода.
     if warehouse.warehouse_type == "SUBSTANCE_WAREHOUSE":
-        from app.services.receipt_certificates import has_certificate
+        from app.services.receipt_certificates import missing_certificate_lines
 
-        if not has_certificate(db, receipt.id):
+        missing_lines = missing_certificate_lines(db, receipt.id)
+        if missing_lines:
+            missing = "; ".join(
+                f"{line.material.name if line.material else line.material_id} / {line.supplier_lot or '-'}"
+                for line in missing_lines[:6]
+            )
+            suffix = "..." if len(missing_lines) > 6 else ""
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Невозможно провести приход субстанции без сертификата "
-                    "качества производителя (CoA). Приложите скан/фото сертификата."
+                    "Невозможно провести приход субстанций: CoA должен быть приложен к каждой строке. "
+                    f"Нет CoA для: {missing}{suffix}"
                 ),
             )
 
@@ -248,6 +254,7 @@ def post_receipt(db: Session, user: CurrentUser, receipt_id: UUID, signature: Si
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Material series already exists: {series}")
         lot = Lot(
             material_id=line.material_id,
+            receipt_line_id=line.id,
             supplier_id=line.supplier_id,
             manufacturer_id=line.manufacturer_id,
             supplier_lot=line.supplier_lot or None,

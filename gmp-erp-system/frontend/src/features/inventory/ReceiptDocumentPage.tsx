@@ -30,6 +30,7 @@ import type {
   ReceiptCreate,
   ReceiptDefectItem,
   ReceiptDefectSeverity,
+  ReceiptResponseLine,
   SupplierItem,
   WarehouseItem,
 } from '../../types/inventory'
@@ -133,9 +134,12 @@ interface PostedSummary {
 interface PendingDraft {
   id: string
   documentNo: string
+  lines: ReceiptResponseLine[]
   password: string
   reason: string
 }
+
+const QC_NOTIFICATION_WAREHOUSE_TYPES = new Set(['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'])
 
 type ReferenceDialogType = 'material' | 'manufacturer' | 'supplier'
 
@@ -467,6 +471,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
         setPendingDraft({
           id: receipt.id,
           documentNo: receipt.document_no,
+          lines: receipt.lines,
           password: values.signature_password,
           reason: values.reason,
         })
@@ -547,13 +552,13 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
               {postedSummary.notificationNo ? (
                 <p className="mt-1 text-sm">{t('qcNotifications.createSuccess', { no: postedSummary.notificationNo })}</p>
               ) : (
-                postedSummary.warehouseType === 'SUBSTANCE_WAREHOUSE' && (
+                QC_NOTIFICATION_WAREHOUSE_TYPES.has(postedSummary.warehouseType) && (
                   <p className="mt-1 text-sm">{t('receipt.qcNotificationManualHint')}</p>
                 )
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {postedSummary.warehouseType === 'SUBSTANCE_WAREHOUSE' && !postedSummary.notificationId && (
+              {QC_NOTIFICATION_WAREHOUSE_TYPES.has(postedSummary.warehouseType) && !postedSummary.notificationId && (
                 <Button
                   type="button"
                   onClick={() => {
@@ -1341,17 +1346,16 @@ function CoaPanel({
   onFinalize,
 }: {
   token: string
-  draft: { id: string; documentNo: string }
+  draft: { id: string; documentNo: string; lines: ReceiptResponseLine[] }
   isLoading: boolean
   onCancel: () => void
   onFinalize: () => void
 }) {
   const { t } = useI18n()
   const [certs, setCerts] = useState<ReceiptCertificateItem[]>([])
-  const [certNo, setCertNo] = useState('')
+  const [certNoByLine, setCertNoByLine] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   const reload = useCallback(async () => {
     try {
@@ -1366,12 +1370,12 @@ function CoaPanel({
     void reload()
   }, [reload])
 
-  async function handleUpload(file: File) {
+  async function handleUpload(lineId: string, file: File) {
     setBusy(true)
     setError(null)
     try {
-      await uploadReceiptCertificate(token, draft.id, file, certNo.trim() || undefined)
-      setCertNo('')
+      await uploadReceiptCertificate(token, draft.id, file, certNoByLine[lineId]?.trim() || undefined, lineId)
+      setCertNoByLine((prev) => ({ ...prev, [lineId]: '' }))
       await reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : t('receipt.coa.uploadFailed'))
@@ -1379,6 +1383,11 @@ function CoaPanel({
       setBusy(false)
     }
   }
+
+  const certByLine = new Map(certs.filter((c) => c.receipt_line_id).map((c) => [c.receipt_line_id, c]))
+  const uploadedCount = draft.lines.filter((line) => certByLine.has(line.id)).length
+  const allLinesCovered = draft.lines.length > 0 && uploadedCount === draft.lines.length
+  const legacyCerts = certs.filter((c) => !c.receipt_line_id)
 
   return (
     <div className="rounded-xl border-2 border-amber-300 bg-amber-50/40 p-5 shadow-sm">
@@ -1393,84 +1402,111 @@ function CoaPanel({
           </p>
         </div>
         <span className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-700">
-          {t('receipt.statusDraft')}
+          {t('receipt.coa.progress', { done: uploadedCount, total: draft.lines.length })}
         </span>
       </div>
 
       {error && <p className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
 
-      {/* Uploaded certificates */}
-      <div className="mt-4 space-y-2">
-        {certs.length === 0 ? (
+      {legacyCerts.length > 0 && (
+        <p className="mt-3 rounded-md border border-amber-300 bg-white px-3 py-2 text-[12px] text-amber-800">
+          {t('receipt.coa.legacyIgnored')}
+        </p>
+      )}
+
+      <div className="mt-4 space-y-3">
+        {draft.lines.length === 0 ? (
           <p className="rounded-md border border-dashed border-amber-300 bg-white/60 px-3 py-3 text-center text-[13px] text-amber-800">
             {t('receipt.coa.empty')}
           </p>
         ) : (
-          certs.map((c) => (
-            <div key={c.id} className="flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2">
-              <FileDown size={15} className="text-emerald-700" />
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-medium text-slate-900">
-                  {c.certificate_no || t('receipt.coa.noNumber')}
+          draft.lines.map((line) => {
+            const cert = certByLine.get(line.id)
+            const fileInputId = `coa-file-${line.id}`
+            return (
+              <div key={line.id} className={`rounded-lg border bg-white p-3 ${cert ? 'border-emerald-200' : 'border-amber-200'}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-[260px] flex-1">
+                    <div className="text-[13px] font-semibold text-slate-900">
+                      {line.material_code} · {line.material_name}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-slate-600">
+                      <span>{t('receipt.coa.lineLot')}: <b>{line.supplier_lot || '-'}</b></span>
+                      <span>{t('receipt.coa.lineManufacturer')}: <b>{line.manufacturer_name}</b></span>
+                      <span>{line.quantity} {line.unit}</span>
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${cert ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'}`}>
+                    {cert ? t('receipt.coa.attached') : t('receipt.coa.missing')}
+                  </span>
                 </div>
-                <div className="font-mono text-[10.5px] text-slate-500">
-                  sha256: {c.sha256_hash.slice(0, 12)}… · {(c.file_size / 1024).toFixed(0)} {t('common.kb')}
+
+                {cert && (
+                  <div className="mt-3 flex items-center gap-3 rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2">
+                    <FileDown size={15} className="text-emerald-700" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-medium text-slate-900">
+                        {cert.certificate_no || t('receipt.coa.noNumber')}
+                      </div>
+                      <div className="font-mono text-[10.5px] text-slate-500">
+                        sha256: {cert.sha256_hash.slice(0, 12)}... · {(cert.file_size / 1024).toFixed(0)} {t('common.kb')}
+                      </div>
+                    </div>
+                    <a
+                      href={`/api/inventory/receipt-certificates/${cert.id}/file`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[12px] font-medium text-blue-700 hover:underline"
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        const resp = await fetch(`/api/inventory/receipt-certificates/${cert.id}/file`, { headers: { Authorization: `Bearer ${token}` } })
+                        if (resp.ok) {
+                          const url = URL.createObjectURL(await resp.blob())
+                          window.open(url, '_blank', 'noopener,noreferrer')
+                          window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+                        }
+                      }}
+                    >
+                      {t('receipt.coa.view')}
+                    </a>
+                  </div>
+                )}
+
+                <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_auto_auto] lg:items-end">
+                  <label className="text-[12px] text-slate-700">
+                    <span className="mb-1 block">{t('receipt.coa.certNo')}</span>
+                    <input
+                      value={certNoByLine[line.id] || ''}
+                      onChange={(e) => setCertNoByLine((prev) => ({ ...prev, [line.id]: e.target.value }))}
+                      placeholder={t('receipt.coa.certNoPlaceholder')}
+                      className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
+                    />
+                  </label>
+                  <ScanButton onScanned={(file) => void handleUpload(line.id, file)} onError={setError} disabled={busy} asPdf />
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => document.getElementById(fileInputId)?.click()}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50"
+                  >
+                    <Paperclip size={15} /> {cert ? t('receipt.coa.replace') : t('receipt.coa.upload')}
+                  </button>
+                  <input
+                    id={fileInputId}
+                    type="file"
+                    accept="image/jpeg,image/png,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) void handleUpload(line.id, f)
+                      e.target.value = ''
+                    }}
+                  />
                 </div>
               </div>
-              <a
-                href={`/api/inventory/receipt-certificates/${c.id}/file`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[12px] font-medium text-blue-700 hover:underline"
-                onClick={async (e) => {
-                  // токен в заголовке нужен — качаем blob программно
-                  e.preventDefault()
-                  const resp = await fetch(`/api/inventory/receipt-certificates/${c.id}/file`, { headers: { Authorization: `Bearer ${token}` } })
-                  if (resp.ok) {
-                    const url = URL.createObjectURL(await resp.blob())
-                    window.open(url, '_blank', 'noopener,noreferrer')
-                    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-                  }
-                }}
-              >
-                {t('receipt.coa.view')}
-              </a>
-            </div>
-          ))
+            )
+          })
         )}
-      </div>
-
-      {/* Upload control */}
-      <div className="mt-4 flex flex-wrap items-end gap-2">
-        <label className="flex-1 min-w-[200px] text-[12px] text-slate-700">
-          <span className="mb-1 block">{t('receipt.coa.certNo')}</span>
-          <input
-            value={certNo}
-            onChange={(e) => setCertNo(e.target.value)}
-            placeholder={t('receipt.coa.certNoPlaceholder')}
-            className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400"
-          />
-        </label>
-        <ScanButton onScanned={(file) => void handleUpload(file)} onError={setError} disabled={busy} asPdf />
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => fileRef.current?.click()}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-800 hover:bg-slate-50"
-        >
-          <Paperclip size={15} /> {t('receipt.coa.upload')}
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/jpeg,image/png,application/pdf"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) void handleUpload(f)
-            e.target.value = ''
-          }}
-        />
       </div>
 
       <p className="mt-2 text-[11.5px] text-amber-900/70">{t('receipt.coa.hint')}</p>
@@ -1478,7 +1514,7 @@ function CoaPanel({
       {/* Footer actions */}
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-amber-200 pt-4">
         <Button type="button" variant="secondary" onClick={onCancel}>{t('common.cancel')}</Button>
-        <Button type="button" disabled={isLoading || certs.length === 0} onClick={onFinalize}>
+        <Button type="button" disabled={isLoading || !allLinesCovered} onClick={onFinalize}>
           {isLoading ? t('receipt.posting') : t('receipt.coa.finalize')}
         </Button>
       </div>

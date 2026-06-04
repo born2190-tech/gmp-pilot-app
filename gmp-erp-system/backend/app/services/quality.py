@@ -388,23 +388,28 @@ def _populate_notification_lines(db: Session, notification: QCNotification, rece
     return added
 
 
+QC_NOTIFICATION_WAREHOUSES = {"SUBSTANCE_WAREHOUSE", "PACKAGING_WAREHOUSE"}
+
+
 def list_eligible_receipts_for_notification(db: Session, user: CurrentUser) -> list[dict]:
-    """Проведённые приходы склада субстанций, по которым ещё НЕ создано извещение
+    """Проведённые приходы сырья/упаковки, по которым ещё НЕ создано извещение
     (Ф-14). Источник для ручного создания извещения складом во вкладке «Извещения»."""
     require_permission(user, "POST_RECEIPT")
     notified = db.query(QCNotification.receipt_id)
-    rows = (
+    query = (
         db.query(ReceiptDocument)
         .join(Warehouse, Warehouse.id == ReceiptDocument.warehouse_id)
         .filter(
             ReceiptDocument.status == "posted",
-            Warehouse.warehouse_type == "SUBSTANCE_WAREHOUSE",
+            Warehouse.warehouse_type.in_(QC_NOTIFICATION_WAREHOUSES),
             ~ReceiptDocument.id.in_(notified),
         )
         .order_by(ReceiptDocument.posted_at.desc().nullslast())
         .limit(100)
-        .all()
     )
+    if user.warehouse_scope:
+        query = query.filter(Warehouse.warehouse_type == user.warehouse_scope)
+    rows = query.all()
     out: list[dict] = []
     for r in rows:
         n = db.query(func.count(ReceiptLine.id)).filter(ReceiptLine.receipt_id == r.id).scalar() or 0
@@ -420,7 +425,7 @@ def list_eligible_receipts_for_notification(db: Session, user: CurrentUser) -> l
 def create_qc_notification(db: Session, user: CurrentUser, payload: QCNotificationCreate) -> QCNotification:
     """Manually create a QC notification (Извещение) for a posted receipt.
 
-    Form Ф-14 к СОП-209 — printed by the substance warehouse and handed
+    Form Ф-14 к СОП-209 — printed by the warehouse and handed
     to the QC manager so they can sample lots that just entered quarantine.
     """
     require_permission(user, "POST_RECEIPT")
@@ -431,10 +436,10 @@ def create_qc_notification(db: Session, user: CurrentUser, payload: QCNotificati
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only posted receipts can be notified to QC")
     warehouse = db.get(Warehouse, receipt.warehouse_id)
     require_warehouse_type_scope(user, warehouse.warehouse_type)
-    if warehouse.warehouse_type != "SUBSTANCE_WAREHOUSE":
+    if warehouse.warehouse_type not in QC_NOTIFICATION_WAREHOUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="QC notification (Ф-14 СОП-209) is only issued for the substance warehouse",
+            detail="QC notification (Ф-14 СОП-209) is only issued for substance or packaging warehouses",
         )
 
     # Извещение теперь создаётся автоматически при проведении прихода — если оно

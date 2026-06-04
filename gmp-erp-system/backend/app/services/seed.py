@@ -213,6 +213,15 @@ def seed_foundation_data(db: Session) -> None:
     )
     get_or_create_user(
         db,
+        "warehouse_packaging",
+        "Warehouse Packaging Operator",
+        "whp123",
+        roles["WAREHOUSE_OPERATOR"],
+        departments["WAREHOUSE"],
+        "PACKAGING_WAREHOUSE",
+    )
+    get_or_create_user(
+        db,
         "head_qa",
         "Head of QA",
         "qahead123",

@@ -86,10 +86,21 @@ class ReceiptCreate(BaseModel):
         return None if value == "" else value
 
 
+class ReceiptResponseLine(BaseModel):
+    id: UUID
+    material_code: str
+    material_name: str
+    supplier_lot: str | None
+    manufacturer_name: str
+    quantity: float
+    unit: str
+
+
 class ReceiptResponse(BaseModel):
     id: UUID
     document_no: str
     status: str
+    lines: list[ReceiptResponseLine] = []
 
 
 class SignatureRequest(BaseModel):
@@ -204,6 +215,7 @@ class ReceiptCertificateItem(BaseModel):
 
     id: UUID
     receipt_id: UUID
+    receipt_line_id: UUID | None
     certificate_no: str | None
     note: str | None
     file_size: int

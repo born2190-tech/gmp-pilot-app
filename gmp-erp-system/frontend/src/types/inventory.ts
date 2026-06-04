@@ -848,11 +848,23 @@ export interface ReceiptResponse {
   id: string
   document_no: string
   status: string
+  lines: ReceiptResponseLine[]
+}
+
+export interface ReceiptResponseLine {
+  id: string
+  material_code: string
+  material_name: string
+  supplier_lot: string | null
+  manufacturer_name: string
+  quantity: number
+  unit: string
 }
 
 export interface ReceiptCertificateItem {
   id: string
   receipt_id: string
+  receipt_line_id: string | null
   certificate_no: string | null
   note: string | null
   file_size: number
