@@ -35,6 +35,7 @@ import {
 import {
   closeOos,
   downloadLotQcReportPdf,
+  downloadLotQcReportScan,
   downloadQcReportScan,
   listOos,
   listQaLots,
@@ -284,6 +285,19 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
     }
   }
 
+  // Скан подписанного Ф-11 — ДОК должен видеть именно верифицированный документ.
+  async function openQaReportScan(lotId: string) {
+    setError(null)
+    try {
+      const blob = await downloadLotQcReportScan(token, lotId)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('qaBoard.scanUnavailable'))
+    }
+  }
+
   if (mode === 'qc') {
     return (
       <section className="space-y-4">
@@ -458,6 +472,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
               onConfirmOpen={setConfirmDecision}
               onRunAction={runAction}
               onOpenReport={() => void openQaReportPdf(selectedLot.id)}
+              onOpenScan={() => void openQaReportScan(selectedLot.id)}
             />
           ) : (
             <QaCard className="flex min-h-[640px] items-center justify-center">
@@ -755,6 +770,7 @@ function QaDecisionCard({
   onConfirmOpen,
   onRunAction,
   onOpenReport,
+  onOpenScan,
 }: {
   lot: LotItem
   action: 'release' | 'reject' | null
@@ -770,6 +786,7 @@ function QaDecisionCard({
   onConfirmOpen: (value: boolean) => void
   onRunAction: (action: 'release' | 'reject') => Promise<void>
   onOpenReport: () => void
+  onOpenScan: () => void
 }) {
   const { t } = useI18n()
   const decided = lot.quality_status === 'released' || lot.quality_status === 'rejected'
@@ -779,7 +796,7 @@ function QaDecisionCard({
     <div className="space-y-3">
       <QaCard className="overflow-hidden"><QaDecisionHeader lot={lot} /></QaCard>
       <QaRouteSection lot={lot} />
-      <QaF11Block lot={lot} onOpenReport={onOpenReport} />
+      <QaF11Block lot={lot} onOpenReport={onOpenReport} onOpenScan={onOpenScan} />
       {!decided && <QaGatesSection resultReady={resultReady} canRelease={canRelease} />}
       {decided ? <QaDecidedBlock lot={lot} /> : canDecide ? (
         <QaCard className="overflow-hidden">
@@ -933,12 +950,17 @@ function QaRouteSection({ lot }: { lot: LotItem }) {
   )
 }
 
-function QaF11Block({ lot, onOpenReport }: { lot: LotItem; onOpenReport: () => void }) {
+function QaF11Block({ lot, onOpenReport, onOpenScan }: { lot: LotItem; onOpenReport: () => void; onOpenScan: () => void }) {
   const { t } = useI18n()
   const ready = Boolean(lot.qc_result_received_at)
   return (
     <QaCard className="overflow-hidden">
-      <QaSectionHead icon={FlaskConical} eyebrow={t('qaBoard.f11Eyebrow')} title={t('qaBoard.f11Title')} right={<QaPillButton tone="neutral" icon={Eye} size="sm" onClick={onOpenReport}>{t('qaBoard.openF11')}</QaPillButton>} />
+      <QaSectionHead icon={FlaskConical} eyebrow={t('qaBoard.f11Eyebrow')} title={t('qaBoard.f11Title')} right={
+        <>
+          <QaPillButton tone="confirm" icon={FileScan} size="sm" disabled={!ready} onClick={onOpenScan}>{t('qaBoard.openScan')}</QaPillButton>
+          <QaPillButton tone="neutral" icon={Eye} size="sm" onClick={onOpenReport}>{t('qaBoard.openF11')}</QaPillButton>
+        </>
+      } />
       <div className={`flex items-center gap-3 px-4 py-3.5 ${ready ? 'bg-emerald-50/60' : 'bg-amber-50/60'}`}>
         <span className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${ready ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}`}>{ready ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}</span>
         <div className="min-w-0 flex-1">

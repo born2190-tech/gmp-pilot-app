@@ -43,7 +43,7 @@ from app.schemas.quality import (
     VerificationQueueItem,
     VerificationQueueResponse,
 )
-from app.services.permissions import require_permission
+from app.services.permissions import require_any_permission, require_permission
 from app.services.quality import create_qc_report, qa_decision, sample_lot, submit_qc_report, submit_qc_result
 from app.services import equipment as equipment_service
 from app.services import sampling_acts as sampling_service
@@ -468,7 +468,7 @@ def lot_qc_report_pdf(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
     """Аналитический лист ОКК (Ф-11) для партии — последний поданный протокол."""
-    require_permission(current_user, "VIEW_WAREHOUSE")
+    require_any_permission(current_user, ("VIEW_WAREHOUSE", "VIEW_QA", "VIEW_QC"))
     from app.models.quality import QCReport
 
     report = (
@@ -489,7 +489,7 @@ def lot_qc_report_docx(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
     """Аналитический лист ОКК (Ф-11) для партии в формате Word (.docx)."""
-    require_permission(current_user, "VIEW_WAREHOUSE")
+    require_any_permission(current_user, ("VIEW_WAREHOUSE", "VIEW_QA", "VIEW_QC"))
     from app.models.quality import QCReport
 
     report = (
@@ -510,7 +510,7 @@ def lot_qc_report_scan(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
     """Скан подписанного аналитического листа (Ф-11) для партии."""
-    require_permission(current_user, "VIEW_WAREHOUSE")
+    require_any_permission(current_user, ("VIEW_WAREHOUSE", "VIEW_QA", "VIEW_QC"))
     from app.models.quality import QCReport
     from app.services.qc_report_scans import latest_scan, load_scan_file
 
