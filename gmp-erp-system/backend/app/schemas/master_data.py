@@ -65,14 +65,26 @@ class MaterialItem(OrmModel):
     code: str
     name: str
     item_type: str
+    # Тип ВУМ/ПУМ для подбора методов входного контроля (label|carton|
+    # corrugated_box|leaflet|foil). None — не упаковка / тип не задан.
+    packaging_type: str | None = None
     default_unit: str
+
+
+_PACKAGING_TYPE_PATTERN = "^(label|carton|corrugated_box|leaflet|foil)$"
 
 
 class MaterialCreate(BaseModel):
     code: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     item_type: str = Field(min_length=1, max_length=64)
+    packaging_type: str | None = Field(default=None, pattern=_PACKAGING_TYPE_PATTERN)
     default_unit: str = Field(min_length=1, max_length=32)
+
+
+class MaterialUpdate(BaseModel):
+    # Обновление классификации упаковки (для уже созданных материалов).
+    packaging_type: str | None = Field(default=None, pattern=_PACKAGING_TYPE_PATTERN)
 
 
 class MaterialsResponse(BaseModel):

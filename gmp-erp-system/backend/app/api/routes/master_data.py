@@ -1,3 +1,6 @@
+import re
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -12,6 +15,7 @@ from app.schemas.master_data import (
     ManufacturersResponse,
     MaterialCreate,
     MaterialItem,
+    MaterialUpdate,
     MaterialsResponse,
     SupplierCreate,
     SupplierItem,
@@ -22,6 +26,22 @@ from app.services.audit import write_audit
 from app.services.permissions import require_permission
 
 router = APIRouter(prefix="/api/master-data", tags=["master-data"])
+
+
+def _infer_packaging_type(name: str) -> str | None:
+    """Эвристика типа упаковки по наименованию (фолбэк при создании)."""
+    s = (name or "").lower()
+    if re.search(r"фольг|foil|алюмин", s):
+        return "foil"
+    if re.search(r"этикет|стикер|label|sticker", s):
+        return "label"
+    if re.search(r"гофр|короб|ящик|corrugat", s):
+        return "corrugated_box"
+    if re.search(r"пенал|пачк|картон|carton", s):
+        return "carton"
+    if re.search(r"инструкц|вкладыш|листок|leaflet|insert", s):
+        return "leaflet"
+    return None
 
 
 @router.get("/warehouses", response_model=WarehousesResponse)
@@ -147,7 +167,12 @@ def create_material(
     if db.query(Material).filter(Material.code == code).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Material code already exists")
 
-    material = Material(code=code, name=name, item_type=item_type, default_unit=default_unit)
+    # Тип упаковки: явный из формы, иначе авто-эвристика для PACKAGING.
+    packaging_type = payload.packaging_type
+    if not packaging_type and item_type == "PACKAGING":
+        packaging_type = _infer_packaging_type(name)
+
+    material = Material(code=code, name=name, item_type=item_type, packaging_type=packaging_type, default_unit=default_unit)
     db.add(material)
     db.flush()
     write_audit(
@@ -160,9 +185,36 @@ def create_material(
             "code": material.code,
             "name": material.name,
             "item_type": material.item_type,
+            "packaging_type": material.packaging_type,
             "default_unit": material.default_unit,
         },
         reason="Master data material created",
+    )
+    db.commit()
+    db.refresh(material)
+    return MaterialItem.model_validate(material)
+
+
+@router.patch("/materials/{material_id}", response_model=MaterialItem)
+def update_material(
+    material_id: UUID,
+    payload: MaterialUpdate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MaterialItem:
+    """Классификация упаковки уже созданного материала (тип ВУМ/ПУМ)."""
+    require_permission(current_user, "MANAGE_MASTER_DATA")
+    material = db.get(Material, material_id)
+    if not material:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material not found")
+    old = material.packaging_type
+    material.packaging_type = payload.packaging_type
+    write_audit(
+        db, current_user, object_type="material", object_id=str(material.id),
+        action_type="UPDATE",
+        new_value={"packaging_type": material.packaging_type},
+        old_value={"packaging_type": old},
+        reason="Material packaging type updated",
     )
     db.commit()
     db.refresh(material)

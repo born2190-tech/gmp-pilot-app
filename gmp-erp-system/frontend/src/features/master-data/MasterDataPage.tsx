@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import type { UseFormRegisterReturn } from 'react-hook-form'
 import type { ColumnDef } from '@tanstack/react-table'
-import { createManufacturer, createMaterial, createSupplier, listManufacturers, listMaterials, listSuppliers } from '../../lib/api'
+import { createManufacturer, createMaterial, createSupplier, listManufacturers, listMaterials, listSuppliers, updateMaterial } from '../../lib/api'
 import { Button } from '../../components/ui/button'
 import { DataTable } from '../../components/table/DataTable'
 import type { CurrentUser } from '../../types/auth'
@@ -28,7 +28,30 @@ export function MasterDataPage({ token, user }: MasterDataPageProps) {
 
   const supplierForm = useForm<SupplierCreate>({ defaultValues: { code: '', name: '' } })
   const manufacturerForm = useForm<ManufacturerCreate>({ defaultValues: { code: '', name: '' } })
-  const materialForm = useForm<MaterialCreate>({ defaultValues: { code: '', name: '', item_type: 'SUBSTANCE', default_unit: 'kg' } })
+  const materialForm = useForm<MaterialCreate>({ defaultValues: { code: '', name: '', item_type: 'SUBSTANCE', packaging_type: '', default_unit: 'kg' } })
+
+  // Типы упаковки (ВУМ/ПУМ) для подбора методов входного контроля в ОКК.
+  const PACKAGING_TYPE_OPTIONS: { value: string; label: string }[] = [
+    { value: '', label: '—' },
+    { value: 'label', label: t('master.pkgLabel') },
+    { value: 'carton', label: t('master.pkgCarton') },
+    { value: 'corrugated_box', label: t('master.pkgCorrugated') },
+    { value: 'leaflet', label: t('master.pkgLeaflet') },
+    { value: 'foil', label: t('master.pkgFoil') },
+  ]
+  function packagingTypeLabel(value: string | null | undefined): string {
+    return PACKAGING_TYPE_OPTIONS.find((o) => o.value === (value || ''))?.label ?? '—'
+  }
+
+  async function setPackagingType(material: MaterialItem, value: string) {
+    setError(null)
+    try {
+      await updateMaterial(token, material.id, { packaging_type: value || null })
+      setMaterials((prev) => prev.map((m) => (m.id === material.id ? { ...m, packaging_type: value || null } : m)))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('master.loadFailed'))
+    }
+  }
 
   async function loadMasterData() {
     setIsLoading(true)
@@ -63,8 +86,9 @@ export function MasterDataPage({ token, user }: MasterDataPageProps) {
   }
 
   async function submitMaterial(values: MaterialCreate) {
-    await submitCreate(() => createMaterial(token, values), t('master.materialCreated'))
-    materialForm.reset({ code: '', name: '', item_type: 'SUBSTANCE', default_unit: 'kg' })
+    const payload: MaterialCreate = { ...values, packaging_type: values.packaging_type || null }
+    await submitCreate(() => createMaterial(token, payload), t('master.materialCreated'))
+    materialForm.reset({ code: '', name: '', item_type: 'SUBSTANCE', packaging_type: '', default_unit: 'kg' })
   }
 
   async function submitCreate(createFn: () => Promise<unknown>, message: string) {
@@ -103,9 +127,30 @@ export function MasterDataPage({ token, user }: MasterDataPageProps) {
       { accessorKey: 'code', header: t('common.code') },
       { accessorKey: 'name', header: t('common.name') },
       { accessorKey: 'item_type', header: t('common.type') },
+      {
+        id: 'packaging_type',
+        header: t('master.packagingType'),
+        cell: ({ row }) => {
+          const m = row.original
+          const isPackaging = (m.item_type || '').toUpperCase() === 'PACKAGING'
+          if (!canManage) return <span className="text-slate-600">{packagingTypeLabel(m.packaging_type)}</span>
+          return (
+            <select
+              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[12.5px] outline-none focus:border-slate-400 disabled:opacity-50"
+              value={m.packaging_type || ''}
+              disabled={!isPackaging}
+              title={isPackaging ? '' : t('master.packagingOnlyForPackaging')}
+              onChange={(e) => void setPackagingType(m, e.target.value)}
+            >
+              {PACKAGING_TYPE_OPTIONS.map((o) => <option key={o.value || 'none'} value={o.value}>{o.label}</option>)}
+            </select>
+          )
+        },
+      },
       { accessorKey: 'default_unit', header: t('common.unit') },
     ],
-    [t],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t, canManage],
   )
 
   return (
@@ -160,6 +205,13 @@ export function MasterDataPage({ token, user }: MasterDataPageProps) {
                 <option value="PACKAGING">PACKAGING</option>
                 <option value="FINISHED_GOOD">FINISHED_GOOD</option>
               </select>
+            </label>
+            <label className="mb-3 block text-sm font-medium text-slate-700">
+              {t('master.packagingType')}
+              <select className="input mt-1" {...materialForm.register('packaging_type')}>
+                {PACKAGING_TYPE_OPTIONS.map((o) => <option key={o.value || 'none'} value={o.value}>{o.label}</option>)}
+              </select>
+              <span className="mt-1 block text-[11px] font-normal text-slate-400">{t('master.packagingTypeHint')}</span>
             </label>
             <FormInput label={t('master.defaultUnit')} register={materialForm.register('default_unit', { required: true })} />
             <Button disabled={isLoading} type="submit">{t('master.createMaterial')}</Button>

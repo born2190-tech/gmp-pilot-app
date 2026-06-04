@@ -56,6 +56,7 @@ export interface MaterialItem {
   code: string
   name: string
   item_type: string
+  packaging_type?: string | null
   default_unit: string
 }
 
@@ -63,6 +64,7 @@ export interface MaterialCreate {
   code: string
   name: string
   item_type: string
+  packaging_type?: string | null
   default_unit: string
 }
 

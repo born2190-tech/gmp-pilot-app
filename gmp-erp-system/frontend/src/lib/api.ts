@@ -227,6 +227,10 @@ export function createMaterial(token: string, payload: MaterialCreate): Promise<
   return request<MaterialItem>('/api/master-data/materials', 'POST', { token, body: payload })
 }
 
+export function updateMaterial(token: string, materialId: string, payload: { packaging_type: string | null }): Promise<MaterialItem> {
+  return request<MaterialItem>(`/api/master-data/materials/${materialId}`, 'PATCH', { token, body: payload })
+}
+
 export function listLots(token: string, query?: LotsQuery): Promise<LotsResponse> {
   return request<LotsResponse>('/api/inventory/lots', 'GET', { token, query })
 }
