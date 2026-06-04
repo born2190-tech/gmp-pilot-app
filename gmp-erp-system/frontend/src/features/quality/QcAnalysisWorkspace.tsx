@@ -355,8 +355,11 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
     return local ? new Date(local).toISOString() : null
   }
 
-  // ── Create draft protocol (persists params) ────────────────────────────────
-  async function createDraft() {
+  // ── Сформировать и подписать одним действием ───────────────────────────────
+  // Объединяет создание протокола (createQcReport) и электронную подпись
+  // (submitQcReport) в один шаг: после подтверждения результат сразу уходит в
+  // ДОК без повторного действия. Пароль э-подписи сохраняется (ALCOA+/СОП-549).
+  async function formAndSign() {
     setError(null)
     setSuccess(null)
     const pc = pcParams.filter((p) => p.parameter_name.trim())
@@ -368,6 +371,10 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
     }
     if (all.some((p) => p.complies === null)) {
       setError(t('qcws.errUntouched'))
+      return
+    }
+    if (!password.trim()) {
+      setError(t('qcws.errNoPassword'))
       return
     }
     setBusy(true)
@@ -398,8 +405,17 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
         })),
       })
       setDraft(report)
-      setSuccess(t('qcws.draftCreated'))
-      toast.success(t('qcws.draftCreated'))
+      await submitQcReport(token, report.id, {
+        username: user.username,
+        password,
+        meaning: t('quality.resultMeaning'),
+        reason: reason || t('quality.resultReason'),
+      })
+      setDraft((d) => (d ? { ...d, status: 'submitted' } : { ...report, status: 'submitted' }))
+      setSuccess(t('qcws.signed'))
+      toast.success(t('qcws.signed'))
+      setPassword('')
+      onSubmitted()
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('quality.actionFailed')
       setError(msg)
@@ -530,9 +546,6 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
             </PillButton>
             <PillButton tone="neutral" icon={FileText} disabled={!draft} onClick={() => void downloadWord()}>
               {t('qcws.downloadWord')}
-            </PillButton>
-            <PillButton tone="confirm" icon={ShieldCheck} disabled={!draft || signed || !password} onClick={() => void signProtocol()}>
-              {t('qcws.signProtocol')}
             </PillButton>
           </div>
         </div>
@@ -784,27 +797,26 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
           <SectionNumber n={2} title={t('qcws.verdictTitle')} hint={t('qcws.verdictHint')} />
           <VerdictBanner verdict={verdict} t={t} />
 
-          {/* Hybrid loop */}
-          <SectionNumber n={3} title={t('qcws.hybridTitle')} hint={t('qcws.hybridHint')} />
+          {/* Confirm + e-sign (single step) */}
+          <SectionNumber n={3} title={t('qcws.confirmTitle')} hint={t('qcws.confirmHint')} />
 
-          {!draft ? (
-            <Card>
-              <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-[13px] font-semibold text-slate-900">{t('qcws.createDraftTitle')}</p>
-                  <p className="mt-0.5 text-[12px] text-slate-500">{t('qcws.createDraftHint')}</p>
-                </div>
-                <PillButton tone="primary" size="lg" icon={FileText} disabled={busy} onClick={() => void createDraft()}>
-                  {t('qcws.createDraft')}
-                </PillButton>
-              </div>
-            </Card>
-          ) : (
+          {signed ? (
             <>
-              {/* Scan section */}
+              {/* Signed → result released to QA */}
+              <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-white">
+                <div className="flex items-start gap-4 p-5">
+                  <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white"><ShieldCheck size={20} /></span>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">{t('qcws.protocolSigned')}</p>
+                    <h3 className="mt-0.5 text-base font-semibold text-emerald-900">{t('qcws.sentToQa')}</h3>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Optional: attach the wet-signed F-11 scan to the hybrid record */}
               {!scanAttached ? (
                 <Card>
-                  <SectionHead icon={ScanLine} accent="amber" eyebrow={t('qcws.step1')} title={t('qcws.scanTitle')} sub={t('qcws.scanSub')} />
+                  <SectionHead icon={ScanLine} accent="amber" eyebrow={t('qcws.scanOptional')} title={t('qcws.scanTitle')} sub={t('qcws.scanSub')} />
                   <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2">
                     <div className="flex flex-col items-start gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50/40 p-5">
                       <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-white"><ScanLine size={16} /></span>
@@ -824,7 +836,7 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                 </Card>
               ) : (
                 <Card>
-                  <SectionHead icon={FileCheck} accent="emerald" eyebrow={`${t('qcws.step1')} · ${t('qcws.uploaded')}`} title={t('qcws.scanUploadedTitle')}
+                  <SectionHead icon={FileCheck} accent="emerald" eyebrow={`${t('qcws.scanOptional')} · ${t('qcws.uploaded')}`} title={t('qcws.scanUploadedTitle')}
                     right={
                       <>
                         <PillButton tone="quiet" icon={Eye} onClick={() => void viewScan(false)}>{t('qc.reportsModal.download')}</PillButton>
@@ -839,46 +851,42 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadScan(f); e.target.value = '' }} />
                 </Card>
               )}
-
-              {/* Signing block */}
-              {signed ? (
-                <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-white">
-                  <div className="flex items-start gap-4 p-5">
-                    <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white"><ShieldCheck size={20} /></span>
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">{t('qcws.step2')} · {t('qcws.protocolSigned')}</p>
-                      <h3 className="mt-0.5 text-base font-semibold text-emerald-900">{t('qcws.sentToQa')}</h3>
-                    </div>
-                  </div>
-                </Card>
-              ) : (
-                <Card>
-                  <SectionHead icon={KeyRound} accent="emerald" eyebrow={t('qcws.step2')} title={t('qcws.signTitle')} sub={t('qcws.signSub')} />
-                  <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-3">
-                    <div>
-                      <MetaLabel>{t('common.reason')}</MetaLabel>
-                      <input value={reason} onChange={(e) => setReason(e.target.value)}
-                        className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] outline-none focus:border-slate-400" />
-                    </div>
-                    <div>
-                      <MetaLabel>{t('quality.signaturePassword')}</MetaLabel>
-                      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                        className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 font-mono text-[13px] tracking-widest outline-none focus:border-slate-400" />
-                    </div>
-                    <div className="flex items-end">
-                      <button type="button" disabled={busy || !password} onClick={() => void signProtocol()}
-                        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-[13.5px] font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
-                        <ShieldCheck size={16} /> {t('qcws.signProtocol')}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 border-t border-slate-200 bg-slate-50/40 px-5 py-3 text-[11.5px] text-slate-500">
-                    <AlertTriangle size={13} className="text-amber-600" />
-                    {t('qcws.signFooter')}
-                  </div>
-                </Card>
-              )}
             </>
+          ) : (
+            /* Single action: form the protocol AND e-sign it; result auto-flows to QA. */
+            <Card>
+              <SectionHead icon={KeyRound} accent="emerald" eyebrow={t('qcws.eSignEyebrow')} title={t('qcws.formAndSignTitle')} sub={t('qcws.formAndSignHint')} />
+              <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-3">
+                <div>
+                  <MetaLabel>{t('common.reason')}</MetaLabel>
+                  <input value={reason} onChange={(e) => setReason(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] outline-none focus:border-slate-400" />
+                </div>
+                <div>
+                  <MetaLabel>{t('quality.signaturePassword')}</MetaLabel>
+                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 font-mono text-[13px] tracking-widest outline-none focus:border-slate-400" />
+                </div>
+                <div className="flex items-end">
+                  {draft ? (
+                    /* Draft persisted but e-sign failed earlier — retry signing only. */
+                    <button type="button" disabled={busy || !password} onClick={() => void signProtocol()}
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-[13.5px] font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
+                      <ShieldCheck size={16} /> {t('qcws.signProtocol')}
+                    </button>
+                  ) : (
+                    <button type="button" disabled={busy || !password} onClick={() => void formAndSign()}
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-[13.5px] font-semibold text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
+                      <ShieldCheck size={16} /> {t('qcws.formAndSign')}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-200 bg-slate-50/40 px-5 py-3 text-[11.5px] text-slate-500">
+                <AlertTriangle size={13} className="text-amber-600" />
+                {t('qcws.signFooter')}
+              </div>
+            </Card>
           )}
         </div>
 
