@@ -25,6 +25,7 @@ import {
   uploadSamplingScan,
 } from '../../lib/api'
 import { ScanButton } from '../../components/ui/ScanButton'
+import { useToast } from '../../components/ui/ToastProvider'
 import { printBlob } from '../../lib/print'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
@@ -71,6 +72,7 @@ function defaultLines(sopForm: '533' | '548', lot: LotItem): ActLine[] {
 
 export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPanelProps) {
   const { t, locale } = useI18n()
+  const toast = useToast()
   const [act, setAct] = useState<SamplingActItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -143,8 +145,11 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
     try {
       const created = await createSamplingAct(token, buildPayload())
       setAct(created)
+      toast.success(t('sampling.createdToast'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('sampling.createFailed'))
+      const msg = err instanceof Error ? err.message : t('sampling.createFailed')
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }
@@ -157,8 +162,11 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
     try {
       const updated = await updateSamplingAct(token, act.id, buildPayload())
       setAct(updated)
+      toast.success(t('sampling.savedToast'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('sampling.saveFailed'))
+      const msg = err instanceof Error ? err.message : t('sampling.saveFailed')
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }
@@ -171,8 +179,11 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
     try {
       const updated = await uploadSamplingScan(token, act.id, file)
       setAct(updated)
+      toast.success(t('sampling.scanUploaded'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('sampling.uploadFailed'))
+      const msg = err instanceof Error ? err.message : t('sampling.uploadFailed')
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }
@@ -191,9 +202,12 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
       })
       setAct(updated)
       setPassword('')
+      toast.success(t('sampling.postedToast'))
       onVerified?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('sampling.postFailed'))
+      const msg = err instanceof Error ? err.message : t('sampling.postFailed')
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }
@@ -206,10 +220,13 @@ export function SamplingActPanel({ token, user, lot, onVerified }: SamplingActPa
     setError(null)
     try {
       await cancelSamplingAct(token, act.id)
+      toast.info(t('sampling.cancelledToast'))
       onVerified?.() // перезагружаем дашборд — партия вернётся в «Новое извещение»
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('sampling.cancelFailed'))
+      const msg = err instanceof Error ? err.message : t('sampling.cancelFailed')
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }

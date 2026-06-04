@@ -34,6 +34,7 @@ import {
 import { CalibrationBadge } from './EquipmentAdminPage'
 import { printBlob } from '../../lib/print'
 import { ScanButton } from '../../components/ui/ScanButton'
+import { useToast } from '../../components/ui/ToastProvider'
 import { resolveSpecTemplate } from './qcSpecTemplates'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
@@ -219,6 +220,7 @@ interface Props {
 
 export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
   const { locale, t } = useI18n()
+  const toast = useToast()
   const sopForm = lot.warehouse_type === 'FG_WAREHOUSE' ? '548' : '533'
   const isFg = sopForm === '548'
 
@@ -397,8 +399,11 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
       })
       setDraft(report)
       setSuccess(t('qcws.draftCreated'))
+      toast.success(t('qcws.draftCreated'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('quality.actionFailed'))
+      const msg = err instanceof Error ? err.message : t('quality.actionFailed')
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }
@@ -446,8 +451,11 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
       await uploadQcReportScan(token, draft.id, file)
       setScanAttached(true)
       setSuccess(t('qcws.scanAttached'))
+      toast.success(t('qcws.scanAttached'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('quality.actionFailed'))
+      const msg = err instanceof Error ? err.message : t('quality.actionFailed')
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }
@@ -482,10 +490,13 @@ export function QcAnalysisWorkspace({ token, user, lot, onSubmitted }: Props) {
       })
       setDraft((d) => (d ? { ...d, status: 'submitted' } : d))
       setSuccess(t('qcws.signed'))
+      toast.success(t('qcws.signed'))
       setPassword('')
       onSubmitted()
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('quality.actionFailed'))
+      const msg = err instanceof Error ? err.message : t('quality.actionFailed')
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }
