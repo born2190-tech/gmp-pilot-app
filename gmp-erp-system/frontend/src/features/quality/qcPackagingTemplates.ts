@@ -18,7 +18,7 @@ export interface PackagingParamSeed {
   kind: PackagingKind
 }
 
-export type PackagingType = 'label' | 'carton' | 'corrugated_box' | 'leaflet'
+export type PackagingType = 'label' | 'carton' | 'corrugated_box' | 'leaflet' | 'foil'
 
 export interface PackagingTemplate {
   key: PackagingType
@@ -91,13 +91,37 @@ export const PACKAGING_TEMPLATES: Record<PackagingType, PackagingTemplate> = {
       DESCR_PRINT,
     ],
   },
+  // ─── 5. Алюминиевая фольга (первичная упаковка, ПУМ) — СОП-561 ────────────
+  // Параметры одинаковы для всей фольги; отличается только ширина (размер).
+  foil: {
+    key: 'foil',
+    label: 'Алюминиевая фольга',
+    ndRef: 'СОП-561; In House',
+    params: [
+      { name: 'Описание (внешний вид)', spec: 'Фольга без запаха; поверхность чистая, гладкая, ровная, без надрывов, заломов, коррозии и литья. Лакокрасочное покрытие нанесено равномерным слоем, без непрокрашенных мест; без изгибов, отклонений и трещин', method: 'СОП-561', unit: '—', kind: 'descriptive' },
+      { name: 'Толщина фольги', spec: '0,15 мм ± 10 %', method: 'СОП-561', unit: 'мм', kind: 'numeric' },
+      { name: 'Ширина фольги', spec: '____ мм ± 1 мм', method: 'СОП-561', unit: 'мм', kind: 'numeric' },
+      { name: 'Определение запаха', spec: 'Запах отсутствует или присутствует лёгкий нормальный запах', method: 'СОП-561', unit: '—', kind: 'descriptive' },
+      { name: 'Определение смачиваемости', spec: 'Смачиваемость удовлетворительная', method: 'СОП-561', unit: '—', kind: 'descriptive' },
+      { name: 'Определение адгезии лакокрасочного покрытия', spec: 'Удовлетворительная адгезия (тип А, В или С)', method: 'СОП-561', unit: '—', kind: 'descriptive' },
+    ],
+  },
 }
 
-export const PACKAGING_TYPE_VALUES: PackagingType[] = ['label', 'carton', 'corrugated_box', 'leaflet']
+/** Номинальная ширина фольги из наименования материала («…215 мм») → норма
+ * «215 мм ± 1 мм». Если размер не найден — оставляет шаблонный плейсхолдер. */
+export function foilWidthSpec(materialName: string | null | undefined): string {
+  const m = `${materialName || ''}`.match(/(\d{2,4})\s*мм|(\d{2,4})\s*mm/i)
+  const w = m ? (m[1] || m[2]) : null
+  return w ? `${w} мм ± 1 мм` : '____ мм ± 1 мм'
+}
+
+export const PACKAGING_TYPE_VALUES: PackagingType[] = ['label', 'carton', 'corrugated_box', 'leaflet', 'foil']
 
 /** Эвристика типа ВУМ по наименованию материала (фолбэк, если поле не задано). */
 export function inferPackagingType(materialName: string | null | undefined, materialCode?: string | null): PackagingType | null {
   const s = `${materialName || ''} ${materialCode || ''}`.toLowerCase()
+  if (/фольг|foil|алюмин|alu\b/.test(s)) return 'foil'
   if (/этикет|стикер|label|sticker/.test(s)) return 'label'
   if (/гофр|короб|ящик|carton box|corrugat/.test(s)) return 'corrugated_box'
   if (/пенал|пачк|картон|carton|складн/.test(s)) return 'carton'

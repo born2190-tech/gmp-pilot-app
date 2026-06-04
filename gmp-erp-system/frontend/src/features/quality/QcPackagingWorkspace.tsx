@@ -11,7 +11,7 @@ import { ScanButton } from '../../components/ui/ScanButton'
 import { useToast } from '../../components/ui/ToastProvider'
 import { useI18n } from '../../i18n/I18nProvider'
 import {
-  PACKAGING_TEMPLATES, PACKAGING_TYPE_VALUES, resolvePackagingTemplate, type PackagingType,
+  PACKAGING_TEMPLATES, PACKAGING_TYPE_VALUES, foilWidthSpec, resolvePackagingTemplate, type PackagingType,
 } from './qcPackagingTemplates'
 import type { CurrentUser } from '../../types/auth'
 import type { LotItem } from '../../types/inventory'
@@ -39,7 +39,7 @@ const STR = {
     errNoPassword: 'Введите пароль электронной подписи.', errScanRequired: 'Приложите скан подписанного Ф-2.',
     created: 'Черновик заключения создан.', signed: 'Заключение подписано и передано в ДОК.', failed: 'Действие не выполнено.',
     noType: 'Тип ВУМ не определён — выберите вручную.',
-    types: { label: 'Самоклеящиеся этикетки', carton: 'Пеналы', corrugated_box: 'Короба из гофрокартона', leaflet: 'Инструкции по применению' },
+    types: { label: 'Самоклеящиеся этикетки', carton: 'Пеналы', corrugated_box: 'Короба из гофрокартона', leaflet: 'Инструкции по применению', foil: 'Алюминиевая фольга' },
   },
   uz: {
     eyebrow: 'Kirish nazorati · SOP-543', title: 'Ikkilamchi qadoqlash materialiga xulosa',
@@ -62,7 +62,7 @@ const STR = {
     errNoPassword: 'Elektron imzo parolini kiriting.', errScanRequired: 'Imzolangan F-2 skanini ilova qiling.',
     created: 'Xulosa qoralamasi yaratildi.', signed: 'Xulosa imzolandi va SKA ga uzatildi.', failed: 'Amal bajarilmadi.',
     noType: 'QM turi aniqlanmadi — qo‘lda tanlang.',
-    types: { label: 'Yopishqoq etiketkalar', carton: 'Penallar', corrugated_box: 'Gofrokarton qutilar', leaflet: 'Qo‘llash yo‘riqnomalari' },
+    types: { label: 'Yopishqoq etiketkalar', carton: 'Penallar', corrugated_box: 'Gofrokarton qutilar', leaflet: 'Qo‘llash yo‘riqnomalari', foil: 'Alyumin folga' },
   },
   en: {
     eyebrow: 'Incoming control · SOP-543', title: 'Conclusion on secondary packaging material',
@@ -85,7 +85,7 @@ const STR = {
     errNoPassword: 'Enter your electronic signature password.', errScanRequired: 'Attach the scan of the signed F-2.',
     created: 'Conclusion draft created.', signed: 'Conclusion signed and passed to QA.', failed: 'Action failed.',
     noType: 'Packaging type not detected — pick it manually.',
-    types: { label: 'Self-adhesive labels', carton: 'Folding cartons', corrugated_box: 'Corrugated boxes', leaflet: 'Leaflets' },
+    types: { label: 'Self-adhesive labels', carton: 'Folding cartons', corrugated_box: 'Corrugated boxes', leaflet: 'Leaflets', foil: 'Aluminium foil' },
   },
 } as const
 
@@ -94,6 +94,13 @@ function evalNumeric(spec: string, value: string): boolean | null {
   const r = Number(value.replace(',', '.'))
   if (!value.trim() || Number.isNaN(r)) return null
   const s = spec.toLowerCase().replace(/,/g, '.')
+  // Допуск «X ± p %» или «X ± a».
+  const tol = s.match(/(\d+(?:\.\d+)?)\s*(?:мм|mm|сек|s)?\s*[±]\s*(\d+(?:\.\d+)?)\s*(%?)/)
+  if (tol) {
+    const center = Number(tol[1]); const delta = Number(tol[2])
+    const span = tol[3] === '%' ? (center * delta) / 100 : delta
+    return r >= center - span - 1e-9 && r <= center + span + 1e-9
+  }
   const range = s.match(/(\d+(?:\.\d+)?)\s*(?:до|—|–|-|to)\s*(\d+(?:\.\d+)?)/)
   if (range) {
     const a = Number(range[1]); const b = Number(range[2])
@@ -155,8 +162,10 @@ export function QcPackagingWorkspace({ token, user, lot, onSubmitted }: Props) {
 
   function loadMethods() {
     setRows(template.params.map((p) => ({
-      key: `p${++keySeq}`, name: p.name, spec: p.spec, method: p.method, unit: p.unit,
-      kind: p.kind, result: '', complies: null,
+      key: `p${++keySeq}`, name: p.name,
+      // Для фольги норму ширины подставляем из номинала в наименовании партии.
+      spec: type === 'foil' && /ширин/i.test(p.name) ? foilWidthSpec(lot.material_name) : p.spec,
+      method: p.method, unit: p.unit, kind: p.kind, result: '', complies: null,
     })))
     setError(null)
   }

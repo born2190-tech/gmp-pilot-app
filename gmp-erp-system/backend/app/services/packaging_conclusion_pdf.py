@@ -91,17 +91,26 @@ def render_packaging_conclusion_pdf(data: dict, qr_payload: str | None = None) -
     else:
         logo_cell = Paragraph("<b>novugen</b>", ParagraphStyle("logo", fontName=bold_font, fontSize=16, leading=20, alignment=1))
 
+    # Фольга — первичная упаковка (ПУМ) по СОП-561; остальное — ВУМ по СОП-543.
+    is_primary = data.get("packaging_type") == "foil"
+    appendix = "Приложение Ф-1 к СОП-561" if is_primary else "Приложение Ф-2 к СОП-543"
+    doc_title = (
+        "АНАЛИТИЧЕСКИЙ ЛИСТ входного контроля первичного упаковочного материала"
+        if is_primary
+        else "ЗАКЛЮЧЕНИЕ на ВТОРИЧНЫЙ УПАКОВОЧНЫЙ МАТЕРИАЛ"
+    )
+
     from app.services.document_qr import make_qr_image
     qr_image = make_qr_image(qr_payload, size_mm=17.0) if qr_payload else None
-    right_cell: object = Paragraph("Приложение Ф-2 к СОП-543", small)
+    right_cell: object = Paragraph(appendix, small)
     if qr_image is not None:
-        right_cell = [Paragraph("Приложение Ф-2 к СОП-543", small), qr_image, Paragraph("КР-код заключения", footer)]
+        right_cell = [Paragraph(appendix, small), qr_image, Paragraph("КР-код документа", footer)]
 
     header = Table(
         [[logo_cell,
           [Paragraph("ИП ООО «NOVUGEN PHARMA» (Узбекистан)", org_name),
            Paragraph("ДЕПАРТАМЕНТ КОНТРОЛЯ КАЧЕСТВА", body),
-           Paragraph("ЗАКЛЮЧЕНИЕ на ВТОРИЧНЫЙ УПАКОВОЧНЫЙ МАТЕРИАЛ", title_style)],
+           Paragraph(doc_title, title_style)],
           right_cell]],
         colWidths=[40 * mm, 100 * mm, 42 * mm],
         rowHeights=[26 * mm if qr_image is not None else 18 * mm],
@@ -119,7 +128,7 @@ def render_packaging_conclusion_pdf(data: dict, qr_payload: str | None = None) -
     # meta
     meta_rows = [
         [Paragraph(f"<b>№ заключения / Аналит. протокол:</b> {data.get('report_no', '')}", body),
-         Paragraph(f"<b>Тип ВУМ:</b> {data.get('packaging_type_label') or '—'}", body)],
+         Paragraph(f"<b>Тип материала:</b> {data.get('packaging_type_label') or '—'}", body)],
         [Paragraph(f"<b>Наименование:</b> {data.get('material_name') or '—'}", body),
          Paragraph(f"<b>Производитель:</b> {data.get('manufacturer_name') or '—'}", body)],
         [Paragraph(f"<b>Серия:</b> {data.get('internal_lot') or '—'}", body),
@@ -171,11 +180,8 @@ def render_packaging_conclusion_pdf(data: dict, qr_payload: str | None = None) -
 
     # conclusion
     complies_all = data.get("overall_result") == "complies"
-    verdict_text = (
-        "ВТОРИЧНЫЙ УПАКОВОЧНЫЙ МАТЕРИАЛ СООТВЕТСТВУЕТ НД"
-        if complies_all
-        else "ВТОРИЧНЫЙ УПАКОВОЧНЫЙ МАТЕРИАЛ НЕ СООТВЕТСТВУЕТ НД"
-    )
+    _subject = "ПЕРВИЧНЫЙ УПАКОВОЧНЫЙ МАТЕРИАЛ" if is_primary else "ВТОРИЧНЫЙ УПАКОВОЧНЫЙ МАТЕРИАЛ"
+    verdict_text = f"{_subject} {'СООТВЕТСТВУЕТ' if complies_all else 'НЕ СООТВЕТСТВУЕТ'} НД"
     concl = Table(
         [[Paragraph(f"<b>ЗАКЛЮЧЕНИЕ:</b> {verdict_text}", body)]],
         colWidths=[182 * mm],

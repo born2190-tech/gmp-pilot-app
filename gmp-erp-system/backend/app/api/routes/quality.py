@@ -378,6 +378,7 @@ def _build_qc_report_data(db: Session, report) -> dict:
         "carton": ("Пеналы", "ГОСТ 7933-89; ГОСТ 33781-2016"),
         "corrugated_box": ("Короба из гофрокартона", "ГОСТ 9142-2014"),
         "leaflet": ("Инструкции по применению", "ГОСТ 18510-87; In House"),
+        "foil": ("Алюминиевая фольга", "СОП-561; In House"),
     }
     pkg_label, pkg_nd = _PKG_LABELS.get((material.packaging_type or "") if material else "", (None, None))
     params = (
@@ -435,6 +436,7 @@ def _build_qc_report_data(db: Session, report) -> dict:
         "lot_size": lot_size,
         "sampling_location": sampling_location,
         "warehouse_type": warehouse.warehouse_type if warehouse else None,
+        "packaging_type": (material.packaging_type if material else None),
         "packaging_type_label": pkg_label,
         "packaging_nd_ref": pkg_nd,
         # Обратная совместимость: общий список + раздельные ФХ/микро.
