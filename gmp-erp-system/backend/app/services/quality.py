@@ -350,13 +350,15 @@ def _populate_notification_lines(db: Session, notification: QCNotification, rece
     for line in lines:
         material = db.get(Material, line.material_id)
         manufacturer = db.get(Manufacturer, line.manufacturer_id)
-        lot = (
-            db.query(Lot)
-            .filter(Lot.material_id == line.material_id, Lot.warehouse_id == receipt.warehouse_id)
-            .filter((Lot.supplier_lot == line.supplier_lot) | (Lot.internal_lot == (line.supplier_lot or "")))
-            .order_by(Lot.created_at.desc())
-            .first()
-        )
+        lot = db.query(Lot).filter(Lot.receipt_line_id == line.id).first()
+        if not lot:
+            lot = (
+                db.query(Lot)
+                .filter(Lot.material_id == line.material_id, Lot.warehouse_id == receipt.warehouse_id)
+                .filter((Lot.supplier_lot == line.supplier_lot) | (Lot.internal_lot == (line.supplier_lot or "")))
+                .order_by(Lot.created_at.desc())
+                .first()
+            )
         if not lot:
             lot = (
                 db.query(Lot)

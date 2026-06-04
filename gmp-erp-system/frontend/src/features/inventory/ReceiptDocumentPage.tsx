@@ -264,7 +264,8 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
   }, [lines, selectedLineId])
 
   const masterDataReady = warehouses.length > 0 && locations.length > 0
-  const lineErrors = lines.map((line) => validateLine(line, t))
+  const isSupplierLotRequired = selectedWarehouse?.warehouse_type !== 'PACKAGING_WAREHOUSE'
+  const lineErrors = lines.map((line) => validateLine(line, t, isSupplierLotRequired))
   const hasLineErrors = lineErrors.some((items) => items.length > 0)
   const selectedLine = lines.find((line) => line.id === selectedLineId) ?? lines[0]
 
@@ -677,6 +678,7 @@ export function ReceiptDocumentPage({ token, user, username }: ReceiptDocumentPa
                 {selectedLine ? (
                   <MaterialDetailPanel
                     allowedLocations={allowedLocations}
+                    isSupplierLotRequired={isSupplierLotRequired}
                     line={selectedLine}
                     manufacturers={manufacturers}
                     materials={materials}
@@ -975,6 +977,7 @@ function ExpandedValue({ label, mono = false, value }: { label: string; mono?: b
 
 function MaterialDetailPanel({
   allowedLocations,
+  isSupplierLotRequired,
   line,
   manufacturers,
   materials,
@@ -985,6 +988,7 @@ function MaterialDetailPanel({
   t,
 }: {
   allowedLocations: LocationItem[]
+  isSupplierLotRequired: boolean
   line: ReceiptLineForm
   manufacturers: ManufacturerItem[]
   materials: MaterialItem[]
@@ -1016,7 +1020,7 @@ function MaterialDetailPanel({
 
         <Separator />
 
-        <Field label={t('receipt.supplierLot')}>
+        <Field label={isSupplierLotRequired ? t('receipt.supplierLot') : t('receipt.supplierLotOptional')}>
           <input className="input bg-white font-mono" placeholder={t('receipt.enterLot')} title={line.supplier_lot} value={line.supplier_lot} onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })} />
           {line.supplier_lot && <p className="mt-2 break-words text-xs text-slate-600">{line.supplier_lot}</p>}
         </Field>
@@ -1269,7 +1273,7 @@ function displayLocation(locationId: string, locations: LocationItem[], t: Retur
   return location ? translatedLocation(location.code, t) : ''
 }
 
-function validateLine(line: ReceiptLineForm, t: ReturnType<typeof useI18n>['t']) {
+function validateLine(line: ReceiptLineForm, t: ReturnType<typeof useI18n>['t'], isSupplierLotRequired: boolean) {
   const errors: string[] = []
   const quantity = Number(line.quantity)
   if (line.material_mode === 'existing' && !line.material_id) errors.push(t('receipt.materialRequired'))
@@ -1278,7 +1282,7 @@ function validateLine(line: ReceiptLineForm, t: ReturnType<typeof useI18n>['t'])
   if (line.manufacturer_mode === 'new' && (!line.manufacturer_code.trim() || !line.manufacturer_name.trim())) errors.push(t('receipt.manufacturerRequired'))
   if (line.supplier_mode === 'existing' && !line.supplier_id) errors.push(t('receipt.supplierRequired'))
   if (line.supplier_mode === 'new' && (!line.supplier_code.trim() || !line.supplier_name.trim())) errors.push(t('receipt.supplierRequired'))
-  if (!line.supplier_lot.trim()) errors.push(t('receipt.supplierLotRequired'))
+  if (isSupplierLotRequired && !line.supplier_lot.trim()) errors.push(t('receipt.supplierLotRequired'))
   if (!line.production_date) errors.push(t('receipt.productionDateRequired'))
   if (!line.expiry_date) errors.push(t('receipt.expiryDateRequired'))
   if (!Number.isFinite(quantity) || quantity <= 0) errors.push(t('receipt.quantityWarning'))
