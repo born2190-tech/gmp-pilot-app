@@ -1195,6 +1195,14 @@ export function signBmrField(token: string, id: string, payload: { section_id: s
   return request<BmrInstanceItem>(`/api/bmr/instances/${id}/sign`, 'POST', { token, body: payload })
 }
 
+export interface BmrStageLockResult { acquired: boolean; locked_by_other: boolean; holder: string; holder_id: string }
+export function acquireBmrStageLock(token: string, id: string, stageCode: string, takeover = false): Promise<BmrStageLockResult> {
+  return request<BmrStageLockResult>(`/api/bmr/instances/${id}/stage-lock`, 'POST', { token, body: { stage_code: stageCode, takeover } })
+}
+export function releaseBmrStageLock(token: string, id: string, stageCode: string): Promise<{ released: boolean }> {
+  return request<{ released: boolean }>(`/api/bmr/instances/${id}/stage-unlock`, 'POST', { token, body: { stage_code: stageCode } })
+}
+
 export function completeBmrInstance(token: string, id: string, payload: { username: string; password: string; meaning: string; reason: string }): Promise<BmrInstanceItem> {
   return request<BmrInstanceItem>(`/api/bmr/instances/${id}/complete`, 'POST', { token, body: payload })
 }

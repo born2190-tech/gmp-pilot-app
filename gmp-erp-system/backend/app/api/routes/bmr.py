@@ -23,6 +23,7 @@ from app.schemas.bmr import (
     BmrTemplatesResponse,
 )
 from app.services.bmr import (
+    acquire_stage_lock,
     approve_template,
     complete_instance,
     create_template,
@@ -32,15 +33,38 @@ from app.services.bmr import (
     get_template,
     list_assignable_operators,
     list_templates,
+    release_stage_lock,
     review_instance,
     save_entries,
     set_assignments,
     sign_field,
+    stage_locks,
     update_template,
 )
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/bmr/templates", tags=["bmr"])
 instances_router = APIRouter(prefix="/api/bmr/instances", tags=["bmr"])
+
+
+class StageLockRequest(BaseModel):
+    stage_code: str
+    takeover: bool = False
+
+
+@instances_router.get("/{instance_id}/stage-locks")
+def stage_locks_route(instance_id: UUID, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> dict:
+    return stage_locks(db, user, instance_id)
+
+
+@instances_router.post("/{instance_id}/stage-lock")
+def acquire_stage_lock_route(instance_id: UUID, payload: StageLockRequest, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> dict:
+    return acquire_stage_lock(db, user, instance_id, payload.stage_code, payload.takeover)
+
+
+@instances_router.post("/{instance_id}/stage-unlock")
+def release_stage_lock_route(instance_id: UUID, payload: StageLockRequest, db: Session = Depends(get_db), user: CurrentUser = Depends(get_current_user)) -> dict:
+    return release_stage_lock(db, user, instance_id, payload.stage_code)
 
 
 @instances_router.get("/operators", response_model=BmrOperatorsResponse)

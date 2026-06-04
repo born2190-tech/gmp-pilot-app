@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -601,6 +601,21 @@ class BmrEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     filled_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BmrStageLock(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Мягкая (advisory) блокировка этапа BMR: кто сейчас редактирует этап на
+    планшете. Защита от параллельного ввода. Удерживается heartbeat'ом; протухает
+    по TTL (см. сервис). Снимается при выходе или перехватывается по кнопке."""
+
+    __tablename__ = "bmr_stage_locks"
+    __table_args__ = (UniqueConstraint("instance_id", "stage_code", name="uq_bmr_stage_lock"),)
+
+    instance_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("bmr_instances.id"), nullable=False)
+    stage_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class WeighingCampaign(UUIDPrimaryKeyMixin, TimestampMixin, Base):

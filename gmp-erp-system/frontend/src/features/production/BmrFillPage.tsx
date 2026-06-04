@@ -8,6 +8,7 @@ import { BmrAssignDialog } from './BmrAssignDialog'
 import {
   getBmrInstance, listProductionBatches, getBatchBmrInstance, saveBmrEntries, signBmrField,
   completeBmrInstance, reviewBmrInstance, downloadBmrInstancePdf,
+  acquireBmrStageLock, releaseBmrStageLock,
 } from '../../lib/api'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
@@ -234,6 +235,9 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   const draftRef = useRef<Record<string, string>>({})
   const dirtyRef = useRef(false)
   const autosaveTimer = useRef<number | null>(null)
+  // Мягкая блокировка этапа: имя другого пользователя, если этап занят им.
+  const [lockHolder, setLockHolder] = useState<string | null>(null)
+  const takeoverRef = useRef<() => void>(() => {})
   const [dock, setDock] = useState<{ sectionId: string; fieldIndex: number; role: SignRole; label: string } | null>(null)
   const [action, setAction] = useState<null | 'complete' | 'review'>(null)
   const [pwd, setPwd] = useState('')
@@ -307,8 +311,8 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   }, [persist])
 
   const setVal = (sid: string, fi: number, v: string) => {
+    if (closed || lockHolder) return
     setDraft((p) => { const n = { ...p, [key(sid, fi)]: v }; draftRef.current = n; return n })
-    if (closed) return
     dirtyRef.current = true
     setSaveState('dirty')
     scheduleAutosave()
@@ -335,6 +339,41 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   }, [])
 
   const saveAll = () => persist(true)
+
+  // Этап, который пользователь сейчас редактирует (для блокировки). Null-safe.
+  const myRoomEarly = roomFromWorkstation(user?.workstation_id)
+  const lockStageCode = useMemo<string | null>(() => {
+    if (!inst) return null
+    const route = inst.route || []
+    if (!isSupervisor && myRoomEarly) { const mine = route.find((r) => r.room === myRoomEarly); if (mine) return mine.stage }
+    const active = route.find((r) => r.status === 'in_progress' || r.status === 'completed'); if (active) return active.stage
+    const next = route.find((r) => r.status === 'issued'); return next ? next.stage : (route[route.length - 1]?.stage ?? null)
+  }, [inst, isSupervisor, myRoomEarly])
+
+  // Захват/heartbeat блокировки этапа; снятие при выходе. Если этап занят
+  // другим — показываем баннер и блокируем ввод (с кнопкой «Перехватить»).
+  const lockClosed = readOnly || inst?.status === 'completed' || inst?.status === 'reviewed'
+  useEffect(() => {
+    const instId = inst?.id
+    if (!instId || !lockStageCode || lockClosed || overview) { setLockHolder(null); return }
+    let cancelled = false
+    const beat = async (takeover = false) => {
+      try {
+        const r = await acquireBmrStageLock(token, instId, lockStageCode, takeover)
+        if (!cancelled) setLockHolder(r.locked_by_other ? r.holder : null)
+      } catch { /* сеть — игнорируем, ввод не блокируем по сбою */ }
+    }
+    takeoverRef.current = () => { void beat(true) }
+    void beat()
+    const interval = window.setInterval(() => void beat(), 30000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+      void releaseBmrStageLock(token, instId, lockStageCode).catch(() => {})
+    }
+  }, [inst?.id, lockStageCode, lockClosed, overview, token])
+
+  const lockedByOther = lockHolder !== null
 
   async function confirmSign() {
     if (!inst || !dock || !signer.trim() || !pwd) return
@@ -381,16 +420,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   }, { done: 0, total: 0 })
 
   const route = inst.route || []
-  const currentStageCode = (() => {
-    if (!isSupervisor && myRoom) {
-      const mine = route.find((r) => r.room === myRoom)
-      if (mine) return mine.stage
-    }
-    const active = route.find((r) => r.status === 'in_progress' || r.status === 'completed')
-    if (active) return active.stage
-    const next = route.find((r) => r.status === 'issued')
-    return next ? next.stage : (route[route.length - 1]?.stage ?? null)
-  })()
+  const currentStageCode = lockStageCode
   const openStage = (code: string) => {
     setOverview(false)
     const sec = inst.sections.find((s) => stageCodeOf(s) === code)
@@ -454,18 +484,28 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
           />
           <main className="min-w-0 space-y-3">
             {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
+            {lockedByOther && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-[13px] text-rose-800">
+                <Lock size={16} className="shrink-0" />
+                <span className="font-medium">{t('bmrFill.stageLockedBy', { name: lockHolder || '' })}</span>
+                <button type="button" onClick={() => takeoverRef.current()}
+                  className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-300 bg-white px-3 text-[12px] font-semibold text-rose-700 hover:bg-rose-100">
+                  {t('bmrFill.takeover')}
+                </button>
+              </div>
+            )}
             <ParticipantsJournal participants={inst.participants || []} />
             {visibleSections.length === 0 ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-[13px] text-amber-800">
                 {t('bmrFill.noStageForRoom', { room: myRoom || user?.workstation_id || t('bmrFill.undefined') })}
               </div>
             ) : visibleSections.map((s) => (
-              <SectionBlock key={s.id} section={s} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed}
+              <SectionBlock key={s.id} section={s} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed || lockedByOther}
                 canDp={canDp} canDok={canDok} canWh={canWh} onSetVal={setVal}
                 onSign={(fi, role, label) => { setSigner(''); setPwd(''); setDock({ sectionId: String(s.id), fieldIndex: fi, role, label }) }} />
             ))}
             {finalEndFields.length > 0 && (
-              <ProcessClosureBlock fields={finalEndFields} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed} onSetVal={setVal} />
+              <ProcessClosureBlock fields={finalEndFields} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed || lockedByOther} onSetVal={setVal} />
             )}
           </main>
         </div>

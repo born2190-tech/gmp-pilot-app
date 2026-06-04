@@ -1,7 +1,7 @@
 """Конструктор шаблонов электронного BMR/ЗПС (СОП-11) — Phase A."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import re
 from uuid import UUID
 
@@ -16,6 +16,7 @@ from app.models.inventory import (
     BmrInstance,
     BmrInstanceSection,
     BmrSection,
+    BmrStageLock,
     BmrTemplate,
     ProductionBatch,
     ProductionRequisition,
@@ -848,6 +849,13 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
         .filter(BmrEntry.section_id == payload.section_id, BmrEntry.field_index == payload.field_index)
         .first()
     )
+    # Идемпотентность: уже подписанную ячейку повторно не подписываем (защита от
+    # двойного клика / двойной подписи). Снять/переподписать нельзя без РНС.
+    if entry is not None and isinstance(entry.value, dict) and entry.value.get("signed_by"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ячейка уже подписана ({entry.value.get('signed_by')}). Повторная подпись запрещена.",
+        )
     if entry is None:
         entry = BmrEntry(instance_id=inst.id, section_id=payload.section_id, field_index=payload.field_index)
         db.add(entry)
@@ -964,3 +972,77 @@ def set_assignments(db: Session, user: CurrentUser, instance_id: UUID, mapping: 
     db.commit()
     db.refresh(inst)
     return _instance_dict(db, inst, user)
+
+
+# ─── Мягкая блокировка этапа (защита от параллельного редактирования) ──────────
+STAGE_LOCK_TTL_SECONDS = 90  # протухание без heartbeat (фронт шлёт ~каждые 30 c)
+
+
+def _lock_dict(lock: BmrStageLock, user: CurrentUser) -> dict:
+    return {
+        "stage_code": lock.stage_code,
+        "user_id": str(lock.user_id),
+        "full_name": lock.full_name,
+        "heartbeat_at": lock.heartbeat_at.isoformat() if lock.heartbeat_at else None,
+        "mine": str(lock.user_id) == str(user.id),
+    }
+
+
+def stage_locks(db: Session, user: CurrentUser, instance_id: UUID) -> dict:
+    """Активные (не протухшие) блокировки этапов инстанса."""
+    _get_instance(db, instance_id)
+    cutoff = now_utc() - timedelta(seconds=STAGE_LOCK_TTL_SECONDS)
+    rows = (
+        db.query(BmrStageLock)
+        .filter(BmrStageLock.instance_id == instance_id, BmrStageLock.heartbeat_at >= cutoff)
+        .all()
+    )
+    return {"locks": [_lock_dict(r, user) for r in rows]}
+
+
+def acquire_stage_lock(db: Session, user: CurrentUser, instance_id: UUID, stage_code: str, takeover: bool = False) -> dict:
+    """Захват/продление блокировки этапа. Если этап удерживает другой
+    пользователь и блокировка не протухла — возвращаем locked_by_other (без
+    захвата), если только не takeover (явный перехват)."""
+    _get_instance(db, instance_id)
+    now = now_utc()
+    cutoff = now - timedelta(seconds=STAGE_LOCK_TTL_SECONDS)
+    existing = (
+        db.query(BmrStageLock)
+        .filter(BmrStageLock.instance_id == instance_id, BmrStageLock.stage_code == stage_code)
+        .first()
+    )
+    if (
+        existing is not None
+        and str(existing.user_id) != str(user.id)
+        and existing.heartbeat_at is not None
+        and existing.heartbeat_at >= cutoff
+        and not takeover
+    ):
+        return {"acquired": False, "locked_by_other": True, "holder": existing.full_name, "holder_id": str(existing.user_id)}
+
+    if existing is None:
+        existing = BmrStageLock(instance_id=instance_id, stage_code=stage_code, user_id=user.id, full_name=user.full_name, heartbeat_at=now)
+        db.add(existing)
+    else:
+        existing.user_id = user.id
+        existing.full_name = user.full_name
+        existing.heartbeat_at = now
+    if takeover and str(existing.user_id) != str(user.id):
+        write_audit(
+            db, user, object_type="bmr_instance", object_id=str(instance_id),
+            action_type="TAKEOVER_BMR_STAGE", new_value={"stage": stage_code},
+        )
+    db.commit()
+    return {"acquired": True, "locked_by_other": False, "holder": user.full_name, "holder_id": str(user.id)}
+
+
+def release_stage_lock(db: Session, user: CurrentUser, instance_id: UUID, stage_code: str) -> dict:
+    """Снятие своей блокировки этапа (при выходе с экрана)."""
+    db.query(BmrStageLock).filter(
+        BmrStageLock.instance_id == instance_id,
+        BmrStageLock.stage_code == stage_code,
+        BmrStageLock.user_id == user.id,
+    ).delete()
+    db.commit()
+    return {"released": True}
