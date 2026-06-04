@@ -137,9 +137,21 @@ export function QcPackagingWorkspace({ token, user, lot, onSubmitted }: Props) {
     () => resolvePackagingTemplate(lot.packaging_type, lot.material_name, lot.material_code)?.key ?? null,
     [lot.packaging_type, lot.material_name, lot.material_code],
   )
+  // Собирает строки показателей для типа ВУМ (для фольги — норма ширины из
+  // номинала в наименовании партии). Используется при монтировании, смене
+  // типа и по кнопке «Загрузить методы» — параметры всегда соответствуют типу.
+  function buildRows(t: PackagingType): Row[] {
+    return PACKAGING_TEMPLATES[t].params.map((p) => ({
+      key: `p${++keySeq}`, name: p.name,
+      spec: t === 'foil' && /ширин/i.test(p.name) ? foilWidthSpec(lot.material_name) : p.spec,
+      method: p.method, unit: p.unit, kind: p.kind, result: '', complies: null,
+    }))
+  }
+
   const [type, setType] = useState<PackagingType>(inferred ?? 'leaflet')
   const [reportNo, setReportNo] = useState(`VUM-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-001`)
-  const [rows, setRows] = useState<Row[]>([])
+  // Если тип определён по материалу — сразу подгружаем его методы.
+  const [rows, setRows] = useState<Row[]>(() => (inferred ? buildRows(inferred) : []))
   const [draft, setDraft] = useState<{ id: string; status: string } | null>(null)
   const [scanAttached, setScanAttached] = useState(false)
   const [password, setPassword] = useState('')
@@ -161,12 +173,13 @@ export function QcPackagingWorkspace({ token, user, lot, onSubmitted }: Props) {
   }, [rows])
 
   function loadMethods() {
-    setRows(template.params.map((p) => ({
-      key: `p${++keySeq}`, name: p.name,
-      // Для фольги норму ширины подставляем из номинала в наименовании партии.
-      spec: type === 'foil' && /ширин/i.test(p.name) ? foilWidthSpec(lot.material_name) : p.spec,
-      method: p.method, unit: p.unit, kind: p.kind, result: '', complies: null,
-    })))
+    setRows(buildRows(type))
+    setError(null)
+  }
+  // Смена типа ВУМ перезагружает соответствующий набор показателей.
+  function changeType(next: PackagingType) {
+    setType(next)
+    setRows(buildRows(next))
     setError(null)
   }
 
@@ -293,7 +306,7 @@ export function QcPackagingWorkspace({ token, user, lot, onSubmitted }: Props) {
           </span>
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{tr.type}</span>
-            <select value={type} disabled={locked} onChange={(e) => setType(e.target.value as PackagingType)}
+            <select value={type} disabled={locked} onChange={(e) => changeType(e.target.value as PackagingType)}
               className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[12.5px] outline-none focus:border-slate-400 disabled:opacity-70">
               {PACKAGING_TYPE_VALUES.map((v) => <option key={v} value={v}>{tr.types[v]}</option>)}
             </select>
