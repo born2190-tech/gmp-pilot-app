@@ -1,0 +1,49 @@
+# Прод-overlay поверх docker-compose.yml. Запуск:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Отличия от пилота:
+#  • БД НЕ публикуется наружу (нет проброса 5434);
+#  • данные/сканы/бэкапы на хостовых (бэкапируемых/внешних) дисках — bind-mount;
+#  • перед backend/frontend стоит Caddy reverse-proxy с автоматическим TLS;
+#  • backend/frontend не публикуют порты напрямую — только через прокси.
+# Секреты задаются в .env (POSTGRES_PASSWORD, GMP_SECRET_KEY, SITE_DOMAIN, пути).
+
+services:
+  postgres:
+    ports: !reset []           # не публиковать БД в сеть
+    volumes:
+      - ${PGDATA_HOST_PATH:-/srv/gmp/pgdata}:/var/lib/postgresql/data
+
+  backend:
+    ports: !reset []           # доступ только через reverse-proxy
+    volumes:
+      - ${SCANS_HOST_PATH:-/srv/gmp/qc-scans}:/data/qc-scans
+      - ${DEFECT_PHOTOS_HOST_PATH:-/srv/gmp/defect-photos}:/data/receipt-defect-photos
+
+  frontend:
+    ports: !reset []           # доступ только через reverse-proxy
+
+  db-backup:
+    volumes:
+      - ${BACKUPS_HOST_PATH:-/srv/gmp/backups}:/backups
+
+  proxy:
+    image: caddy:2-alpine
+    container_name: gmp-erp-proxy
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-erp.example.local}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - gmp_erp_caddy_data:/data
+      - gmp_erp_caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  gmp_erp_caddy_data:
+  gmp_erp_caddy_config:

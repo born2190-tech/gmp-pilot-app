@@ -1,0 +1,24 @@
+# Reverse-proxy GMP ERP. Caddy сам получает/обновляет TLS-сертификат для
+# публичного домена (Let's Encrypt). Для внутреннего домена без публичного DNS
+# Caddy выпустит самоподписанный сертификат (tls internal) — добавьте его в
+# доверенные на планшетах/ПК предприятия.
+#
+# SPA-фронт отдаётся с / ; API проксируется на backend по префиксам.
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	# Внутренний домен без публичного DNS — раскомментируйте для self-signed TLS:
+	# tls internal
+
+	# API → backend (FastAPI). Префиксы соответствуют роутерам приложения.
+	@api path /api/* /health /health/*
+	handle @api {
+		reverse_proxy backend:8000
+	}
+
+	# Всё остальное → статический фронт (nginx в контейнере frontend).
+	handle {
+		reverse_proxy frontend:80
+	}
+}

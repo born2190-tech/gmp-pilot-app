@@ -3,9 +3,10 @@ services:
     image: postgres:16-alpine
     container_name: gmp-erp-postgres
     environment:
-      POSTGRES_DB: gmp_erp
-      POSTGRES_USER: gmp_user
-      POSTGRES_PASSWORD: gmp_pass
+      POSTGRES_DB: ${POSTGRES_DB:-gmp_erp}
+      POSTGRES_USER: ${POSTGRES_USER:-gmp_user}
+      # Прод: задать POSTGRES_PASSWORD в .env (не использовать дефолт!).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gmp_pass}
     ports:
       - "5434:5432"
     volumes:
@@ -21,8 +22,9 @@ services:
     build: ./backend
     container_name: gmp-erp-backend
     environment:
-      GMP_DATABASE_URL: postgresql+psycopg://gmp_user:gmp_pass@postgres:5432/gmp_erp
-      GMP_SECRET_KEY: dev-change-me
+      GMP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gmp_user}:${POSTGRES_PASSWORD:-gmp_pass}@postgres:5432/${POSTGRES_DB:-gmp_erp}
+      # Прод: задать сильный GMP_SECRET_KEY в .env (подпись токенов/сессий).
+      GMP_SECRET_KEY: ${GMP_SECRET_KEY:-dev-change-me}
       GMP_QC_SCAN_ROOT: /data/qc-scans
     ports:
       - "8002:8000"
@@ -53,8 +55,10 @@ services:
     image: postgres:16-alpine
     container_name: gmp-erp-db-backup
     environment:
-      PGPASSWORD: gmp_pass
-      BACKUP_KEEP_DAYS: "14"
+      PGPASSWORD: ${POSTGRES_PASSWORD:-gmp_pass}
+      POSTGRES_USER: ${POSTGRES_USER:-gmp_user}
+      POSTGRES_DB: ${POSTGRES_DB:-gmp_erp}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
     volumes:
       - gmp_erp_backups:/backups
     depends_on:
@@ -67,7 +71,7 @@ services:
         while true; do
           ts=$$(date +%Y%m%d_%H%M%S)
           out="/backups/gmp_erp_$${ts}.dump"
-          if pg_dump -h postgres -U gmp_user -d gmp_erp -Fc -f "$${out}"; then
+          if pg_dump -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -Fc -f "$${out}"; then
             echo "[db-backup] ok $${out} ($$(du -h "$${out}" | cut -f1))"
           else
             echo "[db-backup] FAILED at $${ts}" >&2
