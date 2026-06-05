@@ -794,8 +794,6 @@ function BatchDetail({
         isLoading={isLoading}
       />
 
-      <BmrLineClearance batch={batch} bmrInstance={bmrInstance} onOpenBmr={onOpenBmr} />
-
       {canCancel && (
         <CancelStrip
           cancelPassword={cancelPassword}
@@ -1032,53 +1030,6 @@ function ReadinessChecklist({ batch, canExecute, onChecklist }: { batch: Product
           </span>
         </label>
       ))}
-    </div>
-  )
-}
-
-function BmrLineClearance({ batch, bmrInstance, onOpenBmr }: { batch: ProductionBatchItem; bmrInstance: BmrInstanceItem | null; onOpenBmr: (id: string) => void }) {
-  const { t } = useI18n()
-  return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-white"><ShieldCheck size={18} /></span>
-          <div>
-            <div className="text-[15px] font-semibold text-slate-900">Line clearance — отражение из BMR</div>
-            <div className="text-xs text-slate-500">Источник истины — электронный BMR. На этом экране не редактируется.</div>
-          </div>
-        </div>
-        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">только чтение</span>
-      </div>
-      <div className="p-5">
-        {bmrInstance ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{bmrInstanceStatus(bmrInstance.status, t)}</span>
-              <span className="text-sm text-slate-700"><b>{bmrInstance.title}</b> · {t('prodBatch.sectionsN', { n: bmrInstance.sections.length })}</span>
-              <button type="button" onClick={() => onOpenBmr(bmrInstance.id)} className="ml-auto inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-semibold text-slate-700 hover:bg-slate-50">
-                <FileText size={15} />
-                {t('prodBatch.openBmr')}
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <SignBox label="Выполнил ДП" done={batch.room_ready && batch.equipment_ready} />
-              <SignBox label="Проверил ДОК" done={batch.qa_line_clearance} />
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">{t('prodBatch.eBmrEmpty')}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SignBox({ label, done }: { label: string; done: boolean }) {
-  return (
-    <div className={`rounded-md border px-3 py-2.5 ${done ? 'border-emerald-200 bg-emerald-50' : 'border-dashed border-slate-300 bg-slate-50'}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div>
-      <div className={`mt-1 text-sm font-medium ${done ? 'text-emerald-700' : 'text-slate-500'}`}>{done ? 'подтверждено' : 'ожидает подписи в BMR'}</div>
     </div>
   )
 }
