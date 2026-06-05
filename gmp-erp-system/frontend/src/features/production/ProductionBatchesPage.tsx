@@ -85,13 +85,13 @@ const STATUS_STYLE: Record<string, string> = {
 const STATUS_FILTERS = ['', 'draft', 'assigned', 'bmr_requested', 'bmr_issued', 'ready_to_start', 'in_production', 'completed', 'cancelled']
 
 const BATCH_ROUTE = [
-  { key: 'draft', label: 'Черновик', short: 'Черновик' },
-  { key: 'assigned', label: 'Серия присвоена', short: 'Присвоена' },
-  { key: 'bmr_requested', label: 'ЗПС запрошена', short: 'ЗПС запрошена' },
-  { key: 'bmr_issued', label: 'ЗПС выдана', short: 'ЗПС выдана' },
-  { key: 'ready_to_start', label: 'Готова к старту', short: 'К старту' },
-  { key: 'in_production', label: 'В производстве', short: 'В производстве' },
-  { key: 'completed', label: 'Завершена', short: 'Завершена' },
+  { key: 'draft' },
+  { key: 'assigned' },
+  { key: 'bmr_requested' },
+  { key: 'bmr_issued' },
+  { key: 'ready_to_start' },
+  { key: 'in_production' },
+  { key: 'completed' },
 ]
 
 const ROUTE_INDEX = Object.fromEntries(BATCH_ROUTE.map((step, index) => [step.key, index]))
@@ -119,19 +119,19 @@ function formatDateTime(value: string | null): string {
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
 }
 
-function waitingFor(batch: ProductionBatchItem) {
+function waitingFor(batch: ProductionBatchItem, t: Translate) {
   switch (batch.status) {
     case 'draft':
-      return { text: 'ждёт: присвоить серию', tone: 'border-amber-200 bg-amber-50 text-amber-700' }
+      return { text: t('prodBatch.wait.assign' as Parameters<Translate>[0]), tone: 'border-amber-200 bg-amber-50 text-amber-700' }
     case 'assigned':
-      return { text: 'ждёт: запрос ЗПС', tone: 'border-amber-200 bg-amber-50 text-amber-700' }
+      return { text: t('prodBatch.wait.requestBmr' as Parameters<Translate>[0]), tone: 'border-amber-200 bg-amber-50 text-amber-700' }
     case 'bmr_requested':
-      return { text: 'ждёт: выдачу ЗПС (ДОК)', tone: 'border-cyan-200 bg-cyan-50 text-cyan-700' }
+      return { text: t('prodBatch.wait.issueBmr' as Parameters<Translate>[0]), tone: 'border-cyan-200 bg-cyan-50 text-cyan-700' }
     case 'bmr_issued':
     case 'ready_to_start':
-      return { text: 'ждёт: старт серии', tone: 'border-blue-200 bg-blue-50 text-blue-700' }
+      return { text: t('prodBatch.wait.start' as Parameters<Translate>[0]), tone: 'border-blue-200 bg-blue-50 text-blue-700' }
     case 'in_production':
-      return { text: 'идёт выпуск', tone: 'border-slate-200 bg-slate-50 text-slate-600' }
+      return { text: t('prodBatch.wait.inProduction' as Parameters<Translate>[0]), tone: 'border-slate-200 bg-slate-50 text-slate-600' }
     default:
       return null
   }
@@ -483,7 +483,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       {myActionCount > 0 && (
         <div className="flex items-center gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-800">
           <AlertTriangle size={17} className="shrink-0" />
-          <span><b>{myActionCount}</b> серии ждут действия по вашей роли.</span>
+          <span>{t('prodBatch.myActionsCount' as Parameters<Translate>[0], { n: myActionCount })}</span>
         </div>
       )}
 
@@ -524,7 +524,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
                 <th className="px-4 py-3">{t('prodBatch.thProdDate')}</th>
                 <th className="px-4 py-3">{t('prodBatch.thExpiry')}</th>
                 <th className="px-4 py-3">{t('prodBatch.thStatus')}</th>
-                <th className="px-4 py-3">Индикатор</th>
+                <th className="px-4 py-3">{t('prodBatch.thIndicator' as Parameters<Translate>[0])}</th>
               </tr>
             </thead>
             <tbody>
@@ -632,16 +632,17 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
 }
 
 function ProductionEmptyState() {
+  const { t } = useI18n()
   return (
     <section className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div>
-          <div className="text-[16px] font-semibold text-slate-950">Панель управления производственной серией</div>
-          <div className="mt-1 text-sm text-slate-500">В реестре нет выбранной серии. Создайте серию через основную кнопку сверху, чтобы открыть действия по маршруту.</div>
+          <div className="text-[16px] font-semibold text-slate-950">{t('prodBatch.emptyPanelTitle' as Parameters<Translate>[0])}</div>
+          <div className="mt-1 text-sm text-slate-500">{t('prodBatch.emptyPanelHint' as Parameters<Translate>[0])}</div>
         </div>
       </div>
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Маршрут серии</div>
+        <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('prodBatch.routeTitle' as Parameters<Translate>[0])}</div>
         <ol className="hidden items-start md:flex">
           {BATCH_ROUTE.map((step, index) => (
             <li key={step.key} className="flex flex-1 flex-col items-center">
@@ -652,7 +653,7 @@ function ProductionEmptyState() {
                 </span>
                 <span className={`h-0.5 flex-1 rounded ${index === BATCH_ROUTE.length - 1 ? 'opacity-0' : 'bg-slate-200'}`} />
               </div>
-              <span className="mt-2 text-center text-xs leading-tight text-slate-400">{step.short}</span>
+              <span className="mt-2 text-center text-xs leading-tight text-slate-400">{t(`prodBatch.route.${step.key}.short` as Parameters<Translate>[0])}</span>
             </li>
           ))}
         </ol>
@@ -665,7 +666,7 @@ function ProductionEmptyState() {
                 </span>
                 {index < BATCH_ROUTE.length - 1 && <span className="w-0.5 flex-1 bg-slate-200" style={{ minHeight: 18 }} />}
               </div>
-              <span className="pb-3 pt-1.5 text-sm text-slate-400">{step.label}</span>
+              <span className="pb-3 pt-1.5 text-sm text-slate-400">{t(`prodBatch.route.${step.key}.label` as Parameters<Translate>[0])}</span>
             </li>
           ))}
         </ol>
@@ -822,7 +823,7 @@ function RouteStepper({ batch }: { batch: ProductionBatchItem }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Маршрут серии</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t('prodBatch.routeTitle' as Parameters<Translate>[0])}</span>
         <span className="text-xs text-slate-400">{statusLabel(batch.status, t)}</span>
       </div>
       <ol className="hidden items-start md:flex">
@@ -837,7 +838,7 @@ function RouteStepper({ batch }: { batch: ProductionBatchItem }) {
                 <span className={`h-0.5 flex-1 rounded ${index === BATCH_ROUTE.length - 1 ? 'opacity-0' : nextState === 'done' ? 'bg-emerald-300' : 'bg-slate-200'}`} />
               </div>
               <span className={`mt-2 text-center text-xs leading-tight ${state === 'current' ? 'font-semibold text-blue-700' : state === 'done' ? 'text-slate-700' : 'text-slate-400'}`}>
-                {step.short}
+                {t(`prodBatch.route.${step.key}.short` as Parameters<Translate>[0])}
               </span>
             </li>
           )
@@ -853,7 +854,7 @@ function RouteStepper({ batch }: { batch: ProductionBatchItem }) {
                 {index < BATCH_ROUTE.length - 1 && <span className={`w-0.5 flex-1 ${state === 'done' ? 'bg-emerald-300' : 'bg-slate-200'}`} style={{ minHeight: 18 }} />}
               </div>
               <span className={`pb-3 pt-1.5 text-sm ${state === 'current' ? 'font-semibold text-blue-700' : state === 'done' ? 'text-slate-800' : 'text-slate-400'}`}>
-                {step.label}
+                {t(`prodBatch.route.${step.key}.label` as Parameters<Translate>[0])}
               </span>
             </li>
           )
@@ -925,7 +926,7 @@ function ActionPanel({
   const { t } = useI18n()
   if (batch.status === 'draft') {
     return (
-      <PanelShell icon={ShieldCheck} tone="blue" title={t('prodBatch.assignBatch')} sub="Регистрация номера серии">
+      <PanelShell icon={ShieldCheck} tone="blue" title={t('prodBatch.assignBatch')} sub={t('prodBatch.assignSub' as Parameters<Translate>[0])}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-slate-600">{t('prodBatch.draftNotice')}</p>
           <button type="button" disabled={!canManage || isLoading} onClick={onAssign} className="inline-flex h-11 items-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
@@ -952,7 +953,7 @@ function ActionPanel({
   if (batch.status === 'bmr_requested') {
     return (
       <InfoStrip tone="cyan" icon={FileSignature}>
-        {t('prodBatch.bmrRequestedAt', { date: formatDate(batch.bmr_requested_at) })}. Ожидается выдача ЗПС/BMR контролером ДОК.
+        {t('prodBatch.waitingDokIssue' as Parameters<Translate>[0], { date: formatDate(batch.bmr_requested_at) })}
       </InfoStrip>
     )
   }
@@ -997,12 +998,12 @@ function ActionPanel({
   if (batch.status === 'completed') {
     return (
       <InfoStrip tone="violet" icon={CheckCircle2}>
-        {t('prodBatch.completedAt', { date: formatDate(batch.completed_at) })}. Запись остается в реестре производственных серий.
+        {t('prodBatch.completedRegistryNote' as Parameters<Translate>[0], { date: formatDate(batch.completed_at) })}
       </InfoStrip>
     )
   }
   if (batch.status === 'cancelled') {
-    return <InfoStrip tone="slate" icon={Ban}>Серия отменена. Действия заблокированы, запись сохранена для прослеживаемости.</InfoStrip>
+    return <InfoStrip tone="slate" icon={Ban}>{t('prodBatch.cancelledBlockedNote' as Parameters<Translate>[0])}</InfoStrip>
   }
   return (
     <InfoStrip tone="slate" icon={FileText}>
@@ -1073,7 +1074,7 @@ function CancelStrip({
           {t('prodBatch.cancelBtn')}
         </button>
       </div>
-      <button type="button" onClick={() => setOpen(false)} className="mt-3 text-xs font-medium text-slate-500 hover:text-slate-800">Свернуть</button>
+      <button type="button" onClick={() => setOpen(false)} className="mt-3 text-xs font-medium text-slate-500 hover:text-slate-800">{t('prodBatch.collapse' as Parameters<Translate>[0])}</button>
     </PanelShell>
   )
 }
@@ -1571,7 +1572,8 @@ function KpiCard({ label, value, tone, active, onClick }: { label: string; value
 }
 
 function WaitingPill({ batch }: { batch: ProductionBatchItem }) {
-  const waiting = waitingFor(batch)
+  const { t } = useI18n()
+  const waiting = waitingFor(batch, t)
   if (!waiting) return <span className="text-xs text-slate-400">-</span>
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${waiting.tone}`}>
