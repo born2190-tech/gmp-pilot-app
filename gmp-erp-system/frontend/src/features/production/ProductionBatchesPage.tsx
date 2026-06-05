@@ -592,10 +592,7 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           isLoading={isLoading}
         />
       ) : (
-        <ProductionEmptyState
-          canCreate={canCreate}
-          onCreate={() => { setForm(makeInitialForm(t('prodBatch.defaultUnit'))); setShowCreate(true) }}
-        />
+        <ProductionEmptyState />
       )}
 
       {showCreate && (
@@ -634,25 +631,13 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   )
 }
 
-function ProductionEmptyState({ canCreate, onCreate }: { canCreate: boolean; onCreate: () => void }) {
+function ProductionEmptyState() {
   return (
     <section className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-[16px] font-semibold text-slate-950">Панель управления производственной серией</div>
-            <div className="mt-1 text-sm text-slate-500">В реестре нет выбранной серии. Создайте серию, чтобы открыть действия по маршруту.</div>
-          </div>
-          {canCreate && (
-            <button
-              type="button"
-              onClick={onCreate}
-              className="inline-flex h-11 items-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700"
-            >
-              <Plus size={17} />
-              Новая серия
-            </button>
-          )}
+        <div>
+          <div className="text-[16px] font-semibold text-slate-950">Панель управления производственной серией</div>
+          <div className="mt-1 text-sm text-slate-500">В реестре нет выбранной серии. Создайте серию через основную кнопку сверху, чтобы открыть действия по маршруту.</div>
         </div>
       </div>
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
