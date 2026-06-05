@@ -68,14 +68,18 @@ def _code_from_filename(filename: str) -> str | None:
 
 def _material_from_filename(filename: str) -> str | None:
     stem = _filename_stem(filename)
-    stem = re.sub(r"(?i)\b(SPC|ND|ФСП|СПЦ|СОП|SPEC|SUB|СУБ)\b", " ", stem)
-    stem = re.sub(r"(?i)спецификац[ия]+|specification", " ", stem)
     stem = re.sub(r"^\W*\d+[\W_]*", " ", stem)
     stem = re.sub(r"[_\-()]+", " ", stem)
+    stop_words = {"spc", "nd", "фсп", "спц", "соп", "spec", "sub", "суб", "specification", "спецификация"}
+    stem = " ".join(part for part in stem.split() if not part.isdigit() and part.lower() not in stop_words)
     stem = _clean(stem)
     if 3 <= len(stem) <= 120 and not _HEADER_NOISE_RE.search(stem):
         return stem
     return None
+
+
+def _has_cyrillic(value: str | None) -> bool:
+    return bool(value and re.search(r"[А-Яа-я]", value))
 
 
 def _looks_like_material_title(value: str) -> bool:
@@ -105,6 +109,27 @@ def _material_from_top_lines(text: str) -> str | None:
         else:
             merged.append(line)
     return merged[0] if merged else None
+
+
+def _guess_sop_form(filename: str, text: str) -> str:
+    hay = f"{filename}\n{text[:5000]}".lower()
+    if re.search(r"(субстанц|сырь|spc[_\-\s]*суб|соп[\s–-]*533|sop[\s–-]*533)", hay):
+        return "533"
+    if re.search(r"(готов(ая|ой)?\s+продукц|гп\b|finished product|соп[\s–-]*548|sop[\s–-]*548|таблет|капсул)", hay):
+        return "548"
+    return "533"
+
+
+def _infer_unit(spec: str) -> str | None:
+    compact = _clean(spec)
+    if len(compact) > 48:
+        return None
+    if not re.search(r"\d", compact):
+        return None
+    if "%" in compact:
+        return "%"
+    unit_match = _UNIT_RE.search(compact)
+    return unit_match.group(1) if unit_match else None
 
 
 def _extract_docx_text(data: bytes) -> tuple[str, list[list[str]]]:
@@ -179,8 +204,10 @@ def _guess_header(filename: str, text: str) -> tuple[str, str | None, str]:
             break
     if material and _HEADER_NOISE_RE.search(material):
         material = ""
+    filename_material = _material_from_filename(filename)
     if not material:
-        material = _material_from_top_lines(text) or _material_from_filename(filename) or _filename_stem(filename)
+        top_material = _material_from_top_lines(text)
+        material = filename_material if _has_cyrillic(filename_material) else top_material or filename_material or _filename_stem(filename)
     return nd_code[:128], revision[:32] if revision else None, material[:255]
 
 
@@ -200,8 +227,7 @@ def _row_to_param(cells: list[str]) -> dict | None:
     method = cleaned[2] if len(cleaned) >= 3 else None
     unit = cleaned[3] if len(cleaned) >= 4 else None
     if not unit:
-        unit_match = _UNIT_RE.search(spec)
-        unit = unit_match.group(1) if unit_match else None
+        unit = _infer_unit(spec)
     if len(name) < 2 or len(spec) < 1:
         return None
     category = "microbiological" if re.search(r"(микро|бактер|дрож|плес|salmonella|e\.?\s*coli|cfu|кое)", name, re.IGNORECASE) else "physicochemical"
@@ -327,7 +353,7 @@ def import_specification_document(db: Session, user: CurrentUser, filename: str,
         material_name=material_name,
         material_id=None,
         match_keywords=material_name,
-        sop_form="548" if re.search(r"(готов|finished|tablet|capsule|таблет|капсул)", text, re.IGNORECASE) else "533",
+        sop_form=_guess_sop_form(filename, text),
         micro_required=micro_required,
         micro_method_ref=None,
         is_active=False,
