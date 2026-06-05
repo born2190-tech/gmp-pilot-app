@@ -84,6 +84,27 @@ const STATUS_STYLE: Record<string, string> = {
 
 const STATUS_FILTERS = ['', 'draft', 'assigned', 'bmr_requested', 'bmr_issued', 'ready_to_start', 'in_production', 'completed', 'cancelled']
 
+const BATCH_ROUTE = [
+  { key: 'draft', label: 'Черновик', short: 'Черновик' },
+  { key: 'assigned', label: 'Серия присвоена', short: 'Присвоена' },
+  { key: 'bmr_requested', label: 'ЗПС запрошена', short: 'ЗПС запрошена' },
+  { key: 'bmr_issued', label: 'ЗПС выдана', short: 'ЗПС выдана' },
+  { key: 'ready_to_start', label: 'Готова к старту', short: 'К старту' },
+  { key: 'in_production', label: 'В производстве', short: 'В производстве' },
+  { key: 'completed', label: 'Завершена', short: 'Завершена' },
+]
+
+const ROUTE_INDEX = Object.fromEntries(BATCH_ROUTE.map((step, index) => [step.key, index]))
+
+const KPI_TONES: Record<string, string> = {
+  draft: 'bg-slate-400',
+  assigned: 'bg-amber-400',
+  bmr_requested: 'bg-cyan-400',
+  in_production: 'bg-slate-900',
+  completed: 'bg-violet-400',
+  cancelled: 'bg-rose-400',
+}
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -96,6 +117,33 @@ function formatDate(value: string | null): string {
 function formatDateTime(value: string | null): string {
   if (!value) return '-'
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
+}
+
+function waitingFor(batch: ProductionBatchItem) {
+  switch (batch.status) {
+    case 'draft':
+      return { text: 'ждёт: присвоить серию', tone: 'border-amber-200 bg-amber-50 text-amber-700' }
+    case 'assigned':
+      return { text: 'ждёт: запрос ЗПС', tone: 'border-amber-200 bg-amber-50 text-amber-700' }
+    case 'bmr_requested':
+      return { text: 'ждёт: выдачу ЗПС (ДОК)', tone: 'border-cyan-200 bg-cyan-50 text-cyan-700' }
+    case 'bmr_issued':
+    case 'ready_to_start':
+      return { text: 'ждёт: старт серии', tone: 'border-blue-200 bg-blue-50 text-blue-700' }
+    case 'in_production':
+      return { text: 'идёт выпуск', tone: 'border-slate-200 bg-slate-50 text-slate-600' }
+    default:
+      return null
+  }
+}
+
+function routeState(stepKey: string, batch: ProductionBatchItem): 'done' | 'current' | 'upcoming' {
+  const current = ROUTE_INDEX[batch.status] ?? 0
+  const index = ROUTE_INDEX[stepKey] ?? 0
+  if (batch.status === 'cancelled') return index <= current ? 'done' : 'upcoming'
+  if (index < current) return 'done'
+  if (index === current) return 'current'
+  return 'upcoming'
 }
 
 function makeInitialForm(unit = 'pcs') {
@@ -371,6 +419,11 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
   const kpiActive = batches.filter((batch) => batch.status === 'in_production').length
   const kpiCompleted = batches.filter((batch) => batch.status === 'completed').length
   const kpiCancelled = batches.filter((batch) => batch.status === 'cancelled').length
+  const myActionCount = batches.filter((batch) => {
+    if (batch.status === 'bmr_requested') return canViewAudit
+    if (['draft', 'assigned', 'bmr_issued', 'ready_to_start', 'in_production'].includes(batch.status)) return canCreate || canExecute || canRequestBmr
+    return false
+  }).length
   const toggleFilter = (s: string) => setStatusFilter((cur) => (cur === s ? '' : s))
 
   return (
@@ -419,15 +472,22 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
       {success && <Notice tone="success" text={success} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KpiCard label={t('prodBatch.kpiDraft')} value={kpiDraft} active={statusFilter === 'draft'} onClick={() => toggleFilter('draft')} />
-        <KpiCard label={t('prodBatch.kpiAssigned')} value={kpiAssigned} active={statusFilter === 'assigned'} onClick={() => toggleFilter('assigned')} />
-        <KpiCard label={t('prodBatch.kpiBmrRequested')} value={kpiBmrRequested} active={statusFilter === 'bmr_requested'} onClick={() => toggleFilter('bmr_requested')} />
-        <KpiCard label={t('prodBatch.kpiActive')} value={kpiActive} active={statusFilter === 'in_production'} onClick={() => toggleFilter('in_production')} />
-        <KpiCard label={t('prodBatch.kpiCompleted')} value={kpiCompleted} active={statusFilter === 'completed'} onClick={() => toggleFilter('completed')} />
-        <KpiCard label={t('prodBatch.kpiCancelled')} value={kpiCancelled} active={statusFilter === 'cancelled'} onClick={() => toggleFilter('cancelled')} />
+        <KpiCard label={t('prodBatch.kpiDraft')} value={kpiDraft} tone={KPI_TONES.draft} active={statusFilter === 'draft'} onClick={() => toggleFilter('draft')} />
+        <KpiCard label={t('prodBatch.kpiAssigned')} value={kpiAssigned} tone={KPI_TONES.assigned} active={statusFilter === 'assigned'} onClick={() => toggleFilter('assigned')} />
+        <KpiCard label={t('prodBatch.kpiBmrRequested')} value={kpiBmrRequested} tone={KPI_TONES.bmr_requested} active={statusFilter === 'bmr_requested'} onClick={() => toggleFilter('bmr_requested')} />
+        <KpiCard label={t('prodBatch.kpiActive')} value={kpiActive} tone={KPI_TONES.in_production} active={statusFilter === 'in_production'} onClick={() => toggleFilter('in_production')} />
+        <KpiCard label={t('prodBatch.kpiCompleted')} value={kpiCompleted} tone={KPI_TONES.completed} active={statusFilter === 'completed'} onClick={() => toggleFilter('completed')} />
+        <KpiCard label={t('prodBatch.kpiCancelled')} value={kpiCancelled} tone={KPI_TONES.cancelled} active={statusFilter === 'cancelled'} onClick={() => toggleFilter('cancelled')} />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      {myActionCount > 0 && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-800">
+          <AlertTriangle size={17} className="shrink-0" />
+          <span><b>{myActionCount}</b> серии ждут действия по вашей роли.</span>
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-3">
           <div className="relative min-w-[260px] flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -456,24 +516,21 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1240px] w-full text-left text-sm">
+          <table className="min-w-[980px] w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-[0.08em] text-slate-500">
               <tr>
-                <th className="px-4 py-3">{t('prodBatch.thBatchNo')}</th>
-                <th className="px-4 py-3">{t('prodBatch.thProduct')}</th>
+                <th className="px-4 py-3">{t('prodBatch.thBatchNo')} · {t('prodBatch.thProduct')}</th>
                 <th className="px-4 py-3">{t('prodBatch.thSize')}</th>
                 <th className="px-4 py-3">{t('prodBatch.thProdDate')}</th>
                 <th className="px-4 py-3">{t('prodBatch.thExpiry')}</th>
                 <th className="px-4 py-3">{t('prodBatch.thStatus')}</th>
-                <th className="px-4 py-3">{t('prodBatch.zpsBmr')}</th>
-                <th className="px-4 py-3">{t('prodBatch.thStart')}</th>
-                <th className="px-4 py-3">{t('prodBatch.thEnd')}</th>
+                <th className="px-4 py-3">Индикатор</th>
               </tr>
             </thead>
             <tbody>
               {filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-500">
                     {isLoading ? t('prodBatch.loading') : t('prodBatch.notFound')}
                   </td>
                 </tr>
@@ -488,19 +545,13 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
                   >
                     <td className="px-4 py-3">
                       <div className="font-mono font-semibold text-slate-950">{batch.batch_no}</div>
-                      <div className="text-xs text-slate-500">{t('prodBatch.codeShort')} {batch.product_code} · № {String(batch.serial_no).padStart(3, '0')}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{batch.product_name}</div>
-                      <div className="text-xs text-slate-500">{batch.dosage_form || '-'}</div>
+                      <div className="text-xs text-slate-500">{batch.product_name} · {t('prodBatch.codeShort')} {batch.product_code}</div>
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-700">{batch.batch_size} {batch.batch_size_unit}</td>
                     <td className="px-4 py-3 font-mono text-slate-700">{formatDate(batch.production_date)}</td>
                     <td className="px-4 py-3 font-mono text-slate-700">{formatDate(batch.expiry_date)}</td>
                     <td className="px-4 py-3"><StatusBadge status={batch.status} /></td>
-                    <td className="px-4 py-3 font-mono text-slate-700">{batch.bmr_no || '-'}</td>
-                    <td className="px-4 py-3 font-mono text-slate-700">{formatDate(batch.started_at)}</td>
-                    <td className="px-4 py-3 font-mono text-slate-700">{formatDate(batch.completed_at)}</td>
+                    <td className="px-4 py-3"><WaitingPill batch={batch} /></td>
                   </tr>
                 ))
               )}
@@ -648,30 +699,7 @@ function BatchDetail({
   const isTerminal = ['in_production', 'completed', 'cancelled'].includes(batch.status)
   const canCancel = canManage && !isTerminal
   return (
-    <div className="space-y-4">
-      {batch.status === 'draft' && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-50 p-4">
-          <div className="text-sm text-slate-700">
-            <span className="font-semibold">{t('prodBatch.draftBatch')}</span> {t('prodBatch.draftNotice')}
-          </div>
-          {canManage && (
-            <button
-              type="button"
-              disabled={isLoading}
-              onClick={onAssign}
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              <ShieldCheck size={16} />
-              {t('prodBatch.assignBatch')}
-            </button>
-          )}
-        </div>
-      )}
-      {batch.status === 'cancelled' && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-          <span className="font-semibold">{t('prodBatch.cancelledLabel')}</span> {formatDate(batch.cancelled_at)}{batch.cancel_reason ? ` · ${batch.cancel_reason}` : ''}. {t('prodBatch.staysInLog')}
-        </div>
-      )}
+    <section className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -690,63 +718,210 @@ function BatchDetail({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        {canRequestBmr && (
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <SectionTitle icon={FileSignature} title={t('prodBatch.requestBmrTitle')} sub={t('prodBatch.requestBmrSub')} />
-          {batch.bmr_issued_at ? (
-            <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              {t('prodBatch.bmrIssuedBy')} <span className="font-mono">{batch.bmr_no}</span>. {t('prodBatch.canStart')}
-            </div>
-          ) : batch.bmr_requested_at ? (
-            <div className="mt-4 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-800">
-              {t('prodBatch.bmrRequestedAt', { date: formatDate(batch.bmr_requested_at) })}
-            </div>
-          ) : (
-            <div className="mt-4 space-y-3">
-              <p className="text-sm text-slate-600">{t('prodBatch.requestBmrHint')}</p>
-              <button
-                type="button"
-                disabled={!canRequestBmr || batch.status !== 'assigned' || isLoading}
-                onClick={onRequestBmr}
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FileSignature size={16} />
-                {t('prodBatch.requestBmrBtn')}
-              </button>
-              {batch.status === 'draft' && <p className="text-xs text-amber-700">{t('prodBatch.assignFirst')}</p>}
-            </div>
-          )}
-        </div>
-        )}
+      {batch.status === 'cancelled' && (
+        <InfoStrip tone="rose" icon={Ban}>
+          <span className="font-semibold">{t('prodBatch.cancelledLabel')}</span> {formatDate(batch.cancelled_at)}
+          {batch.cancel_reason ? ` · ${batch.cancel_reason}` : ''}. {t('prodBatch.staysInLog')}
+        </InfoStrip>
+      )}
 
-        {canExecute && (
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <SectionTitle icon={ClipboardCheck} title={t('prodBatch.readinessTitle')} sub={t('prodBatch.readinessSub')} />
-          <div className="mt-4 space-y-2">
-            {CHECK_KEYS.map((key) => (
-              <label key={key} className="flex items-start gap-3 rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50">
-                <input
-                  type="checkbox"
-                  checked={batch[key]}
-                  disabled={!canExecute || batch.status === 'in_production' || batch.status === 'completed'}
-                  onChange={(e) => onChecklist(key, e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300"
-                />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-slate-900">{t(`prodBatch.check.${key}` as Parameters<Translate>[0])}</span>
-                  <span className="block text-xs text-slate-500">{t(`prodBatch.checkSop.${key}` as Parameters<Translate>[0])}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-        )}
+      <RouteStepper batch={batch} />
+
+      <ActionPanel
+        batch={batch}
+        bmrInstance={bmrInstance}
+        canManage={canManage}
+        canRequestBmr={canRequestBmr}
+        canExecute={canExecute}
+        canStart={!!canStart}
+        canComplete={!!canComplete}
+        allChecks={allChecks}
+        startPassword={startPassword}
+        startReason={startReason}
+        completePassword={completePassword}
+        completeReason={completeReason}
+        onAssign={onAssign}
+        onRequestBmr={onRequestBmr}
+        onChecklist={onChecklist}
+        onStartPassword={onStartPassword}
+        onStartReason={onStartReason}
+        onCompletePassword={onCompletePassword}
+        onCompleteReason={onCompleteReason}
+        onStart={onStart}
+        onComplete={onComplete}
+        onOpenBmr={onOpenBmr}
+        isLoading={isLoading}
+      />
+
+      <BmrLineClearance batch={batch} bmrInstance={bmrInstance} onOpenBmr={onOpenBmr} />
+
+      {canCancel && (
+        <CancelStrip
+          cancelPassword={cancelPassword}
+          cancelReason={cancelReason}
+          onCancelPassword={onCancelPassword}
+          onCancelReason={onCancelReason}
+          onCancel={onCancel}
+          isLoading={isLoading}
+        />
+      )}
+
+      <DetailTabs
+        batch={batch}
+        audit={audit}
+        linkedReqs={linkedReqs}
+        bmrInstance={bmrInstance}
+        canViewAudit={canViewAudit}
+        onOpenBmr={onOpenBmr}
+      />
+    </section>
+  )
+}
+
+function RouteStepper({ batch }: { batch: ProductionBatchItem }) {
+  const { t } = useI18n()
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Маршрут серии</span>
+        <span className="text-xs text-slate-400">{statusLabel(batch.status, t)}</span>
       </div>
+      <ol className="hidden items-start md:flex">
+        {BATCH_ROUTE.map((step, index) => {
+          const state = routeState(step.key, batch)
+          const nextState = BATCH_ROUTE[index + 1] ? routeState(BATCH_ROUTE[index + 1].key, batch) : 'upcoming'
+          return (
+            <li key={step.key} className="flex flex-1 flex-col items-center">
+              <div className="flex w-full items-center">
+                <span className={`h-0.5 flex-1 rounded ${index === 0 ? 'opacity-0' : state === 'done' || state === 'current' ? 'bg-emerald-300' : 'bg-slate-200'}`} />
+                <StepDot state={state} index={index} />
+                <span className={`h-0.5 flex-1 rounded ${index === BATCH_ROUTE.length - 1 ? 'opacity-0' : nextState === 'done' ? 'bg-emerald-300' : 'bg-slate-200'}`} />
+              </div>
+              <span className={`mt-2 text-center text-xs leading-tight ${state === 'current' ? 'font-semibold text-blue-700' : state === 'done' ? 'text-slate-700' : 'text-slate-400'}`}>
+                {step.short}
+              </span>
+            </li>
+          )
+        })}
+      </ol>
+      <ol className="space-y-0 md:hidden">
+        {BATCH_ROUTE.map((step, index) => {
+          const state = routeState(step.key, batch)
+          return (
+            <li key={step.key} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <StepDot state={state} index={index} />
+                {index < BATCH_ROUTE.length - 1 && <span className={`w-0.5 flex-1 ${state === 'done' ? 'bg-emerald-300' : 'bg-slate-200'}`} style={{ minHeight: 18 }} />}
+              </div>
+              <span className={`pb-3 pt-1.5 text-sm ${state === 'current' ? 'font-semibold text-blue-700' : state === 'done' ? 'text-slate-800' : 'text-slate-400'}`}>
+                {step.label}
+              </span>
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
 
-      {canExecute && (
-      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={Play} title={t('prodBatch.startTitle')} sub={t('prodBatch.startSub')} />
+function StepDot({ state, index }: { state: 'done' | 'current' | 'upcoming'; index: number }) {
+  if (state === 'done') {
+    return <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm"><CheckCircle2 size={17} /></span>
+  }
+  if (state === 'current') {
+    return <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm ring-4 ring-blue-100"><span className="font-mono text-[13px] font-bold">{index + 1}</span></span>
+  }
+  return <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400"><span className="font-mono text-[13px] font-semibold">{index + 1}</span></span>
+}
+
+function ActionPanel({
+  batch,
+  bmrInstance,
+  canManage,
+  canRequestBmr,
+  canExecute,
+  canStart,
+  canComplete,
+  allChecks,
+  startPassword,
+  startReason,
+  completePassword,
+  completeReason,
+  onAssign,
+  onRequestBmr,
+  onChecklist,
+  onStartPassword,
+  onStartReason,
+  onCompletePassword,
+  onCompleteReason,
+  onStart,
+  onComplete,
+  onOpenBmr,
+  isLoading,
+}: {
+  batch: ProductionBatchItem
+  bmrInstance: BmrInstanceItem | null
+  canManage: boolean
+  canRequestBmr: boolean
+  canExecute: boolean
+  canStart: boolean
+  canComplete: boolean
+  allChecks: boolean
+  startPassword: string
+  startReason: string
+  completePassword: string
+  completeReason: string
+  onAssign: () => void
+  onRequestBmr: () => void
+  onChecklist: (key: CheckKey, value: boolean) => void
+  onStartPassword: (value: string) => void
+  onStartReason: (value: string) => void
+  onCompletePassword: (value: string) => void
+  onCompleteReason: (value: string) => void
+  onStart: () => void
+  onComplete: () => void
+  onOpenBmr: (id: string) => void
+  isLoading: boolean
+}) {
+  const { t } = useI18n()
+  if (batch.status === 'draft') {
+    return (
+      <PanelShell icon={ShieldCheck} tone="blue" title={t('prodBatch.assignBatch')} sub="Регистрация номера серии">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-600">{t('prodBatch.draftNotice')}</p>
+          <button type="button" disabled={!canManage || isLoading} onClick={onAssign} className="inline-flex h-11 items-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            <ShieldCheck size={17} />
+            {t('prodBatch.assignBatch')}
+          </button>
+        </div>
+      </PanelShell>
+    )
+  }
+  if (batch.status === 'assigned') {
+    return (
+      <PanelShell icon={FileSignature} tone="blue" title={t('prodBatch.requestBmrTitle')} sub={t('prodBatch.requestBmrSub')}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-600">{t('prodBatch.requestBmrHint')}</p>
+          <button type="button" disabled={!canRequestBmr || isLoading} onClick={onRequestBmr} className="inline-flex h-11 items-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            <FileSignature size={17} />
+            {t('prodBatch.requestBmrBtn')}
+          </button>
+        </div>
+      </PanelShell>
+    )
+  }
+  if (batch.status === 'bmr_requested') {
+    return (
+      <InfoStrip tone="cyan" icon={FileSignature}>
+        {t('prodBatch.bmrRequestedAt', { date: formatDate(batch.bmr_requested_at) })}. Ожидается выдача ЗПС/BMR контролером ДОК.
+      </InfoStrip>
+    )
+  }
+  if (batch.status === 'bmr_issued' || batch.status === 'ready_to_start') {
+    return (
+      <PanelShell icon={Play} tone="blue" title={t('prodBatch.startTitle')} sub={t('prodBatch.startSub')}>
+        <ReadinessChecklist batch={batch} canExecute={canExecute} onChecklist={onChecklist} />
+        {!allChecks && <p className="mt-3 text-xs text-amber-700">{t('prodBatch.startNeed')}</p>}
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
           <Field label={t('prodBatch.eSignPassword')}>
             <input type="password" className="input" value={startPassword} onChange={(e) => onStartPassword(e.target.value)} disabled={!canStart} />
@@ -754,168 +929,320 @@ function BatchDetail({
           <Field label={t('prodBatch.basis')}>
             <input className="input" value={startReason} onChange={(e) => onStartReason(e.target.value)} disabled={!canStart} />
           </Field>
-          <button
-            type="button"
-            disabled={!canStart || !startPassword || isLoading}
-            onClick={onStart}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <button type="button" disabled={!canStart || !startPassword || isLoading} onClick={onStart} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
             <Play size={16} />
             {t('prodBatch.startBtn')}
           </button>
         </div>
-        {!canStart && batch.status !== 'in_production' && (
-          <p className="mt-3 text-xs text-amber-700">
-            {t('prodBatch.startNeed')}
-          </p>
-        )}
-      </div>
-      )}
+      </PanelShell>
+    )
+  }
+  if (batch.status === 'in_production') {
+    return (
+      <PanelShell icon={CheckCircle2} tone="violet" title={t('prodBatch.completeTitle')} sub={t('prodBatch.completeSub')}>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+          <Field label={t('prodBatch.eSignPassword')}>
+            <input type="password" className="input" value={completePassword} onChange={(e) => onCompletePassword(e.target.value)} disabled={!canComplete} />
+          </Field>
+          <Field label={t('prodBatch.basis')}>
+            <input className="input" value={completeReason} onChange={(e) => onCompleteReason(e.target.value)} disabled={!canComplete} />
+          </Field>
+          <button type="button" disabled={!canComplete || !completePassword || isLoading} onClick={onComplete} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">
+            <CheckCircle2 size={16} />
+            {t('prodBatch.completeBtn')}
+          </button>
+        </div>
+      </PanelShell>
+    )
+  }
+  if (batch.status === 'completed') {
+    return (
+      <InfoStrip tone="violet" icon={CheckCircle2}>
+        {t('prodBatch.completedAt', { date: formatDate(batch.completed_at) })}. Запись остается в реестре производственных серий.
+      </InfoStrip>
+    )
+  }
+  if (batch.status === 'cancelled') {
+    return <InfoStrip tone="slate" icon={Ban}>Серия отменена. Действия заблокированы, запись сохранена для прослеживаемости.</InfoStrip>
+  }
+  return (
+    <InfoStrip tone="slate" icon={FileText}>
+      {bmrInstance ? `${bmrInstance.title}` : t('prodBatch.selectOrCreate')}
+    </InfoStrip>
+  )
+}
 
-      {canExecute && (
-      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={CheckCircle2} title={t('prodBatch.completeTitle')} sub={t('prodBatch.completeSub')} />
-        {batch.completed_at ? (
-          <div className="mt-4 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">
-            {t('prodBatch.completedAt', { date: formatDate(batch.completed_at) })}
-          </div>
-        ) : (
-          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-            <Field label={t('prodBatch.eSignPassword')}>
-              <input type="password" className="input" value={completePassword} onChange={(e) => onCompletePassword(e.target.value)} disabled={!canComplete} />
-            </Field>
-            <Field label={t('prodBatch.basis')}>
-              <input className="input" value={completeReason} onChange={(e) => onCompleteReason(e.target.value)} disabled={!canComplete} />
-            </Field>
-            <button
-              type="button"
-              disabled={!canComplete || !completePassword || isLoading}
-              onClick={onComplete}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <CheckCircle2 size={16} />
-              {t('prodBatch.completeBtn')}
-            </button>
-          </div>
-        )}
-        {!canComplete && !batch.completed_at && (
-          <p className="mt-3 text-xs text-slate-500">
-            {t('prodBatch.completeOnlyInProd')}
-          </p>
-        )}
-      </div>
-      )}
+function ReadinessChecklist({ batch, canExecute, onChecklist }: { batch: ProductionBatchItem; canExecute: boolean; onChecklist: (key: CheckKey, value: boolean) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+      {CHECK_KEYS.map((key) => (
+        <label key={key} className="flex min-h-[74px] items-start gap-3 rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50">
+          <input
+            type="checkbox"
+            checked={batch[key]}
+            disabled={!canExecute || batch.status === 'in_production' || batch.status === 'completed'}
+            onChange={(e) => onChecklist(key, e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-slate-300"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-slate-900">{t(`prodBatch.check.${key}` as Parameters<Translate>[0])}</span>
+            <span className="block text-xs text-slate-500">{t(`prodBatch.checkSop.${key}` as Parameters<Translate>[0])}</span>
+          </span>
+        </label>
+      ))}
+    </div>
+  )
+}
 
-      {canCancel && (
-        <div className="rounded-lg border border-rose-200 bg-white p-5 shadow-sm">
-          <SectionTitle icon={Ban} title={t('prodBatch.cancelTitle')} sub={t('prodBatch.cancelSub')} />
-          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-            <Field label={t('prodBatch.cancelReasonLabel')}>
-              <input className="input" value={cancelReason} onChange={(e) => onCancelReason(e.target.value)} placeholder={t('prodBatch.cancelReasonPh')} />
-            </Field>
-            <Field label={t('prodBatch.eSignPassword')}>
-              <input type="password" className="input" value={cancelPassword} onChange={(e) => onCancelPassword(e.target.value)} />
-            </Field>
-            <button
-              type="button"
-              disabled={!cancelReason.trim() || !cancelPassword || isLoading}
-              onClick={onCancel}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-rose-600 px-5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Ban size={16} />
-              {t('prodBatch.cancelBtn')}
-            </button>
+function BmrLineClearance({ batch, bmrInstance, onOpenBmr }: { batch: ProductionBatchItem; bmrInstance: BmrInstanceItem | null; onOpenBmr: (id: string) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-white"><ShieldCheck size={18} /></span>
+          <div>
+            <div className="text-[15px] font-semibold text-slate-900">Line clearance — отражение из BMR</div>
+            <div className="text-xs text-slate-500">Источник истины — электронный BMR. На этом экране не редактируется.</div>
           </div>
         </div>
-      )}
-
-      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={FileText} title={t('prodBatch.eBmrTitle')} sub={t('prodBatch.eBmrSub')} />
+        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">только чтение</span>
+      </div>
+      <div className="p-5">
         {bmrInstance ? (
-          <div className="mt-4 space-y-3">
+          <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{bmrInstanceStatus(bmrInstance.status, t)}</span>
-              <span className="text-sm text-slate-600">{bmrInstance.title} · {t('prodBatch.templateV', { v: bmrInstance.template_version })} · {t('prodBatch.sectionsN', { n: bmrInstance.sections.length })}</span>
-              <button type="button" onClick={() => onOpenBmr(bmrInstance.id)} className="ml-auto inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700"><FileText size={15} />{t('prodBatch.openBmr')}</button>
+              <span className="text-sm text-slate-700"><b>{bmrInstance.title}</b> · {t('prodBatch.sectionsN', { n: bmrInstance.sections.length })}</span>
+              <button type="button" onClick={() => onOpenBmr(bmrInstance.id)} className="ml-auto inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-semibold text-slate-700 hover:bg-slate-50">
+                <FileText size={15} />
+                {t('prodBatch.openBmr')}
+              </button>
             </div>
-            <ol className="divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
-              {bmrInstance.sections.map((s) => (
-                <li key={s.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-slate-100 font-mono text-[11px] text-slate-600">{s.ordinal}</span>
-                  <span className="font-medium text-slate-900">{s.title}</span>
-                  <span className="ml-auto text-[11px] text-slate-400">{t('prodBatch.fieldsN', { n: (s.config?.fields ?? []).length })}</span>
-                </li>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <SignBox label="Выполнил ДП" done={batch.room_ready && batch.equipment_ready} />
+              <SignBox label="Проверил ДОК" done={batch.qa_line_clearance} />
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">{t('prodBatch.eBmrEmpty')}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SignBox({ label, done }: { label: string; done: boolean }) {
+  return (
+    <div className={`rounded-md border px-3 py-2.5 ${done ? 'border-emerald-200 bg-emerald-50' : 'border-dashed border-slate-300 bg-slate-50'}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div>
+      <div className={`mt-1 text-sm font-medium ${done ? 'text-emerald-700' : 'text-slate-500'}`}>{done ? 'подтверждено' : 'ожидает подписи в BMR'}</div>
+    </div>
+  )
+}
+
+function CancelStrip({
+  cancelPassword,
+  cancelReason,
+  onCancelPassword,
+  onCancelReason,
+  onCancel,
+  isLoading,
+}: {
+  cancelPassword: string
+  cancelReason: string
+  onCancelPassword: (value: string) => void
+  onCancelReason: (value: string) => void
+  onCancel: () => void
+  isLoading: boolean
+}) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-5 py-3 text-left shadow-sm hover:bg-slate-50">
+        <span className="flex items-center gap-2 text-sm text-slate-500"><Ban size={16} /> {t('prodBatch.cancelTitle')}</span>
+        <span className="text-xs text-slate-400">{t('prodBatch.cancelSub')}</span>
+      </button>
+    )
+  }
+  return (
+    <PanelShell icon={Ban} tone="rose" title={t('prodBatch.cancelTitle')} sub={t('prodBatch.cancelSub')}>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+        <Field label={t('prodBatch.cancelReasonLabel')}>
+          <input className="input" value={cancelReason} onChange={(e) => onCancelReason(e.target.value)} placeholder={t('prodBatch.cancelReasonPh')} />
+        </Field>
+        <Field label={t('prodBatch.eSignPassword')}>
+          <input type="password" className="input" value={cancelPassword} onChange={(e) => onCancelPassword(e.target.value)} />
+        </Field>
+        <button type="button" disabled={!cancelReason.trim() || !cancelPassword || isLoading} onClick={onCancel} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-rose-600 px-5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50">
+          <Ban size={16} />
+          {t('prodBatch.cancelBtn')}
+        </button>
+      </div>
+      <button type="button" onClick={() => setOpen(false)} className="mt-3 text-xs font-medium text-slate-500 hover:text-slate-800">Свернуть</button>
+    </PanelShell>
+  )
+}
+
+function DetailTabs({
+  batch,
+  audit,
+  linkedReqs,
+  bmrInstance,
+  canViewAudit,
+  onOpenBmr,
+}: {
+  batch: ProductionBatchItem
+  audit: ProductionBatchAuditItem[]
+  linkedReqs: RequisitionItem[]
+  bmrInstance: BmrInstanceItem | null
+  canViewAudit: boolean
+  onOpenBmr: (id: string) => void
+}) {
+  const { t } = useI18n()
+  const [tab, setTab] = useState<'bmr' | 'reqs' | 'audit'>('bmr')
+  const tabs = [
+    { key: 'bmr' as const, label: t('prodBatch.eBmrTitle'), icon: FileText },
+    { key: 'reqs' as const, label: t('prodBatch.linkedReqsTitle'), icon: Boxes, n: linkedReqs.length },
+    ...(canViewAudit ? [{ key: 'audit' as const, label: t('prodBatch.auditTitle'), icon: History, n: audit.length }] : []),
+  ]
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap gap-1 border-b border-slate-100 p-1.5">
+        {tabs.map((item) => {
+          const Icon = item.icon
+          const active = tab === item.key
+          return (
+            <button key={item.key} type="button" onClick={() => setTab(item.key)} className={`inline-flex h-10 items-center gap-2 rounded-md px-3.5 text-sm font-medium ${active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
+              <Icon size={16} />
+              {item.label}
+              {typeof item.n === 'number' && <span className={`rounded px-1.5 font-mono text-[11px] ${active ? 'bg-white/20' : 'bg-slate-200 text-slate-600'}`}>{item.n}</span>}
+            </button>
+          )
+        })}
+      </div>
+      <div className="p-5">
+        {tab === 'bmr' && <BmrTab bmrInstance={bmrInstance} onOpenBmr={onOpenBmr} />}
+        {tab === 'reqs' && <ReqsTab linkedReqs={linkedReqs} />}
+        {tab === 'audit' && <AuditTab audit={audit} batch={batch} />}
+      </div>
+    </div>
+  )
+}
+
+function BmrTab({ bmrInstance, onOpenBmr }: { bmrInstance: BmrInstanceItem | null; onOpenBmr: (id: string) => void }) {
+  const { t } = useI18n()
+  if (!bmrInstance) return <p className="text-sm text-slate-500">{t('prodBatch.eBmrEmpty')}</p>
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">{bmrInstanceStatus(bmrInstance.status, t)}</span>
+        <span className="text-sm text-slate-700"><b>{bmrInstance.title}</b> · {t('prodBatch.templateV', { v: bmrInstance.template_version })} · {t('prodBatch.sectionsN', { n: bmrInstance.sections.length })}</span>
+        <button type="button" onClick={() => onOpenBmr(bmrInstance.id)} className="ml-auto inline-flex h-9 items-center gap-2 rounded-md bg-blue-600 px-3 text-[13px] font-semibold text-white hover:bg-blue-700"><FileText size={15} />{t('prodBatch.openBmr')}</button>
+      </div>
+      <ol className="divide-y divide-slate-100 overflow-hidden rounded-md border border-slate-200">
+        {bmrInstance.sections.map((section) => (
+          <li key={section.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-100 font-mono text-[11px] font-bold text-slate-600">{section.ordinal}</span>
+            <span className="font-medium text-slate-900">{section.title}</span>
+            <span className="ml-auto text-[11px] text-slate-400">{t('prodBatch.fieldsN', { n: (section.config?.fields ?? []).length })}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="text-xs text-slate-500">{t('prodBatch.eBmrTabletHint')}</p>
+    </div>
+  )
+}
+
+function ReqsTab({ linkedReqs }: { linkedReqs: RequisitionItem[] }) {
+  const { t } = useI18n()
+  if (linkedReqs.length === 0) return <p className="text-sm text-slate-500">{t('prodBatch.linkedReqsEmpty')}</p>
+  return (
+    <div className="space-y-3">
+      {linkedReqs.map((req) => (
+        <div key={req.id} className="rounded-md border border-slate-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
+            <span className="font-mono text-sm font-semibold text-slate-900">{req.requisition_no}</span>
+            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${REQ_STATUS_STYLE[req.status] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>{reqStatusLabel(req.status, t)}</span>
+          </div>
+          <table className="w-full text-left text-sm">
+            <thead className="text-[11px] uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-1.5">{t('prodBatch.thMaterial')}</th>
+                <th className="px-3 py-1.5 text-right">{t('prodBatch.thRequested')}</th>
+                <th className="px-3 py-1.5 text-right">{t('prodBatch.thIssued')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {req.lines.map((line) => (
+                <tr key={line.id} className="border-t border-slate-100">
+                  <td className="px-3 py-1.5 text-slate-800">{line.material_name}</td>
+                  <td className="px-3 py-1.5 text-right font-mono text-slate-600">{line.requested_quantity} {line.unit}</td>
+                  <td className="px-3 py-1.5 text-right font-mono text-slate-900">{line.issued_quantity} {line.unit}</td>
+                </tr>
               ))}
-            </ol>
-            <p className="text-xs text-slate-500">{t('prodBatch.eBmrTabletHint')}</p>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-slate-500">{t('prodBatch.eBmrEmpty')}</p>
-        )}
-      </div>
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  )
+}
 
-      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={Boxes} title={t('prodBatch.linkedReqsTitle')} sub={t('prodBatch.linkedReqsSub')} />
-        {linkedReqs.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">{t('prodBatch.linkedReqsEmpty')}</p>
-        ) : (
-          <div className="mt-4 space-y-3">
-            {linkedReqs.map((req) => (
-              <div key={req.id} className="rounded-md border border-slate-200">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
-                  <span className="font-mono text-sm font-semibold text-slate-900">{req.requisition_no}</span>
-                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${REQ_STATUS_STYLE[req.status] ?? 'border-slate-200 bg-slate-100 text-slate-600'}`}>{reqStatusLabel(req.status, t)}</span>
-                </div>
-                <table className="w-full text-left text-sm">
-                  <thead className="text-[11px] uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-3 py-1.5">{t('prodBatch.thMaterial')}</th>
-                      <th className="px-3 py-1.5 text-right">{t('prodBatch.thRequested')}</th>
-                      <th className="px-3 py-1.5 text-right">{t('prodBatch.thIssued')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {req.lines.map((l) => (
-                      <tr key={l.id} className="border-t border-slate-100">
-                        <td className="px-3 py-1.5 text-slate-800">{l.material_name}</td>
-                        <td className="px-3 py-1.5 text-right font-mono text-slate-600">{l.requested_quantity} {l.unit}</td>
-                        <td className="px-3 py-1.5 text-right font-mono text-slate-900">{l.issued_quantity} {l.unit}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
+function AuditTab({ audit, batch }: { audit: ProductionBatchAuditItem[]; batch: ProductionBatchItem }) {
+  const { t } = useI18n()
+  if (audit.length === 0) return <p className="text-sm text-slate-500">{t('prodBatch.auditEmpty')}</p>
+  return (
+    <ol className="space-y-0">
+      {audit.map((ev, i) => (
+        <li key={ev.id} className="flex gap-3">
+          <div className="flex flex-col items-center">
+            <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 bg-white ${ev.action_type.includes('BATCH') ? 'border-emerald-500' : 'border-blue-500'}`} />
+            {i < audit.length - 1 && <span className="w-px flex-1 bg-slate-200" />}
           </div>
-        )}
-      </div>
+          <div className="pb-4">
+            <div className="text-sm font-medium text-slate-900">{actionLabel(ev.action_type, t)}</div>
+            <div className="text-xs text-slate-500">
+              {formatDateTime(ev.created_at)} · {ev.user_name ?? '—'}{ev.role_code ? ` (${ev.role_code})` : ''} · {batch.batch_no}
+            </div>
+            {ev.reason && <div className="mt-0.5 text-xs italic text-slate-600">«{ev.reason}»</div>}
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}
 
-      {canViewAudit && (
-      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <SectionTitle icon={History} title={t('prodBatch.auditTitle')} sub={t('prodBatch.auditSub')} />
-        {audit.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">{t('prodBatch.auditEmpty')}</p>
-        ) : (
-          <ol className="mt-4 space-y-0">
-            {audit.map((ev, i) => (
-              <li key={ev.id} className="flex gap-3">
-                <div className="flex flex-col items-center">
-                  <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-blue-500 bg-white" />
-                  {i < audit.length - 1 && <span className="w-px flex-1 bg-slate-200" />}
-                </div>
-                <div className="pb-4">
-                  <div className="text-sm font-medium text-slate-900">{actionLabel(ev.action_type, t)}</div>
-                  <div className="text-xs text-slate-500">
-                    {formatDateTime(ev.created_at)} · {ev.user_name ?? '—'}{ev.role_code ? ` (${ev.role_code})` : ''}
-                  </div>
-                  {ev.reason && <div className="mt-0.5 text-xs italic text-slate-600">«{ev.reason}»</div>}
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
+function PanelShell({ icon: Icon, tone, title, sub, children }: { icon: LucideIcon; tone: 'blue' | 'violet' | 'rose' | 'slate'; title: string; sub: string; children: ReactNode }) {
+  const ring = { blue: 'border-blue-200', violet: 'border-violet-200', rose: 'border-rose-200', slate: 'border-slate-200' }[tone]
+  const badge = { blue: 'bg-blue-100 text-blue-700', violet: 'bg-violet-100 text-violet-700', rose: 'bg-rose-100 text-rose-700', slate: 'bg-slate-100 text-slate-700' }[tone]
+  return (
+    <div className={`rounded-lg border bg-white p-5 shadow-sm ${ring}`}>
+      <div className="mb-4 flex items-start gap-3">
+        <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${badge}`}><Icon size={19} /></span>
+        <div>
+          <div className="text-[16px] font-semibold text-slate-950">{title}</div>
+          <div className="text-[13px] text-slate-500">{sub}</div>
+        </div>
       </div>
-      )}
+      {children}
+    </div>
+  )
+}
+
+function InfoStrip({ tone, icon: Icon, children }: { tone: 'slate' | 'cyan' | 'violet' | 'rose'; icon: LucideIcon; children: ReactNode }) {
+  const cls = {
+    slate: 'border-slate-200 bg-slate-50 text-slate-600',
+    cyan: 'border-cyan-200 bg-cyan-50 text-cyan-800',
+    violet: 'border-violet-200 bg-violet-50 text-violet-800',
+    rose: 'border-rose-200 bg-rose-50 text-rose-800',
+  }[tone]
+  return (
+    <div className={`flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm ${cls}`}>
+      <Icon size={18} className="mt-0.5 shrink-0" />
+      <div>{children}</div>
     </div>
   )
 }
@@ -1235,16 +1562,30 @@ function ProductsManagerModal({
   )
 }
 
-function KpiCard({ label, value, active, onClick }: { label: string; value: number; active?: boolean; onClick?: () => void }) {
+function KpiCard({ label, value, tone, active, onClick }: { label: string; value: number; tone?: string; active?: boolean; onClick?: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg border bg-white px-4 py-3 text-left shadow-sm transition ${active ? 'border-slate-900 ring-1 ring-slate-900/10' : 'border-slate-200 hover:border-slate-300'}`}
+      className={`flex flex-col gap-2 rounded-lg border bg-white px-4 py-3 text-left shadow-sm transition ${active ? 'border-slate-900 ring-1 ring-slate-900/10' : 'border-slate-200 hover:border-slate-300'}`}
     >
-      <div className="text-xs font-medium text-slate-500">{label}</div>
-      <div className="mt-1 font-mono text-2xl font-semibold text-slate-950">{value}</div>
+      <div className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${tone ?? 'bg-slate-400'}`} />
+        <span className="text-xs font-medium leading-tight text-slate-500">{label}</span>
+      </div>
+      <div className="font-mono text-[26px] font-semibold leading-none text-slate-950">{value}</div>
     </button>
+  )
+}
+
+function WaitingPill({ batch }: { batch: ProductionBatchItem }) {
+  const waiting = waitingFor(batch)
+  if (!waiting) return <span className="text-xs text-slate-400">-</span>
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${waiting.tone}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {waiting.text}
+    </span>
   )
 }
 
