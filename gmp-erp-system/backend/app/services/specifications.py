@@ -200,7 +200,10 @@ def _merge_repeated_parameters(params: list[dict]) -> list[dict]:
     return merged
 
 
-def _extract_docx_text(data: bytes) -> tuple[str, list[list[str]]]:
+def _extract_docx_text(data: bytes) -> tuple[str, list[list[list[str]]]]:
+    """Возвращает (плоский текст, список ТАБЛИЦ). Каждая таблица — список строк,
+    строка — список ячеек. Границы таблиц сохраняем, чтобы отличать основную
+    таблицу спецификации от справочных/легенд (растворимость, сокращения)."""
     try:
         from docx import Document
     except Exception as exc:  # pragma: no cover - dependency is installed in Docker
@@ -208,21 +211,24 @@ def _extract_docx_text(data: bytes) -> tuple[str, list[list[str]]]:
 
     doc = Document(BytesIO(data))
     lines: list[str] = []
-    rows: list[list[str]] = []
+    tables: list[list[list[str]]] = []
     for p in doc.paragraphs:
         text = _clean(p.text)
         if text:
             lines.append(text)
     for table in doc.tables:
+        t_rows: list[list[str]] = []
         for row in table.rows:
             cells = [_clean(cell.text) for cell in row.cells]
             if any(cells):
-                rows.append(cells)
+                t_rows.append(cells)
                 lines.append(" | ".join(cells))
-    return "\n".join(lines), rows
+        if t_rows:
+            tables.append(t_rows)
+    return "\n".join(lines), tables
 
 
-def _extract_pdf_text(data: bytes) -> tuple[str, list[list[str]]]:
+def _extract_pdf_text(data: bytes) -> tuple[str, list[list[list[str]]]]:
     try:
         import pypdfium2 as pdfium
     except Exception as exc:  # pragma: no cover - dependency is installed in Docker
@@ -244,13 +250,47 @@ def _extract_pdf_text(data: bytes) -> tuple[str, list[list[str]]]:
     return "\n".join(lines), []
 
 
-def _extract_document(filename: str, data: bytes) -> tuple[str, list[list[str]]]:
+def _extract_document(filename: str, data: bytes) -> tuple[str, list[list[list[str]]]]:
     lower = filename.lower()
     if lower.endswith(".docx"):
         return _extract_docx_text(data)
     if lower.endswith(".pdf"):
         return _extract_pdf_text(data)
     raise HTTPException(status_code=400, detail="Only .docx and .pdf specification files are supported")
+
+
+# Заголовок таблицы спецификации: есть «имя показателя» И «норма/метод».
+_HDR_NAME_RE = re.compile(r"показател|наименовани|тест\b|test|parameter", re.IGNORECASE)
+_HDR_NORM_RE = re.compile(r"норм|требован|specif|requirement|метод|method|результат", re.IGNORECASE)
+
+# Легенда степеней растворимости (ГФ/ЕPh) — НЕ показатели качества.
+_SOLUBILITY_LEGEND = {
+    "ТЕРМИН", "ОЧЕНЬ ЛЕГКО РАСТВОРИМ", "ЛЕГКО РАСТВОРИМ", "РАСТВОРИМ",
+    "УМЕРЕННО РАСТВОРИМ", "МАЛО РАСТВОРИМ", "ОЧЕНЬ МАЛО РАСТВОРИМ",
+    "ПРАКТИЧЕСКИ НЕРАСТВОРИМ", "ПРАКТИЧЕСКИ НЕ РАСТВОРИМ",
+}
+
+
+def _table_looks_like_spec(t_rows: list[list[str]]) -> bool:
+    """Таблица — это таблица спецификации, если в первых строках есть заголовок
+    с колонками «показатель/тест» и «норма/требования/метод»."""
+    for row in t_rows[:3]:
+        joined = " ".join(_clean(c) for c in row)
+        if _HDR_NAME_RE.search(joined) and _HDR_NORM_RE.search(joined):
+            return True
+    return False
+
+
+def _select_spec_rows(tables: list[list[list[str]]]) -> list[list[str]]:
+    """Строки только из таблиц-спецификаций. Если ни одна не опознана —
+    откатываемся ко всем строкам (back-compat, чтобы не потерять данные)."""
+    spec_rows: list[list[str]] = []
+    for t_rows in tables:
+        if _table_looks_like_spec(t_rows):
+            spec_rows.extend(t_rows)
+    if spec_rows:
+        return spec_rows
+    return [row for t_rows in tables for row in t_rows]
 
 
 def _guess_header(filename: str, text: str) -> tuple[str, str | None, str]:
@@ -298,6 +338,9 @@ def _row_to_param(cells: list[str]) -> dict | None:
         unit = _infer_unit(spec)
     if len(name) < 2 or len(spec) < 1:
         return None
+    # Отбрасываем строки легенды растворимости (ГФ-определения, не показатели).
+    if name.upper().replace("Ё", "Е") in _SOLUBILITY_LEGEND:
+        return None
     category = "microbiological" if re.search(r"(микро|бактер|дрож|плес|salmonella|e\.?\s*coli|cfu|кое)", name, re.IGNORECASE) else "physicochemical"
     return {
         "category": category,
@@ -308,9 +351,10 @@ def _row_to_param(cells: list[str]) -> dict | None:
     }
 
 
-def _parse_parameters(text: str, rows: list[list[str]]) -> list[dict]:
+def _parse_parameters(text: str, tables: list[list[list[str]]]) -> list[dict]:
     params: list[dict] = []
     seen: set[tuple[str, str]] = set()
+    rows = _select_spec_rows(tables)
     for row in rows:
         parsed = _row_to_param(row)
         if parsed:
@@ -401,7 +445,7 @@ def import_specification_document(db: Session, user: CurrentUser, filename: str,
     require_permission(user, "MANAGE_SPECIFICATIONS")
     if not data:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
-    text, rows = _extract_document(filename, data)
+    text, tables = _extract_document(filename, data)
     if len(_clean(text)) < 20:
         raise HTTPException(status_code=422, detail="No readable text found in the document")
 
@@ -413,7 +457,7 @@ def import_specification_document(db: Session, user: CurrentUser, filename: str,
         nd_code = f"{base_code[:112]}-IMP-{suffix}"
         suffix += 1
 
-    params = _parse_parameters(text, rows)
+    params = _parse_parameters(text, tables)
     micro_required = any(p["category"] == "microbiological" for p in params)
     payload = MaterialSpecificationInput(
         nd_code=nd_code,
