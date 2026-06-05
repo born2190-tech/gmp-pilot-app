@@ -131,7 +131,7 @@ export function WarehouseCenterPage({ token }: WarehouseCenterPageProps) {
         <div className="grid gap-3 xl:grid-cols-5">
           <label className="label xl:col-span-2">
             {t('warehouseCenter.search')}
-            <input className="input" onChange={(event) => setSearch(event.target.value)} value={search} />
+            <input autoComplete="off" className="input" onChange={(event) => setSearch(event.target.value)} value={search} />
           </label>
           <FilterSelect label={t('lots.warehouse')} onChange={setWarehouse} options={uniqueValues(lots, (lot) => lot.warehouse_type)} value={warehouse} />
           <FilterSelect label={t('common.status')} onChange={setStatus} options={uniqueValues(lots, (lot) => lot.quality_status)} value={status} />

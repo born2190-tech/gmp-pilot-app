@@ -605,7 +605,7 @@ export function BmrIssuancePage({ token, user }: BmrIssuancePageProps) {
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Field label={text.bmrNo}>
-                  <input className="input font-mono" value={bmrNo} onChange={(event) => setBmrNo(event.target.value)} />
+                  <input autoComplete="off" className="input font-mono" value={bmrNo} onChange={(event) => setBmrNo(event.target.value)} />
                 </Field>
                 <Field label={text.password}>
                   <input type="password" className="input" value={password} onChange={(event) => setPassword(event.target.value)} />

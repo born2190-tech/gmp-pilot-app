@@ -967,7 +967,7 @@ function ActionPanel({
             <input type="password" className="input" value={startPassword} onChange={(e) => onStartPassword(e.target.value)} disabled={!canStart} />
           </Field>
           <Field label={t('prodBatch.basis')}>
-            <input className="input" value={startReason} onChange={(e) => onStartReason(e.target.value)} disabled={!canStart} />
+            <input autoComplete="off" className="input" value={startReason} onChange={(e) => onStartReason(e.target.value)} disabled={!canStart} />
           </Field>
           <button type="button" disabled={!canStart || !startPassword || isLoading} onClick={onStart} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
             <Play size={16} />
@@ -985,7 +985,7 @@ function ActionPanel({
             <input type="password" className="input" value={completePassword} onChange={(e) => onCompletePassword(e.target.value)} disabled={!canComplete} />
           </Field>
           <Field label={t('prodBatch.basis')}>
-            <input className="input" value={completeReason} onChange={(e) => onCompleteReason(e.target.value)} disabled={!canComplete} />
+            <input autoComplete="off" className="input" value={completeReason} onChange={(e) => onCompleteReason(e.target.value)} disabled={!canComplete} />
           </Field>
           <button type="button" disabled={!canComplete || !completePassword || isLoading} onClick={onComplete} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">
             <CheckCircle2 size={16} />
@@ -1064,7 +1064,7 @@ function CancelStrip({
     <PanelShell icon={Ban} tone="rose" title={t('prodBatch.cancelTitle')} sub={t('prodBatch.cancelSub')}>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
         <Field label={t('prodBatch.cancelReasonLabel')}>
-          <input className="input" value={cancelReason} onChange={(e) => onCancelReason(e.target.value)} placeholder={t('prodBatch.cancelReasonPh')} />
+          <input autoComplete="off" className="input" value={cancelReason} onChange={(e) => onCancelReason(e.target.value)} placeholder={t('prodBatch.cancelReasonPh')} />
         </Field>
         <Field label={t('prodBatch.eSignPassword')}>
           <input type="password" className="input" value={cancelPassword} onChange={(e) => onCancelPassword(e.target.value)} />
@@ -1311,14 +1311,14 @@ function CreateBatchModal({
               </select>
             </Field>
             <Field label={t('prodBatch.productCode')}>
-              <input className="input font-mono bg-slate-50" value={form.product_code} readOnly />
+              <input autoComplete="off" className="input font-mono bg-slate-50" value={form.product_code} readOnly />
             </Field>
           </div>
           <Field label={t('prodBatch.productNameEditable')}>
-            <input className="input" value={form.product_name} onChange={(e) => onChange({ ...form, product_name: e.target.value })} />
+            <input autoComplete="off" className="input" value={form.product_name} onChange={(e) => onChange({ ...form, product_name: e.target.value })} />
           </Field>
           <Field label={t('prodBatch.dosageForm')}>
-            <input className="input" value={form.dosage_form} onChange={(e) => onChange({ ...form, dosage_form: e.target.value })} />
+            <input autoComplete="off" className="input" value={form.dosage_form} onChange={(e) => onChange({ ...form, dosage_form: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('prodBatch.thProdDate')}>
@@ -1333,7 +1333,7 @@ function CreateBatchModal({
               <input type="number" min={0} className="input" value={form.batch_size} onChange={(e) => onChange({ ...form, batch_size: e.target.value })} />
             </Field>
             <Field label={t('prodBatch.unitShort')}>
-              <input className="input" value={form.batch_size_unit} onChange={(e) => onChange({ ...form, batch_size_unit: e.target.value })} />
+              <input autoComplete="off" className="input" value={form.batch_size_unit} onChange={(e) => onChange({ ...form, batch_size_unit: e.target.value })} />
             </Field>
           </div>
           <Field label={t('prodBatch.note')}>
@@ -1368,10 +1368,10 @@ function CreateBatchModal({
             {form.manual_number && (
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Field label={t('prodBatch.manualNumberField')}>
-                  <input className="input font-mono" value={form.batch_no_override} onChange={(e) => onChange({ ...form, batch_no_override: e.target.value })} />
+                  <input autoComplete="off" className="input font-mono" value={form.batch_no_override} onChange={(e) => onChange({ ...form, batch_no_override: e.target.value })} />
                 </Field>
                 <Field label={t('prodBatch.overrideReasonField')}>
-                  <input className="input" value={form.override_reason} onChange={(e) => onChange({ ...form, override_reason: e.target.value })} placeholder={t('prodBatch.overrideReasonPh')} />
+                  <input autoComplete="off" className="input" value={form.override_reason} onChange={(e) => onChange({ ...form, override_reason: e.target.value })} placeholder={t('prodBatch.overrideReasonPh')} />
                 </Field>
               </div>
             )}
@@ -1468,22 +1468,22 @@ function ProductsManagerModal({
         <div className="space-y-4 p-5">
           <div className="grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-[110px_120px_1fr_140px]">
             <Field label={t('prodBatch.fieldCode')}>
-              <input className="input font-mono disabled:bg-slate-100" maxLength={8} value={code} disabled={!!editId} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} />
+              <input autoComplete="off" className="input font-mono disabled:bg-slate-100" maxLength={8} value={code} disabled={!!editId} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} />
             </Field>
             <Field label={t('prodBatch.market')}>
-              <input className="input font-mono uppercase" maxLength={16} value={marketCode} onChange={(e) => setMarketCode(e.target.value.toUpperCase().replace(/[^A-Z_]/g, '').slice(0, 16))} />
+              <input autoComplete="off" className="input font-mono uppercase" maxLength={16} value={marketCode} onChange={(e) => setMarketCode(e.target.value.toUpperCase().replace(/[^A-Z_]/g, '').slice(0, 16))} />
             </Field>
             <Field label={t('prodBatch.marketName')}>
-              <input className="input" value={marketName} onChange={(e) => setMarketName(e.target.value)} />
+              <input autoComplete="off" className="input" value={marketName} onChange={(e) => setMarketName(e.target.value)} />
             </Field>
             <Field label={t('prodBatch.productName')}>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+              <input autoComplete="off" className="input" value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
             <Field label={t('prodBatch.shelfLifeShort')}>
               <input type="number" min={1} className="input" value={shelfLife} onChange={(e) => setShelfLife(e.target.value)} />
             </Field>
             <Field label={t('prodBatch.dosageForm')}>
-              <input className="input" value={dosageForm} onChange={(e) => setDosageForm(e.target.value)} />
+              <input autoComplete="off" className="input" value={dosageForm} onChange={(e) => setDosageForm(e.target.value)} />
             </Field>
             <Field label={t('prodBatch.activeLabel')}>
               <label className="flex h-10 items-center gap-2 text-sm text-slate-700">

@@ -767,14 +767,14 @@ function GtdSection({ gtd, setGtd, t }: { gtd: GtdForm; setGtd: (g: GtdForm) => 
       {gtd.is_import && (
         <>
           <div className="mt-4 grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-            <Field label={t('receipt.gtd.number')}><input className="input font-mono" value={gtd.gtd_number} onChange={(e) => upd({ gtd_number: e.target.value })} placeholder="26002/12.05.2026/0041937" /></Field>
+            <Field label={t('receipt.gtd.number')}><input autoComplete="off" className="input font-mono" value={gtd.gtd_number} onChange={(e) => upd({ gtd_number: e.target.value })} placeholder="26002/12.05.2026/0041937" /></Field>
             <Field label={t('receipt.gtd.date')}><input type="date" className="input" value={gtd.gtd_date} onChange={(e) => upd({ gtd_date: e.target.value })} /></Field>
-            <Field label={t('receipt.gtd.procedure')}><input className="input" value={gtd.procedure} onChange={(e) => upd({ procedure: e.target.value })} placeholder="ИМ 40" /></Field>
-            <Field label={t('receipt.gtd.incoterms')}><input className="input" value={gtd.incoterms} onChange={(e) => upd({ incoterms: e.target.value })} placeholder="CIP" /></Field>
-            <Field label={t('receipt.gtd.countryOrigin')}><input className="input" value={gtd.country_origin} onChange={(e) => upd({ country_origin: e.target.value })} placeholder={t('receipt.gtd.countryPlaceholder')} /></Field>
-            <Field label={t('receipt.gtd.foreignManufacturer')}><input className="input" value={gtd.foreign_manufacturer} onChange={(e) => upd({ foreign_manufacturer: e.target.value })} /></Field>
-            <Field label={t('receipt.gtd.broker')}><input className="input" value={gtd.broker} onChange={(e) => upd({ broker: e.target.value })} /></Field>
-            <Field label={t('receipt.gtd.contractCurrency')}><input className="input" value={gtd.contract_currency} onChange={(e) => upd({ contract_currency: e.target.value })} placeholder="USD" /></Field>
+            <Field label={t('receipt.gtd.procedure')}><input autoComplete="off" className="input" value={gtd.procedure} onChange={(e) => upd({ procedure: e.target.value })} placeholder="ИМ 40" /></Field>
+            <Field label={t('receipt.gtd.incoterms')}><input autoComplete="off" className="input" value={gtd.incoterms} onChange={(e) => upd({ incoterms: e.target.value })} placeholder="CIP" /></Field>
+            <Field label={t('receipt.gtd.countryOrigin')}><input autoComplete="off" className="input" value={gtd.country_origin} onChange={(e) => upd({ country_origin: e.target.value })} placeholder={t('receipt.gtd.countryPlaceholder')} /></Field>
+            <Field label={t('receipt.gtd.foreignManufacturer')}><input autoComplete="off" className="input" value={gtd.foreign_manufacturer} onChange={(e) => upd({ foreign_manufacturer: e.target.value })} /></Field>
+            <Field label={t('receipt.gtd.broker')}><input autoComplete="off" className="input" value={gtd.broker} onChange={(e) => upd({ broker: e.target.value })} /></Field>
+            <Field label={t('receipt.gtd.contractCurrency')}><input autoComplete="off" className="input" value={gtd.contract_currency} onChange={(e) => upd({ contract_currency: e.target.value })} placeholder="USD" /></Field>
             <Field label={t('receipt.gtd.invoiceValue')}><input type="number" step="0.01" className="input" value={gtd.invoice_value} onChange={(e) => upd({ invoice_value: e.target.value })} /></Field>
             <Field label={t('receipt.gtd.customsValue')}><input type="number" step="0.01" className="input" value={gtd.customs_value} onChange={(e) => upd({ customs_value: e.target.value })} /></Field>
             <Field label={t('receipt.gtd.exchangeRate')}><input type="number" step="0.0001" className="input" value={gtd.exchange_rate} onChange={(e) => upd({ exchange_rate: e.target.value })} /></Field>
@@ -1021,7 +1021,7 @@ function MaterialDetailPanel({
         <Separator />
 
         <Field label={isSupplierLotRequired ? t('receipt.supplierLot') : t('receipt.supplierLotOptional')}>
-          <input className="input bg-white font-mono" placeholder={t('receipt.enterLot')} title={line.supplier_lot} value={line.supplier_lot} onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })} />
+          <input autoComplete="off" className="input bg-white font-mono" placeholder={t('receipt.enterLot')} title={line.supplier_lot} value={line.supplier_lot} onChange={(event) => onUpdate(line.id, { supplier_lot: event.target.value })} />
           {line.supplier_lot && <p className="mt-2 break-words text-xs text-slate-600">{line.supplier_lot}</p>}
         </Field>
 
@@ -1065,25 +1065,25 @@ function MaterialDetailPanel({
         <Separator />
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('receipt.productionDate')}><input className="input bg-white" type="date" value={line.production_date} onChange={(event) => onUpdate(line.id, { production_date: event.target.value })} /></Field>
-          <Field label={t('receipt.expiryDate')}><input className="input bg-white" type="date" value={line.expiry_date} onChange={(event) => onUpdate(line.id, { expiry_date: event.target.value })} /></Field>
+          <Field label={t('receipt.productionDate')}><input autoComplete="off" className="input bg-white" type="date" value={line.production_date} onChange={(event) => onUpdate(line.id, { production_date: event.target.value })} /></Field>
+          <Field label={t('receipt.expiryDate')}><input autoComplete="off" className="input bg-white" type="date" value={line.expiry_date} onChange={(event) => onUpdate(line.id, { expiry_date: event.target.value })} /></Field>
         </div>
 
         <Separator />
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('receipt.quantity')}><input className="input bg-white" min="0" step="0.001" type="number" value={line.quantity} onChange={(event) => onUpdate(line.id, { quantity: event.target.value })} /></Field>
-          <Field label={t('common.unit')}><input className="input bg-white" value={line.unit} onChange={(event) => onUpdate(line.id, { unit: event.target.value })} /></Field>
+          <Field label={t('receipt.quantity')}><input autoComplete="off" className="input bg-white" min="0" step="0.001" type="number" value={line.quantity} onChange={(event) => onUpdate(line.id, { quantity: event.target.value })} /></Field>
+          <Field label={t('common.unit')}><input autoComplete="off" className="input bg-white" value={line.unit} onChange={(event) => onUpdate(line.id, { unit: event.target.value })} /></Field>
         </div>
 
         <Separator />
 
         {/* Цена/НДС из счёта-фактуры + ИКПУ + ТН ВЭД */}
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('receipt.unitPrice')}><input className="input bg-white" min="0" step="0.01" type="number" value={line.unit_price} onChange={(event) => onUpdate(line.id, { unit_price: event.target.value })} placeholder="0.00" /></Field>
-          <Field label={t('receipt.vatRate')}><input className="input bg-white" min="0" step="0.1" type="number" value={line.vat_rate} onChange={(event) => onUpdate(line.id, { vat_rate: event.target.value })} placeholder="12" /></Field>
-          <Field label={t('receipt.ikpuCode')}><input className="input bg-white font-mono" value={line.ikpu_code} onChange={(event) => onUpdate(line.id, { ikpu_code: event.target.value })} placeholder="04819001001000000" /></Field>
-          <Field label={t('receipt.hsCode')}><input className="input bg-white font-mono" value={line.hs_code} onChange={(event) => onUpdate(line.id, { hs_code: event.target.value })} placeholder="7607209000" /></Field>
+          <Field label={t('receipt.unitPrice')}><input autoComplete="off" className="input bg-white" min="0" step="0.01" type="number" value={line.unit_price} onChange={(event) => onUpdate(line.id, { unit_price: event.target.value })} placeholder="0.00" /></Field>
+          <Field label={t('receipt.vatRate')}><input autoComplete="off" className="input bg-white" min="0" step="0.1" type="number" value={line.vat_rate} onChange={(event) => onUpdate(line.id, { vat_rate: event.target.value })} placeholder="12" /></Field>
+          <Field label={t('receipt.ikpuCode')}><input autoComplete="off" className="input bg-white font-mono" value={line.ikpu_code} onChange={(event) => onUpdate(line.id, { ikpu_code: event.target.value })} placeholder="04819001001000000" /></Field>
+          <Field label={t('receipt.hsCode')}><input autoComplete="off" className="input bg-white font-mono" value={line.hs_code} onChange={(event) => onUpdate(line.id, { hs_code: event.target.value })} placeholder="7607209000" /></Field>
         </div>
         {Number(line.unit_price) > 0 && Number(line.quantity) > 0 && (
           <p className="text-[11.5px] text-slate-500">
@@ -1217,15 +1217,15 @@ function CreateReferenceDialog({
         <div className="space-y-4 px-6 py-5">
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t('common.code')}>
-              <input className="input bg-slate-50" placeholder={t('common.code')} value={draft.code} onChange={(event) => onChange({ ...draft, code: event.target.value })} />
+              <input autoComplete="off" className="input bg-slate-50" placeholder={t('common.code')} value={draft.code} onChange={(event) => onChange({ ...draft, code: event.target.value })} />
             </Field>
             <Field label={t('common.name')}>
-              <input className="input bg-slate-50" placeholder={t('common.name')} value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} />
+              <input autoComplete="off" className="input bg-slate-50" placeholder={t('common.name')} value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} />
             </Field>
           </div>
           {type === 'material' && (
             <Field label={t('common.type')}>
-              <input className="input bg-slate-50" placeholder="raw_material" value={draft.item_type} onChange={(event) => onChange({ ...draft, item_type: event.target.value })} />
+              <input autoComplete="off" className="input bg-slate-50" placeholder="raw_material" value={draft.item_type} onChange={(event) => onChange({ ...draft, item_type: event.target.value })} />
             </Field>
           )}
         </div>

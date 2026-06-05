@@ -126,31 +126,31 @@ export function FGShipmentsPage({ token, user }: FGShipmentsPageProps) {
       <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm xl:grid-cols-4">
         <label className="label">
           {t('fgShipments.documentNo')}
-          <input className="input" onChange={(event) => setForm({ ...form, document_no: event.target.value })} value={form.document_no} />
+          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, document_no: event.target.value })} value={form.document_no} />
         </label>
         <label className="label">
           {t('fgShipments.customerName')}
-          <input className="input" onChange={(event) => setForm({ ...form, customer_name: event.target.value })} value={form.customer_name} />
+          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, customer_name: event.target.value })} value={form.customer_name} />
         </label>
         <label className="label">
           {t('fgShipments.customerTaxId')}
-          <input className="input" onChange={(event) => setForm({ ...form, customer_tax_id: event.target.value })} value={form.customer_tax_id} />
+          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, customer_tax_id: event.target.value })} value={form.customer_tax_id} />
         </label>
         <label className="label">
           {t('fgShipments.destinationAddress')}
-          <input className="input" onChange={(event) => setForm({ ...form, destination_address: event.target.value })} value={form.destination_address} />
+          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, destination_address: event.target.value })} value={form.destination_address} />
         </label>
         <label className="label">
           {t('fgShipments.shipmentDate')}
-          <input className="input" onChange={(event) => setForm({ ...form, shipment_date: event.target.value })} type="date" value={form.shipment_date} />
+          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, shipment_date: event.target.value })} type="date" value={form.shipment_date} />
         </label>
         <label className="label">
           {t('fgShipments.vehicleNo')}
-          <input className="input" onChange={(event) => setForm({ ...form, vehicle_no: event.target.value })} value={form.vehicle_no} />
+          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, vehicle_no: event.target.value })} value={form.vehicle_no} />
         </label>
         <label className="label">
           {t('fgShipments.waybillNo')}
-          <input className="input" onChange={(event) => setForm({ ...form, waybill_no: event.target.value })} value={form.waybill_no} />
+          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, waybill_no: event.target.value })} value={form.waybill_no} />
         </label>
         <label className="label">
           {t('fgShipments.selectLot')}
@@ -164,15 +164,15 @@ export function FGShipmentsPage({ token, user }: FGShipmentsPageProps) {
         </label>
         <label className="label">
           {t('fgShipments.quantity')}
-          <input className="input" max={selectedLot?.quantity} min="0" onChange={(event) => setForm({ ...form, quantity: Number(event.target.value) })} type="number" value={form.quantity} />
+          <input autoComplete="off" className="input" max={selectedLot?.quantity} min="0" onChange={(event) => setForm({ ...form, quantity: Number(event.target.value) })} type="number" value={form.quantity} />
         </label>
         <label className="label">
           {t('common.password')}
-          <input className="input" onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" value={form.password} />
+          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" value={form.password} />
         </label>
         <label className="label xl:col-span-2">
           {t('common.reason')}
-          <input className="input" onChange={(event) => setForm({ ...form, reason: event.target.value })} value={form.reason} />
+          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, reason: event.target.value })} value={form.reason} />
         </label>
         <div className="flex items-end">
           <button className="btn-primary w-full" disabled={!selectedLot || form.quantity <= 0 || form.quantity > (selectedLot?.quantity ?? 0)} onClick={submitShipment} type="button">
@@ -182,7 +182,7 @@ export function FGShipmentsPage({ token, user }: FGShipmentsPageProps) {
       </section>
 
       <div className="flex justify-end">
-        <input className="input w-80" onChange={(event) => setFilter(event.target.value)} placeholder={t('movements.search')} value={filter} />
+        <input autoComplete="off" className="input w-80" onChange={(event) => setFilter(event.target.value)} placeholder={t('movements.search')} value={filter} />
       </div>
       <DataTable columns={columns} data={shipments} emptyLabel={t('fgShipments.empty')} globalFilter={filter} isLoading={isLoading} />
     </div>

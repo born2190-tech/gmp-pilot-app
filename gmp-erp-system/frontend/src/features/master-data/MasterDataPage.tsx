@@ -170,6 +170,7 @@ export function MasterDataPage({ token, user }: MasterDataPageProps) {
 
       <div className="max-w-md">
         <input
+          autoComplete="off"
           className="input"
           onChange={(event) => setFilter(event.target.value)}
           placeholder={t('master.filter')}
@@ -247,7 +248,7 @@ function FormInput({ label, register }: { label: string; register: UseFormRegist
   return (
     <label className="mb-3 block text-sm font-medium text-slate-700">
       {label}
-      <input className="input mt-1" {...register} />
+      <input autoComplete="off" className="input mt-1" {...register} />
     </label>
   )
 }

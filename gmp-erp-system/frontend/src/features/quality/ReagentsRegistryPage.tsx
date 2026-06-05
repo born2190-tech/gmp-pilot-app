@@ -887,30 +887,30 @@ function AddModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (form:
         <ModalHeader title={t('reagents.addModalTitle')} onClose={onClose} />
         <div className="space-y-6 p-6">
           <FormBlock title={t('reagents.blockMain')}>
-            <Labeled label={t('reagents.codeReq')}><input className="input" value={form.code || ''} onChange={(e) => patch({ code: e.target.value })} placeholder="RE-2026-XXX" /></Labeled>
+            <Labeled label={t('reagents.codeReq')}><input autoComplete="off" className="input" value={form.code || ''} onChange={(e) => patch({ code: e.target.value })} placeholder="RE-2026-XXX" /></Labeled>
             <Labeled label={t('reagents.typeReq')}>
               <select className="input" value={form.type || 'reagent'} onChange={(e) => patch({ type: e.target.value as ReagentType })}>
                 {REAGENT_TYPE_VALUES.map((value) => <option key={value} value={value}>{typeLabel(value, t)}</option>)}
               </select>
             </Labeled>
-            <Labeled label={t('reagents.nameReq')} wide><input className="input" value={form.name || ''} onChange={(e) => patch({ name: e.target.value })} /></Labeled>
-            <Labeled label={t('reagents.gradeFull')} wide><input className="input" value={form.grade || ''} onChange={(e) => patch({ grade: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.nameReq')} wide><input autoComplete="off" className="input" value={form.name || ''} onChange={(e) => patch({ name: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.gradeFull')} wide><input autoComplete="off" className="input" value={form.grade || ''} onChange={(e) => patch({ grade: e.target.value })} /></Labeled>
           </FormBlock>
           <FormBlock title={t('reagents.blockSupplier')}>
-            <Labeled label={t('reagents.manufacturer')}><input className="input" value={form.manufacturer || ''} onChange={(e) => patch({ manufacturer: e.target.value })} /></Labeled>
-            <Labeled label={t('reagents.supplier')}><input className="input" value={form.supplier || ''} onChange={(e) => patch({ supplier: e.target.value })} /></Labeled>
-            <Labeled label={t('reagents.mfrBatch')}><input className="input" value={form.batchNumber || ''} onChange={(e) => patch({ batchNumber: e.target.value })} /></Labeled>
-            <Labeled label={t('reagents.internalBatch')}><input className="input" value={form.internalBatchNumber || ''} onChange={(e) => patch({ internalBatchNumber: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.manufacturer')}><input autoComplete="off" className="input" value={form.manufacturer || ''} onChange={(e) => patch({ manufacturer: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.supplier')}><input autoComplete="off" className="input" value={form.supplier || ''} onChange={(e) => patch({ supplier: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.mfrBatch')}><input autoComplete="off" className="input" value={form.batchNumber || ''} onChange={(e) => patch({ batchNumber: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.internalBatch')}><input autoComplete="off" className="input" value={form.internalBatchNumber || ''} onChange={(e) => patch({ internalBatchNumber: e.target.value })} /></Labeled>
           </FormBlock>
           <FormBlock title={t('reagents.blockDates')}>
             <Labeled label={t('reagents.receivedDate')}><input type="date" className="input" value={form.receivedDate || ''} onChange={(e) => patch({ receivedDate: e.target.value })} /></Labeled>
             <Labeled label={t('reagents.expiryUnopened')}><input type="date" className="input" value={form.expiryDateUnopened || ''} onChange={(e) => patch({ expiryDateUnopened: e.target.value })} /></Labeled>
             <Labeled label={t('reagents.expiryAfterDays')}><input type="number" className="input" value={form.expiryDateAfterOpening || ''} onChange={(e) => patch({ expiryDateAfterOpening: Number(e.target.value) })} /></Labeled>
             <Labeled label={t('reagents.quantity')}><input type="number" className="input" value={form.quantity || ''} onChange={(e) => patch({ quantity: Number(e.target.value) })} /></Labeled>
-            <Labeled label={t('reagents.unit')}><input className="input" value={form.unit || ''} onChange={(e) => patch({ unit: e.target.value })} /></Labeled>
-            <Labeled label={t('reagents.storageLocation')}><input className="input" value={form.storageLocation || ''} onChange={(e) => patch({ storageLocation: e.target.value })} /></Labeled>
-            <Labeled label={t('reagents.storageConditions')}><input className="input" value={form.storageConditions || ''} onChange={(e) => patch({ storageConditions: e.target.value })} /></Labeled>
-            <Labeled label={t('reagents.colResponsible')}><input className="input" value={form.responsible || ''} onChange={(e) => patch({ responsible: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.unit')}><input autoComplete="off" className="input" value={form.unit || ''} onChange={(e) => patch({ unit: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.storageLocation')}><input autoComplete="off" className="input" value={form.storageLocation || ''} onChange={(e) => patch({ storageLocation: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.storageConditions')}><input autoComplete="off" className="input" value={form.storageConditions || ''} onChange={(e) => patch({ storageConditions: e.target.value })} /></Labeled>
+            <Labeled label={t('reagents.colResponsible')}><input autoComplete="off" className="input" value={form.responsible || ''} onChange={(e) => patch({ responsible: e.target.value })} /></Labeled>
             <Labeled label={t('reagents.note')} wide><textarea rows={3} className="input min-h-20" value={form.notes || ''} onChange={(e) => patch({ notes: e.target.value })} /></Labeled>
           </FormBlock>
           <div className="flex gap-3 border-t border-slate-200 pt-4">
