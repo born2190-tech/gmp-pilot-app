@@ -886,6 +886,21 @@ export function createSpecification(token: string, payload: MaterialSpecificatio
   return request<MaterialSpecificationItem>('/api/quality/specifications', 'POST', { token, body: payload })
 }
 
+export async function importSpecificationDocument(token: string, file: File): Promise<MaterialSpecificationItem> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetch('/api/quality/specifications/import', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
 export function updateSpecification(token: string, specId: string, payload: MaterialSpecificationInput): Promise<MaterialSpecificationItem> {
   return request<MaterialSpecificationItem>(`/api/quality/specifications/${specId}`, 'PUT', { token, body: payload })
 }

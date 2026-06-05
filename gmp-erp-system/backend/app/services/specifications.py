@@ -7,6 +7,9 @@
 """
 from __future__ import annotations
 
+import re
+import tempfile
+from io import BytesIO
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -19,6 +22,147 @@ from app.models.quality import MaterialSpecification, SpecificationParameter
 from app.schemas.quality import MaterialSpecificationInput
 from app.services.audit import write_audit
 from app.services.permissions import require_permission
+
+
+_ND_RE = re.compile(r"\b(?:НД|ND|СПЕЦ|SPEC|ФСП|FSP)[-/\w.()А-Яа-я]+", re.IGNORECASE)
+_REV_RE = re.compile(r"(?:рев(?:изия)?|revision|редакция)\s*[№#:]?\s*([A-Za-zА-Яа-я0-9./-]+)", re.IGNORECASE)
+_UNIT_RE = re.compile(r"(%|мг|mg|г|g|кг|kg|мл|ml|КОЕ/г|cfu/g|ppm)\b", re.IGNORECASE)
+
+
+def _clean(value: str | None) -> str:
+    return re.sub(r"\s+", " ", (value or "").replace("\x00", " ")).strip()
+
+
+def _extract_docx_text(data: bytes) -> tuple[str, list[list[str]]]:
+    try:
+        from docx import Document
+    except Exception as exc:  # pragma: no cover - dependency is installed in Docker
+        raise HTTPException(status_code=500, detail="python-docx is not available") from exc
+
+    doc = Document(BytesIO(data))
+    lines: list[str] = []
+    rows: list[list[str]] = []
+    for p in doc.paragraphs:
+        text = _clean(p.text)
+        if text:
+            lines.append(text)
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [_clean(cell.text) for cell in row.cells]
+            if any(cells):
+                rows.append(cells)
+                lines.append(" | ".join(cells))
+    return "\n".join(lines), rows
+
+
+def _extract_pdf_text(data: bytes) -> tuple[str, list[list[str]]]:
+    try:
+        import pypdfium2 as pdfium
+    except Exception as exc:  # pragma: no cover - dependency is installed in Docker
+        raise HTTPException(status_code=500, detail="pypdfium2 is not available") from exc
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf") as tmp:
+        tmp.write(data)
+        tmp.flush()
+        pdf = pdfium.PdfDocument(tmp.name)
+        lines: list[str] = []
+        for page in pdf:
+            textpage = page.get_textpage()
+            text = _clean(textpage.get_text_range())
+            if text:
+                lines.extend(line.strip() for line in text.splitlines() if line.strip())
+            textpage.close()
+            page.close()
+        pdf.close()
+    return "\n".join(lines), []
+
+
+def _extract_document(filename: str, data: bytes) -> tuple[str, list[list[str]]]:
+    lower = filename.lower()
+    if lower.endswith(".docx"):
+        return _extract_docx_text(data)
+    if lower.endswith(".pdf"):
+        return _extract_pdf_text(data)
+    raise HTTPException(status_code=400, detail="Only .docx and .pdf specification files are supported")
+
+
+def _guess_header(filename: str, text: str) -> tuple[str, str | None, str]:
+    nd_match = _ND_RE.search(text)
+    nd_code = _clean(nd_match.group(0)) if nd_match else f"ND-IMPORT-{filename.rsplit('.', 1)[0][:40]}"
+    rev_match = _REV_RE.search(text)
+    revision = _clean(rev_match.group(1)) if rev_match else None
+
+    material = ""
+    for pattern in (
+        r"(?:наименование\s+(?:сырья|материала|продукта)|material\s+name|product\s+name)\s*[:\-]\s*(.+)",
+        r"(?:спецификация|specification)\s+(?:на|for)\s+(.+)",
+    ):
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m:
+            material = _clean(m.group(1).splitlines()[0])
+            break
+    if not material:
+        candidates = [_clean(line) for line in text.splitlines() if 8 <= len(_clean(line)) <= 120]
+        material = candidates[0] if candidates else filename.rsplit(".", 1)[0]
+    return nd_code[:128], revision[:32] if revision else None, material[:255]
+
+
+def _row_to_param(cells: list[str]) -> dict | None:
+    cleaned = [_clean(c) for c in cells if _clean(c)]
+    if len(cleaned) < 2:
+        return None
+    joined = " ".join(cleaned).lower()
+    if any(h in joined for h in ("показатель", "наименование показателя", "test", "parameter")) and any(
+        h in joined for h in ("норма", "spec", "requirement", "треб")
+    ):
+        return None
+    if cleaned[0].isdigit() and len(cleaned) >= 3:
+        cleaned = cleaned[1:]
+    name = cleaned[0]
+    spec = cleaned[1]
+    method = cleaned[2] if len(cleaned) >= 3 else None
+    unit = cleaned[3] if len(cleaned) >= 4 else None
+    if not unit:
+        unit_match = _UNIT_RE.search(spec)
+        unit = unit_match.group(1) if unit_match else None
+    if len(name) < 2 or len(spec) < 1:
+        return None
+    category = "microbiological" if re.search(r"(микро|бактер|дрож|плес|salmonella|e\.?\s*coli|cfu|кое)", name, re.IGNORECASE) else "physicochemical"
+    return {
+        "category": category,
+        "parameter_name": name[:255],
+        "specification": spec,
+        "method_reference": method[:255] if method else None,
+        "unit": unit[:32] if unit else None,
+    }
+
+
+def _parse_parameters(text: str, rows: list[list[str]]) -> list[dict]:
+    params: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        parsed = _row_to_param(row)
+        if parsed:
+            key = (parsed["parameter_name"].lower(), parsed["specification"].lower())
+            if key not in seen:
+                seen.add(key)
+                params.append(parsed)
+
+    if params:
+        return params
+
+    for line in text.splitlines():
+        line = _clean(line)
+        if not line or len(line) < 8:
+            continue
+        parts = [p.strip(" -:") for p in re.split(r"\s{2,}|\t|\|", line) if p.strip(" -:")]
+        parsed = _row_to_param(parts)
+        if parsed:
+            key = (parsed["parameter_name"].lower(), parsed["specification"].lower())
+            if key not in seen:
+                seen.add(key)
+                params.append(parsed)
+    return params
 
 
 def list_specifications(db: Session, include_inactive: bool = True) -> list[MaterialSpecification]:
@@ -75,6 +219,53 @@ def create_specification(db: Session, user: CurrentUser, payload: MaterialSpecif
         db, user, object_type="material_specification", object_id=str(spec.id),
         action_type="CREATE_SPECIFICATION",
         new_value={"nd_code": spec.nd_code, "material": spec.material_name, "parameters": len(payload.parameters)},
+    )
+    db.commit()
+    db.refresh(spec)
+    return spec
+
+
+def import_specification_document(db: Session, user: CurrentUser, filename: str, data: bytes) -> MaterialSpecification:
+    """Create a review draft from an uploaded ND/specification document."""
+    require_permission(user, "MANAGE_SPECIFICATIONS")
+    if not data:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    text, rows = _extract_document(filename, data)
+    if len(_clean(text)) < 20:
+        raise HTTPException(status_code=422, detail="No readable text found in the document")
+
+    nd_code, revision, material_name = _guess_header(filename, text)
+    existing_codes = {r[0] for r in db.query(MaterialSpecification.nd_code).all()}
+    base_code = nd_code
+    suffix = 2
+    while nd_code in existing_codes:
+        nd_code = f"{base_code[:112]}-IMP-{suffix}"
+        suffix += 1
+
+    params = _parse_parameters(text, rows)
+    micro_required = any(p["category"] == "microbiological" for p in params)
+    payload = MaterialSpecificationInput(
+        nd_code=nd_code,
+        revision=revision,
+        material_name=material_name,
+        material_id=None,
+        match_keywords=material_name,
+        sop_form="548" if re.search(r"(готов|finished|tablet|capsule|таблет|капсул)", text, re.IGNORECASE) else "533",
+        micro_required=micro_required,
+        micro_method_ref=None,
+        is_active=False,
+        effective_date=None,
+        notes=(
+            f"Черновик импортирован из файла {filename}. "
+            f"Проверьте распознанные поля и параметры перед вводом в действие."
+        ),
+        parameters=params,
+    )
+    spec = create_specification(db, user, payload)
+    write_audit(
+        db, user, object_type="material_specification", object_id=str(spec.id),
+        action_type="IMPORT_SPECIFICATION_DOCUMENT",
+        new_value={"filename": filename, "parameters": len(params), "draft": True},
     )
     db.commit()
     db.refresh(spec)

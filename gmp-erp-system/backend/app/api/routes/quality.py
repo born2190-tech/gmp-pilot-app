@@ -1031,6 +1031,17 @@ def create_specification_route(
     return MaterialSpecificationItem.model_validate(spec)
 
 
+@router.post("/specifications/import", response_model=MaterialSpecificationItem, status_code=201)
+async def import_specification_route(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> MaterialSpecificationItem:
+    data = await file.read()
+    spec = spec_service.import_specification_document(db, current_user, file.filename or "specification", data)
+    return MaterialSpecificationItem.model_validate(spec)
+
+
 @router.put("/specifications/{spec_id}", response_model=MaterialSpecificationItem)
 def update_specification_route(
     spec_id: UUID,

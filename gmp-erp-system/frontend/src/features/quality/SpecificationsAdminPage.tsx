@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'r
 import {
   AlertTriangle, Archive, ArchiveRestore, ArrowDown, ArrowRight, ArrowUp, Beaker, BookMarked,
   CheckCircle2, Copy, Eye, FileText, Filter, FlaskConical, GitBranch, Info, Inbox, Layers, Lock,
-  Microscope, Package, Pencil, Pill, Plus, Printer, Save, Search, ShieldAlert, Trash2, Unlock, X,
+  Microscope, Package, Pencil, Pill, Plus, Printer, Save, Search, ShieldAlert, Trash2, Unlock, Upload, X,
 } from 'lucide-react'
 import {
   createSpecification,
   deleteSpecification,
   getSpecification,
+  importSpecificationDocument,
   listSpecifications,
   updateSpecification,
 } from '../../lib/api'
@@ -55,6 +56,7 @@ const STR: Record<string, Record<string, string>> = {
     grp_SUB: 'Сырьё / субстанции', grp_PKG: 'Упаковочные материалы', grp_FG: 'Готовая продукция',
     kpi_total: 'Всего НД', kpi_active: 'Действующих', kpi_arch: 'Архивных', kpi_micro: 'С микробиологией',
     params_short: 'парам.', revision: 'рев.', new_nd: 'Новая НД', empty_reg_title: 'Реестр пуст',
+    import_doc: 'Импорт', import_hint: 'DOCX/PDF → черновик НД', imported_ok: 'Черновик НД создан из документа',
     empty_reg_sub: 'Ещё не создано ни одной спецификации. Начните с первой НД.',
     no_results: 'Ничего не найдено', no_results_sub: 'Измените запрос или сбросьте фильтры.',
     reset_filters: 'Сбросить фильтры',
@@ -110,6 +112,7 @@ const STR: Record<string, Record<string, string>> = {
     grp_SUB: 'Xom ashyo / substansiyalar', grp_PKG: 'Qadoqlash materiallari', grp_FG: 'Tayyor mahsulot',
     kpi_total: 'Jami ND', kpi_active: 'Amaldagi', kpi_arch: 'Arxiv', kpi_micro: 'Mikrobiologiya bilan',
     params_short: 'param.', revision: 'rev.', new_nd: 'Yangi ND', empty_reg_title: 'Reestr bo‘sh',
+    import_doc: 'Import', import_hint: 'DOCX/PDF → ND qoralamasi', imported_ok: 'Hujjatdan ND qoralamasi yaratildi',
     empty_reg_sub: 'Hali birorta spetsifikatsiya yaratilmagan. Birinchi ND bilan boshlang.',
     no_results: 'Hech narsa topilmadi', no_results_sub: 'So‘rovni o‘zgartiring yoki filtrlarni tozalang.',
     reset_filters: 'Filtrlarni tozalash',
@@ -165,6 +168,7 @@ const STR: Record<string, Record<string, string>> = {
     grp_SUB: 'Raw materials / substances', grp_PKG: 'Packaging materials', grp_FG: 'Finished products',
     kpi_total: 'Total ND', kpi_active: 'Active', kpi_arch: 'Archived', kpi_micro: 'With microbiology',
     params_short: 'param.', revision: 'rev.', new_nd: 'New ND', empty_reg_title: 'Register is empty',
+    import_doc: 'Import', import_hint: 'DOCX/PDF → ND draft', imported_ok: 'ND draft created from document',
     empty_reg_sub: 'No specifications created yet. Start with the first ND.',
     no_results: 'Nothing found', no_results_sub: 'Change the query or reset the filters.',
     reset_filters: 'Reset filters',
@@ -364,6 +368,25 @@ export function SpecificationsAdminPage({ token, user }: Props) {
     setMode('create'); setSelectedId(null); setDetail(null); setDraft(blankDraft()); setErrors({})
   }, [])
 
+  const importDocument = useCallback(async (file: File) => {
+    setBusy(true)
+    try {
+      const imported = await importSpecificationDocument(token, file)
+      const ui = buildUiFromItem(imported)
+      await reload()
+      setSelectedId(imported.id)
+      setDetail(ui)
+      setDraft(JSON.parse(JSON.stringify(ui)))
+      setMode('edit')
+      setErrors({})
+      showToast(t.imported_ok, 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'import failed', 'info')
+    } finally {
+      setBusy(false)
+    }
+  }, [token, reload, showToast, t])
+
   const requestEdit = useCallback(() => {
     if (!detail) return
     if (statusOf(detail) === 'archived') {
@@ -471,6 +494,7 @@ export function SpecificationsAdminPage({ token, user }: Props) {
           <Registry
             list={list} t={t} canManage={canManage}
             selectedId={selectedId} onSelect={(id) => void onSelect(id)} onNew={startCreate}
+            onImport={(file) => void importDocument(file)}
             query={query} setQuery={setQuery}
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             formFilter={formFilter} setFormFilter={setFormFilter}
@@ -732,9 +756,9 @@ function SectionHead({ icon: Ico, eyebrow, title, accent = 'slate', count }: { i
 // ─────────────────────────────────────────────────────────────────────────────
 interface RegItem extends MaterialSpecificationListItem { group: Group }
 
-function Registry({ list, t, canManage, selectedId, onSelect, onNew, query, setQuery, statusFilter, setStatusFilter, formFilter, setFormFilter, microFilter, setMicroFilter, isEmptyRegistry }: {
+function Registry({ list, t, canManage, selectedId, onSelect, onNew, onImport, query, setQuery, statusFilter, setStatusFilter, formFilter, setFormFilter, microFilter, setMicroFilter, isEmptyRegistry }: {
   list: MaterialSpecificationListItem[]; t: Dict; canManage: boolean
-  selectedId: string | null; onSelect: (id: string) => void; onNew: () => void
+  selectedId: string | null; onSelect: (id: string) => void; onNew: () => void; onImport: (file: File) => void
   query: string; setQuery: (v: string) => void
   statusFilter: 'all' | Status; setStatusFilter: (v: 'all' | Status) => void
   formFilter: 'all' | '533' | '548'; setFormFilter: (v: 'all' | '533' | '548') => void
@@ -782,7 +806,28 @@ function Registry({ list, t, canManage, selectedId, onSelect, onNew, query, setQ
           <MetaLabel>{t.eyebrow}</MetaLabel>
           <h2 className="text-[14px] font-semibold tracking-tight text-slate-900">{t.reg_title}</h2>
         </div>
-        {canManage && <PillButton tone="primary" icon={Plus} size="sm" onClick={onNew}>{t.new_nd}</PillButton>}
+        {canManage && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <label
+              title={t.import_hint}
+              className="inline-flex h-7 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[11.5px] font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              <Upload size={13} />
+              {t.import_doc}
+              <input
+                type="file"
+                accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0]
+                  if (file) onImport(file)
+                  e.currentTarget.value = ''
+                }}
+              />
+            </label>
+            <PillButton tone="primary" icon={Plus} size="sm" onClick={onNew}>{t.new_nd}</PillButton>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 border-b border-slate-200 px-3 py-3">
