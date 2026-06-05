@@ -132,7 +132,7 @@ export function MasterDataPage({ token, user }: MasterDataPageProps) {
         header: t('master.packagingType'),
         cell: ({ row }) => {
           const m = row.original
-          const isPackaging = (m.item_type || '').toUpperCase() === 'PACKAGING'
+          const isPackaging = /pack|label|container|упаков|этикет|тар/i.test(m.item_type || '')
           if (!canManage) return <span className="text-slate-600">{packagingTypeLabel(m.packaging_type)}</span>
           return (
             <select

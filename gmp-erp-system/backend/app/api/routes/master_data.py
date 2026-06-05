@@ -167,9 +167,10 @@ def create_material(
     if db.query(Material).filter(Material.code == code).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Material code already exists")
 
-    # Тип упаковки: явный из формы, иначе авто-эвристика для PACKAGING.
+    # Тип упаковки: явный из формы, иначе авто-эвристика для упаковочных видов.
+    from app.services.material_types import is_packaging_item_type
     packaging_type = payload.packaging_type
-    if not packaging_type and item_type == "PACKAGING":
+    if not packaging_type and is_packaging_item_type(item_type):
         packaging_type = _infer_packaging_type(name)
 
     material = Material(code=code, name=name, item_type=item_type, packaging_type=packaging_type, default_unit=default_unit)

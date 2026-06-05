@@ -63,7 +63,8 @@ def view_scope_for(user: CurrentUser) -> str | None:
 def _resolve_warehouse_type(db: Session, material_id: uuid.UUID) -> str:
     """Determine which warehouse handles this material based on item_type."""
     material = _get_required(db, Material, material_id, "Material")
-    if material.item_type in ("packaging", "label", "container"):
+    from app.services.material_types import is_packaging_item_type
+    if is_packaging_item_type(material.item_type):
         return "PACKAGING_WAREHOUSE"
     # substance, excipient, solvent, other raw → substance warehouse
     return "SUBSTANCE_WAREHOUSE"

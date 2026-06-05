@@ -250,8 +250,8 @@ def render_internal_transfer_pdf(
     pkg_lines = []
     for line in req.lines:
         material = materials_by_id.get(line.material_id)
-        item_type = (material.item_type if material else "").lower()
-        is_pkg = item_type in ("packaging", "label", "container")
+        from app.services.material_types import is_packaging_item_type
+        is_pkg = is_packaging_item_type(material.item_type if material else "")
         bucket = pkg_lines if is_pkg else raw_lines
         bucket.append((line, material))
 
