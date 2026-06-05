@@ -592,9 +592,10 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           isLoading={isLoading}
         />
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
-          {t('prodBatch.selectOrCreate')}
-        </div>
+        <ProductionEmptyState
+          canCreate={canCreate}
+          onCreate={() => { setForm(makeInitialForm(t('prodBatch.defaultUnit'))); setShowCreate(true) }}
+        />
       )}
 
       {showCreate && (
@@ -629,6 +630,61 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           onChanged={() => void load()}
         />
       )}
+    </section>
+  )
+}
+
+function ProductionEmptyState({ canCreate, onCreate }: { canCreate: boolean; onCreate: () => void }) {
+  return (
+    <section className="space-y-4">
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-[16px] font-semibold text-slate-950">Панель управления производственной серией</div>
+            <div className="mt-1 text-sm text-slate-500">В реестре нет выбранной серии. Создайте серию, чтобы открыть действия по маршруту.</div>
+          </div>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={onCreate}
+              className="inline-flex h-11 items-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              <Plus size={17} />
+              Новая серия
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Маршрут серии</div>
+        <ol className="hidden items-start md:flex">
+          {BATCH_ROUTE.map((step, index) => (
+            <li key={step.key} className="flex flex-1 flex-col items-center">
+              <div className="flex w-full items-center">
+                <span className={`h-0.5 flex-1 rounded ${index === 0 ? 'opacity-0' : 'bg-slate-200'}`} />
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400">
+                  <span className="font-mono text-[13px] font-semibold">{index + 1}</span>
+                </span>
+                <span className={`h-0.5 flex-1 rounded ${index === BATCH_ROUTE.length - 1 ? 'opacity-0' : 'bg-slate-200'}`} />
+              </div>
+              <span className="mt-2 text-center text-xs leading-tight text-slate-400">{step.short}</span>
+            </li>
+          ))}
+        </ol>
+        <ol className="space-y-0 md:hidden">
+          {BATCH_ROUTE.map((step, index) => (
+            <li key={step.key} className="flex gap-3">
+              <div className="flex flex-col items-center">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400">
+                  <span className="font-mono text-[13px] font-semibold">{index + 1}</span>
+                </span>
+                {index < BATCH_ROUTE.length - 1 && <span className="w-0.5 flex-1 bg-slate-200" style={{ minHeight: 18 }} />}
+              </div>
+              <span className="pb-3 pt-1.5 text-sm text-slate-400">{step.label}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
     </section>
   )
 }
