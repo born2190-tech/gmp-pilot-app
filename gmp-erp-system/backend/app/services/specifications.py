@@ -200,10 +200,10 @@ def _merge_repeated_parameters(params: list[dict]) -> list[dict]:
     return merged
 
 
-def _extract_docx_text(data: bytes) -> tuple[str, list[list[list[str]]]]:
-    """Возвращает (плоский текст, список ТАБЛИЦ). Каждая таблица — список строк,
-    строка — список ячеек. Границы таблиц сохраняем, чтобы отличать основную
-    таблицу спецификации от справочных/легенд (растворимость, сокращения)."""
+def _extract_docx_text(data: bytes) -> tuple[str, list[list[list[str]]], str]:
+    """Возвращает (текст тела, список ТАБЛИЦ, текст колонтитулов).
+    Колонтитулы держим ОТДЕЛЬНО: их используем для поиска кода НД/ревизии, но
+    НЕ для наименования материала и НЕ как показатели."""
     try:
         from docx import Document
     except Exception as exc:  # pragma: no cover - dependency is installed in Docker
@@ -211,7 +211,22 @@ def _extract_docx_text(data: bytes) -> tuple[str, list[list[list[str]]]]:
 
     doc = Document(BytesIO(data))
     lines: list[str] = []
+    header_lines: list[str] = []
     tables: list[list[list[str]]] = []
+    for section in doc.sections:
+        for part in (section.header, section.footer):
+            try:
+                for p in part.paragraphs:
+                    t = _clean(p.text)
+                    if t:
+                        header_lines.append(t)
+                for tb in part.tables:
+                    for row in tb.rows:
+                        cells = [_clean(c.text) for c in row.cells if _clean(c.text)]
+                        if cells:
+                            header_lines.append(" ".join(cells))
+            except Exception:  # noqa: BLE001 — колонтитул может быть пустым/нестандартным
+                pass
     for p in doc.paragraphs:
         text = _clean(p.text)
         if text:
@@ -225,10 +240,10 @@ def _extract_docx_text(data: bytes) -> tuple[str, list[list[list[str]]]]:
                 lines.append(" | ".join(cells))
         if t_rows:
             tables.append(t_rows)
-    return "\n".join(lines), tables
+    return "\n".join(lines), tables, "\n".join(header_lines)
 
 
-def _extract_pdf_text(data: bytes) -> tuple[str, list[list[list[str]]]]:
+def _extract_pdf_text(data: bytes) -> tuple[str, list[list[list[str]]], str]:
     try:
         import pypdfium2 as pdfium
     except Exception as exc:  # pragma: no cover - dependency is installed in Docker
@@ -247,10 +262,10 @@ def _extract_pdf_text(data: bytes) -> tuple[str, list[list[list[str]]]]:
             textpage.close()
             page.close()
         pdf.close()
-    return "\n".join(lines), []
+    return "\n".join(lines), [], ""
 
 
-def _extract_document(filename: str, data: bytes) -> tuple[str, list[list[list[str]]]]:
+def _extract_document(filename: str, data: bytes) -> tuple[str, list[list[list[str]]], str]:
     lower = filename.lower()
     if lower.endswith(".docx"):
         return _extract_docx_text(data)
@@ -293,12 +308,20 @@ def _select_spec_rows(tables: list[list[list[str]]]) -> list[list[str]]:
     return [row for t_rows in tables for row in t_rows]
 
 
-def _guess_header(filename: str, text: str) -> tuple[str, str | None, str]:
+def _strip_revision_tail(value: str) -> str:
+    """Срезает хвост «… Редакция/Ревизия №N» из наименования материала."""
+    return _clean(re.sub(r"\b(?:редакц\w*|ревизи\w*|revision)\b.*$", "", value, flags=re.IGNORECASE))
+
+
+def _guess_header(filename: str, text: str, header_text: str = "") -> tuple[str, str | None, str]:
+    # Код НД и ревизию ищем в имени файла + колонтитуле + теле (колонтитул в
+    # приоритете для кода). Наименование материала — только из тела/имени.
+    code_hay = "\n".join(p for p in (header_text, text) if p)
     nd_code = _code_from_filename(filename)
     if not nd_code:
-        nd_match = _ND_RE.search(text)
+        nd_match = _ND_RE.search(code_hay)
         nd_code = _normalise_code(nd_match.group(0)) if nd_match else f"ND-IMPORT-{_normalise_code(_filename_stem(filename))[:40]}"
-    rev_match = _REV_RE.search(text)
+    rev_match = _REV_RE.search(code_hay)
     revision = _clean(rev_match.group(1)) if rev_match else None
 
     material = ""
@@ -316,6 +339,7 @@ def _guess_header(filename: str, text: str) -> tuple[str, str | None, str]:
     if not material:
         top_material = _material_from_top_lines(text)
         material = filename_material if _has_cyrillic(filename_material) else top_material or filename_material or _filename_stem(filename)
+    material = _strip_revision_tail(material) or material
     return nd_code[:128], revision[:32] if revision else None, material[:255]
 
 
@@ -445,11 +469,11 @@ def import_specification_document(db: Session, user: CurrentUser, filename: str,
     require_permission(user, "MANAGE_SPECIFICATIONS")
     if not data:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
-    text, tables = _extract_document(filename, data)
+    text, tables, header_text = _extract_document(filename, data)
     if len(_clean(text)) < 20:
         raise HTTPException(status_code=422, detail="No readable text found in the document")
 
-    nd_code, revision, material_name = _guess_header(filename, text)
+    nd_code, revision, material_name = _guess_header(filename, text, header_text)
     existing_codes = {r[0] for r in db.query(MaterialSpecification.nd_code).all()}
     base_code = nd_code
     suffix = 2
@@ -459,15 +483,32 @@ def import_specification_document(db: Session, user: CurrentUser, filename: str,
 
     params = _parse_parameters(text, tables)
     micro_required = any(p["category"] == "microbiological" for p in params)
+    # Метод-ссылка (микро) — из строки микробиологии, если распознана.
+    micro_method_ref = next(
+        (p.get("method_reference") for p in params
+         if p["category"] == "microbiological" and p.get("method_reference")),
+        None,
+    )
+    # Авто-привязка материала по наименованию (точное, затем частичное).
+    material_id = None
+    if material_name:
+        from sqlalchemy import func as _func
+        mat = (
+            db.query(Material)
+            .filter(_func.lower(Material.name) == material_name.lower())
+            .first()
+            or db.query(Material).filter(Material.name.ilike(f"%{material_name}%")).first()
+        )
+        material_id = mat.id if mat else None
     payload = MaterialSpecificationInput(
         nd_code=nd_code,
         revision=revision,
         material_name=material_name,
-        material_id=None,
+        material_id=material_id,
         match_keywords=material_name,
         sop_form=_guess_sop_form(filename, text),
         micro_required=micro_required,
-        micro_method_ref=None,
+        micro_method_ref=(micro_method_ref[:255] if micro_method_ref else None),
         is_active=False,
         effective_date=None,
         notes=(
