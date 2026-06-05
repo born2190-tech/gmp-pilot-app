@@ -24,13 +24,87 @@ from app.services.audit import write_audit
 from app.services.permissions import require_permission
 
 
-_ND_RE = re.compile(r"\b(?:НД|ND|СПЕЦ|SPEC|ФСП|FSP)[-/\w.()А-Яа-я]+", re.IGNORECASE)
-_REV_RE = re.compile(r"(?:рев(?:изия)?|revision|редакция)\s*[№#:]?\s*([A-Za-zА-Яа-я0-9./-]+)", re.IGNORECASE)
+_ND_RE = re.compile(r"\b(?:НД|ND|SPC|СПЦ|ФСП|FSP)[-_/.\w()А-Яа-я]*\d[-_/.\w()А-Яа-я]*", re.IGNORECASE)
+_REV_RE = re.compile(r"\b(?:ревизия|revision|редакция)\b\s*[№#:]?\s*([A-Za-zА-Яа-я0-9./-]+)", re.IGNORECASE)
 _UNIT_RE = re.compile(r"(%|мг|mg|г|g|кг|kg|мл|ml|КОЕ/г|cfu/g|ppm)\b", re.IGNORECASE)
+_HEADER_NOISE_RE = re.compile(
+    r"(адрес|телефон|mail|e-mail|ул\.|улица|район|область|республика|завод|novugen|"
+    r"спецификация$|ссылка\s+на\s+нд|таблица|страница|утвержд|разработ|соглас)",
+    re.IGNORECASE,
+)
+_CHEM_FORMULA_RE = re.compile(r"^[A-ZА-Я]?\d*[A-Z][A-Za-z]?\d+[A-Za-zА-Яа-я0-9().,\-\s]+$")
 
 
 def _clean(value: str | None) -> str:
     return re.sub(r"\s+", " ", (value or "").replace("\x00", " ")).strip()
+
+
+def _filename_stem(filename: str) -> str:
+    return _clean(filename.rsplit("\\", 1)[-1].rsplit("/", 1)[-1].rsplit(".", 1)[0])
+
+
+def _normalise_code(value: str) -> str:
+    value = re.sub(r"[\s_]+", "-", _clean(value))
+    value = re.sub(r"[^0-9A-Za-zА-Яа-я./_-]+", "-", value)
+    value = re.sub(r"-{2,}", "-", value).strip("-_ .")
+    return value[:128]
+
+
+def _code_from_filename(filename: str) -> str | None:
+    stem = _filename_stem(filename)
+    parts = [p for p in re.split(r"[_\s]+", stem) if p]
+    useful: list[str] = []
+    for part in parts:
+        lower = part.lower()
+        if any(stop in lower for stop in ("специфика", "specification", "ситаглип", "дапаг", "тиг", "материал")):
+            break
+        cleaned = re.sub(r"[^0-9A-Za-zА-Яа-я-]+", "", part)
+        if cleaned:
+            useful.append(cleaned)
+    if useful and any(re.search(r"\d", p) for p in useful) and any(re.match(r"(?i)^(spc|nd|фсп|спц|соп)", p) for p in useful):
+        return _normalise_code("-".join(useful))
+    return None
+
+
+def _material_from_filename(filename: str) -> str | None:
+    stem = _filename_stem(filename)
+    stem = re.sub(r"(?i)\b(SPC|ND|ФСП|СПЦ|СОП|SPEC|SUB|СУБ)\b", " ", stem)
+    stem = re.sub(r"(?i)спецификац[ия]+|specification", " ", stem)
+    stem = re.sub(r"^\W*\d+[\W_]*", " ", stem)
+    stem = re.sub(r"[_\-()]+", " ", stem)
+    stem = _clean(stem)
+    if 3 <= len(stem) <= 120 and not _HEADER_NOISE_RE.search(stem):
+        return stem
+    return None
+
+
+def _looks_like_material_title(value: str) -> bool:
+    value = _clean(value)
+    if not (3 <= len(value) <= 120):
+        return False
+    if _HEADER_NOISE_RE.search(value):
+        return False
+    if re.search(r"\d{2,}|[@:]", value):
+        return False
+    if _CHEM_FORMULA_RE.match(value):
+        return False
+    letters = re.sub(r"[^A-Za-zА-Яа-я]", "", value)
+    return len(letters) >= 3
+
+
+def _material_from_top_lines(text: str) -> str | None:
+    lines = [_clean(line) for line in text.splitlines()]
+    candidates = [line for line in lines[:25] if _looks_like_material_title(line)]
+    if not candidates:
+        return None
+
+    merged: list[str] = []
+    for line in candidates[:4]:
+        if merged and len(merged[-1]) + len(line) <= 90 and line.isupper():
+            merged[-1] = f"{merged[-1]} {line}"
+        else:
+            merged.append(line)
+    return merged[0] if merged else None
 
 
 def _extract_docx_text(data: bytes) -> tuple[str, list[list[str]]]:
@@ -87,8 +161,10 @@ def _extract_document(filename: str, data: bytes) -> tuple[str, list[list[str]]]
 
 
 def _guess_header(filename: str, text: str) -> tuple[str, str | None, str]:
-    nd_match = _ND_RE.search(text)
-    nd_code = _clean(nd_match.group(0)) if nd_match else f"ND-IMPORT-{filename.rsplit('.', 1)[0][:40]}"
+    nd_code = _code_from_filename(filename)
+    if not nd_code:
+        nd_match = _ND_RE.search(text)
+        nd_code = _normalise_code(nd_match.group(0)) if nd_match else f"ND-IMPORT-{_normalise_code(_filename_stem(filename))[:40]}"
     rev_match = _REV_RE.search(text)
     revision = _clean(rev_match.group(1)) if rev_match else None
 
@@ -101,9 +177,10 @@ def _guess_header(filename: str, text: str) -> tuple[str, str | None, str]:
         if m:
             material = _clean(m.group(1).splitlines()[0])
             break
+    if material and _HEADER_NOISE_RE.search(material):
+        material = ""
     if not material:
-        candidates = [_clean(line) for line in text.splitlines() if 8 <= len(_clean(line)) <= 120]
-        material = candidates[0] if candidates else filename.rsplit(".", 1)[0]
+        material = _material_from_top_lines(text) or _material_from_filename(filename) or _filename_stem(filename)
     return nd_code[:128], revision[:32] if revision else None, material[:255]
 
 
