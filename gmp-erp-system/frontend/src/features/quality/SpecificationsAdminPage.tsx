@@ -678,6 +678,13 @@ function CellInput({ value, onChange, placeholder, mono, error, align = 'left' }
   )
 }
 
+function CellTextarea({ value, onChange, placeholder, mono, error }: { value: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean; error?: boolean }) {
+  return (
+    <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={value?.includes('\n') ? 4 : 2}
+      className={`min-h-[42px] w-full resize-y rounded border bg-transparent px-1.5 py-1 text-[12px] leading-relaxed text-slate-800 outline-none transition placeholder:text-slate-300 focus:bg-white ${mono ? 'font-mono tabular-nums' : ''} ${error ? 'border-rose-300 bg-rose-50/40' : 'border-transparent hover:border-slate-200 focus:border-slate-400 focus:ring-2 focus:ring-slate-200/50'}`} />
+  )
+}
+
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button type="button" disabled={disabled} onClick={() => onChange(!checked)}
@@ -947,8 +954,8 @@ function ParamTable({ rows, kind, editable, t, errors, onChange, onAdd, onRemove
                 {editable ? (
                   <>
                     <td className="px-1 py-1.5"><CellInput value={r.name} onChange={(v) => onChange(i, 'name', v)} placeholder={t.th_test} error={rowErr} /></td>
-                    <td className="px-1 py-1.5"><CellInput value={r.spec} onChange={(v) => onChange(i, 'spec', v)} placeholder={t.th_spec} mono error={rowErr} /></td>
-                    <td className="px-1 py-1.5"><CellInput value={r.method} onChange={(v) => onChange(i, 'method', v)} placeholder={t.th_method} /></td>
+                    <td className="px-1 py-1.5"><CellTextarea value={r.spec} onChange={(v) => onChange(i, 'spec', v)} placeholder={t.th_spec} mono error={rowErr} /></td>
+                    <td className="px-1 py-1.5"><CellTextarea value={r.method} onChange={(v) => onChange(i, 'method', v)} placeholder={t.th_method} /></td>
                     <td className="px-1 py-1.5"><CellInput value={r.unit} onChange={(v) => onChange(i, 'unit', v)} placeholder="—" align="center" /></td>
                     <td className="px-1 py-1.5">
                       <div className="flex items-center justify-end gap-0.5">
@@ -961,8 +968,8 @@ function ParamTable({ rows, kind, editable, t, errors, onChange, onAdd, onRemove
                 ) : (
                   <>
                     <td className="px-2 py-1.5 text-[12.5px] font-medium text-slate-900">{r.name}</td>
-                    <td className="px-2 py-1.5 font-mono text-[12px] tabular-nums text-slate-700">{r.spec}</td>
-                    <td className="px-2 py-1.5 text-[11.5px] text-slate-500">{r.method}</td>
+                    <td className="whitespace-pre-line px-2 py-1.5 font-mono text-[12px] tabular-nums text-slate-700">{r.spec}</td>
+                    <td className="whitespace-pre-line px-2 py-1.5 text-[11.5px] text-slate-500">{r.method}</td>
                     <td className="px-2 py-1.5 text-center text-[11.5px] text-slate-500">{r.unit}</td>
                   </>
                 )}
@@ -1170,8 +1177,8 @@ function F11Sheet({ d, t }: { d: UiSpec; t: Dict }) {
             <tr key={i} className="border-x border-b border-slate-200 last:border-b-slate-300">
               <td className="border-r border-slate-100 px-2 py-1.5 text-center font-mono text-[11px] tabular-nums text-slate-500">{i + 1}</td>
               <td className="border-r border-slate-100 px-2 py-1.5 text-[11.5px] font-medium text-slate-800">{r.name}</td>
-              <td className="border-r border-slate-100 px-2 py-1.5 font-mono text-[11px] tabular-nums text-slate-600">{r.spec}</td>
-              <td className="border-r border-slate-100 px-2 py-1.5 text-[10.5px] text-slate-500">{r.method}</td>
+              <td className="whitespace-pre-line border-r border-slate-100 px-2 py-1.5 font-mono text-[11px] tabular-nums text-slate-600">{r.spec}</td>
+              <td className="whitespace-pre-line border-r border-slate-100 px-2 py-1.5 text-[10.5px] text-slate-500">{r.method}</td>
               <td className="border-r border-slate-100 px-2 py-1.5 text-center text-[10.5px] text-slate-500">{r.unit}</td>
               <td className="border-r border-slate-100 bg-amber-50/30 px-2 py-1.5"><span className="block h-3.5 rounded-sm border border-dashed border-amber-300/70 bg-white" /></td>
               <td className="bg-amber-50/30 px-2 py-1.5"><span className="mx-auto block h-3.5 w-3.5 rounded-sm border border-dashed border-amber-300/70 bg-white" /></td>

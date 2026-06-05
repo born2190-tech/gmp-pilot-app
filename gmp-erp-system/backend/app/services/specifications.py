@@ -132,6 +132,74 @@ def _infer_unit(spec: str) -> str | None:
     return unit_match.group(1) if unit_match else None
 
 
+def _normalise_param_name(value: str) -> str:
+    value = _clean(value).upper().replace("Ё", "Е")
+    aliases = {
+        "РАСТВОРЕНИЕ": "РАСТВОРИМОСТЬ",
+        "КОЛИЧЕСТВЕННОЕ СОДЕРЖАНИЕ": "КОЛИЧЕСТВЕННОЕ СОДЕРЖАНИЕ",
+    }
+    return aliases.get(value, value)
+
+
+def _merge_lines(values: list[str], numbered: bool = False) -> str:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        value = _clean(value)
+        if not value:
+            continue
+        key = value.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(value)
+    if not unique:
+        return ""
+    if len(unique) == 1:
+        return unique[0]
+    if numbered:
+        return "\n".join(f"{idx}. {line}" if not re.match(r"^\d+[.)]", line) else line for idx, line in enumerate(unique, start=1))
+    return "\n".join(f"- {line}" for line in unique)
+
+
+def _merge_repeated_parameters(params: list[dict]) -> list[dict]:
+    """Merge sub-rows of one analytical test into a single ND parameter.
+
+    SOP specification tables often repeat TEST for subcriteria: solubility in
+    several solvents, several identification reactions, microbiology lines.
+    In the analytical sheet these are one test with multiline specification.
+    """
+    merged: list[dict] = []
+    index_by_key: dict[tuple[str, str], int] = {}
+    specs_by_key: dict[tuple[str, str], list[str]] = {}
+    methods_by_key: dict[tuple[str, str], list[str]] = {}
+    units_by_key: dict[tuple[str, str], list[str]] = {}
+
+    for param in params:
+        name = _normalise_param_name(param["parameter_name"])
+        key = (param["category"], name)
+        if key not in index_by_key:
+            item = {**param, "parameter_name": name}
+            index_by_key[key] = len(merged)
+            merged.append(item)
+            specs_by_key[key] = [param.get("specification") or ""]
+            methods_by_key[key] = [param.get("method_reference") or ""]
+            units_by_key[key] = [param.get("unit") or ""]
+            continue
+        specs_by_key[key].append(param.get("specification") or "")
+        methods_by_key[key].append(param.get("method_reference") or "")
+        units_by_key[key].append(param.get("unit") or "")
+
+    for key, idx in index_by_key.items():
+        item = merged[idx]
+        multi_spec = len([s for s in specs_by_key[key] if _clean(s)]) > 1
+        item["specification"] = _merge_lines(specs_by_key[key], numbered=key[1] == "ПОДЛИННОСТЬ")
+        item["method_reference"] = _merge_lines(methods_by_key[key]) or None
+        unique_units = [u for u in dict.fromkeys(_clean(u) for u in units_by_key[key]) if u]
+        item["unit"] = unique_units[0] if len(unique_units) == 1 and not multi_spec else None
+    return merged
+
+
 def _extract_docx_text(data: bytes) -> tuple[str, list[list[str]]]:
     try:
         from docx import Document
@@ -252,7 +320,7 @@ def _parse_parameters(text: str, rows: list[list[str]]) -> list[dict]:
                 params.append(parsed)
 
     if params:
-        return params
+        return _merge_repeated_parameters(params)
 
     for line in text.splitlines():
         line = _clean(line)
@@ -265,7 +333,7 @@ def _parse_parameters(text: str, rows: list[list[str]]) -> list[dict]:
             if key not in seen:
                 seen.add(key)
                 params.append(parsed)
-    return params
+    return _merge_repeated_parameters(params)
 
 
 def list_specifications(db: Session, include_inactive: bool = True) -> list[MaterialSpecification]:
