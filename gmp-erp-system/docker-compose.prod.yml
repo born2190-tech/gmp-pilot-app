@@ -19,6 +19,7 @@ services:
     volumes:
       - ${SCANS_HOST_PATH:-/srv/gmp/qc-scans}:/data/qc-scans
       - ${DEFECT_PHOTOS_HOST_PATH:-/srv/gmp/defect-photos}:/data/receipt-defect-photos
+      - ${RECEIPT_CERTS_HOST_PATH:-/srv/gmp/receipt-certificates}:/data/receipt-certificates
 
   frontend:
     ports: !reset []           # доступ только через reverse-proxy
