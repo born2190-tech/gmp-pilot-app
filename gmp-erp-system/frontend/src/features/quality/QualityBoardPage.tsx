@@ -95,6 +95,8 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
   const [oosList, setOosList] = useState<OOSItem[]>([])
   const [oosModalOpen, setOosModalOpen] = useState(false)
   const [phaseFilter, setPhaseFilter] = useState<Phase | null>(null)
+  // Категория задач ДКК: субстанции / упаковка / ГП — отдельные доски.
+  const [qcCategory, setQcCategory] = useState<'SUBSTANCE_WAREHOUSE' | 'PACKAGING_WAREHOUSE' | 'FG_WAREHOUSE'>('SUBSTANCE_WAREHOUSE')
   const [collapsedPhases, setCollapsedPhases] = useState<Set<Phase>>(new Set())
   const [selectedLotId, setSelectedLotId] = useState('')
   const [filter, setFilter] = useState('')
@@ -211,9 +213,19 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
     return m
   }, [lots, actByLot])
 
+  // Лоты текущей категории ДКК (субстанции / упаковка / ГП).
+  const categoryLots = useMemo(() => lots.filter((lot) => lot.warehouse_type === qcCategory), [lots, qcCategory])
+
+  // Счётчики задач по категориям для бейджей вкладок (без учёта phase-фильтра).
+  const categoryCounts = useMemo(() => {
+    const c = { SUBSTANCE_WAREHOUSE: 0, PACKAGING_WAREHOUSE: 0, FG_WAREHOUSE: 0 } as Record<string, number>
+    for (const lot of lots) if (lot.warehouse_type in c) c[lot.warehouse_type] += 1
+    return c
+  }, [lots])
+
   const kpi = useMemo(() => {
     const c = { AWAITING_SAMPLING: 0, DRAFT: 0, SCAN_UPLOADED: 0, SAMPLING_VERIFIED: 0, RESULT_READY: 0, overdue: 0 }
-    for (const lot of lots) {
+    for (const lot of categoryLots) {
       const ph = lotPhases.get(lot.id)!
       c[ph] += 1
       if (ph === 'SAMPLING_VERIFIED') {
@@ -222,11 +234,11 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
       }
     }
     return c
-  }, [lots, lotPhases])
+  }, [categoryLots, lotPhases])
 
   const filteredQcLots = useMemo(() => {
     const q = filter.trim().toLowerCase()
-    return lots.filter((lot) => {
+    return categoryLots.filter((lot) => {
       if (phaseFilter && lotPhases.get(lot.id) !== phaseFilter) return false
       if (!q) return true
       return (
@@ -237,7 +249,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
         lot.manufacturer_name.toLowerCase().includes(q)
       )
     })
-  }, [lots, filter, phaseFilter, lotPhases])
+  }, [categoryLots, filter, phaseFilter, lotPhases])
 
   const groupedQc = useMemo(() => {
     const groups = new Map<Phase, LotItem[]>()
@@ -306,6 +318,27 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
           <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{t('quality.incomingControl')}</p>
           <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-slate-950">{t('quality.qcBoard')}</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">{t('qc.dashboardSubtitle')}</p>
+        </div>
+
+        {/* Категории задач ДКК — отдельные доски: субстанции / упаковка / ГП */}
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/60 p-1">
+          {([
+            ['SUBSTANCE_WAREHOUSE', t('qc.cat.substance'), FlaskConical],
+            ['PACKAGING_WAREHOUSE', t('qc.cat.packaging'), Package],
+            ['FG_WAREHOUSE', t('qc.cat.fg'), Boxes],
+          ] as const).map(([cat, label, Icon]) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => { setQcCategory(cat); setPhaseFilter(null); setSelectedLotId('') }}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition ${
+                qcCategory === cat ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+            >
+              <Icon size={14} /> {label}
+              <span className={`ml-0.5 rounded-full px-1.5 text-[10.5px] tabular-nums ${qcCategory === cat ? 'bg-white/20' : 'bg-slate-200 text-slate-600'}`}>{categoryCounts[cat] ?? 0}</span>
+            </button>
+          ))}
         </div>
 
         {error && <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
