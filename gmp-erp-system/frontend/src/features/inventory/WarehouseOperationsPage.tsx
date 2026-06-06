@@ -362,11 +362,14 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
             <FormRow label={t('quality.signaturePassword')}>
               <input
                 type="password"
+                name="warehouse-transfer-esign-password"
                 value={transferPassword}
                 onChange={(event) => setTransferPassword(event.target.value)}
                 disabled={!selectedLot}
                 placeholder="••••••••"
-                autoComplete="current-password"
+                autoComplete="new-password"
+                autoCorrect="off"
+                spellCheck={false}
                 className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200/60 disabled:cursor-not-allowed disabled:bg-slate-50"
               />
             </FormRow>
@@ -457,10 +460,14 @@ export function WarehouseOperationsPage({ token, user }: WarehouseOperationsPage
             <FormRow label={t('quality.signaturePassword')}>
               <input
                 type="password"
+                name="warehouse-adjust-esign-password"
                 value={adjustPassword}
                 onChange={(event) => setAdjustPassword(event.target.value)}
                 disabled={!selectedLot}
                 placeholder="••••••••"
+                autoComplete="new-password"
+                autoCorrect="off"
+                spellCheck={false}
                 className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 disabled:cursor-not-allowed disabled:bg-slate-50"
               />
             </FormRow>
@@ -566,6 +573,11 @@ function LotCombobox({ lots, selectedLot, onSelect, t }: LotComboboxProps) {
         <Search size={15} className="shrink-0 text-slate-400" />
         <input
           ref={inputRef}
+          type="search"
+          name="warehouse-lot-picker-search"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value)
