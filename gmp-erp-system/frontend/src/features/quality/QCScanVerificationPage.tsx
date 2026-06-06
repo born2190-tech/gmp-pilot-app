@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { useI18n } from '../../i18n/I18nProvider'
+import { PdfView } from '../../components/ui/PdfView'
 import {
   downloadQcNotificationScan,
   downloadQcReportScanFile,
@@ -441,14 +442,9 @@ function VerifyModal({
                     <img src={pdfUrl} alt="QC scan" className="max-w-full" />
                   </div>
                 ) : (
-                  <object data={pdfUrl} type={scanMime} className="h-full min-h-[440px] w-full">
-                    {/* Фолбэк, если встроенный просмотрщик PDF отключён в браузере */}
-                    <div className="flex h-full min-h-[440px] flex-col items-center justify-center gap-2 px-4 text-center text-sm text-slate-600">
-                      <FileText size={20} className="text-slate-400" />
-                      <span>{t('qcVerification.previewUnavailable')}</span>
-                      <a href={pdfUrl} target="_blank" rel="noreferrer" className="font-medium text-blue-600 hover:underline">{t('qcVerification.openInNewTab')}</a>
-                    </div>
-                  </object>
+                  // PDF.js: рендер в canvas в самой странице (не зависит от
+                  // настройки браузера и менеджеров загрузок).
+                  <PdfView url={pdfUrl} className="h-full min-h-[440px] overflow-auto bg-slate-100 p-2" />
                 )}
               </>
             ) : (
