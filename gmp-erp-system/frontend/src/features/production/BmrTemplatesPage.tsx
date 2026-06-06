@@ -15,7 +15,7 @@ import {
 } from '../../lib/api'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
-import type { BmrTemplateItem, BmrTemplateListItem, MaterialItem, ProductItem } from '../../types/inventory'
+import type { BmrSectionConfig, BmrTemplateItem, BmrTemplateListItem, MaterialItem, ProductItem } from '../../types/inventory'
 
 interface Props { token: string; user: CurrentUser }
 
@@ -46,7 +46,18 @@ function statusLabel(v: string, t: Translate): string {
 
 interface FieldDef { label: string; type: string; unit?: string; required?: boolean }
 interface DistRow { id: string; group: string; material_code: string; name: string; qty: string }
-interface SecForm { section_type: string; title: string; room?: string; stage?: string; stage_title?: string; fields: FieldDef[]; dist?: DistRow[] }
+interface FormulaRow { group?: string; name?: string; spec?: string; per_tab?: string; per_series?: string }
+interface SecForm {
+  section_type: string
+  title: string
+  room?: string
+  stage?: string
+  stage_title?: string
+  fields: FieldDef[]
+  dist?: DistRow[]
+  formulaRows?: FormulaRow[]
+  config?: BmrSectionConfig
+}
 interface TplForm { id?: string; product_id: string; title: string; status: string; version: number; sections: SecForm[] }
 
 let _rid = 0
@@ -70,6 +81,8 @@ function fromItem(item: BmrTemplateItem): TplForm {
       room: s.config?.room ?? '', stage: s.config?.stage ?? '', stage_title: s.config?.stage_title ?? '',
       fields: (s.config?.fields ?? []).map((f) => ({ label: f.label, type: f.type, unit: f.unit ?? '', required: !!f.required })),
       dist: s.section_type === 'distribution_list' ? distFromConfig(s.config) : undefined,
+      formulaRows: s.section_type === 'production_formula' ? ((s.config?.rows ?? []) as FormulaRow[]) : undefined,
+      config: s.config,
     })),
   }
 }
@@ -152,9 +165,12 @@ export function BmrTemplatesPage({ token, user }: Props) {
         if (s.room?.trim()) meta.room = s.room.trim()
         if (s.stage?.trim()) meta.stage = s.stage.trim()
         if (s.stage_title?.trim()) meta.stage_title = s.stage_title.trim()
+        const fields = s.fields.map((f) => ({ label: f.label.trim(), type: f.type, unit: f.unit?.trim() || null, required: !!f.required }))
         const config = s.section_type === 'distribution_list'
-          ? { ...distConfig(s), ...meta }
-          : { ...meta, fields: s.fields.map((f) => ({ label: f.label.trim(), type: f.type, unit: f.unit?.trim() || null, required: !!f.required })) }
+          ? { ...(s.config ?? {}), ...distConfig(s), ...meta }
+          : s.section_type === 'production_formula'
+            ? { ...(s.config ?? {}), kind: 'production_formula', rows: s.formulaRows ?? [], ...meta, fields }
+            : { ...(s.config ?? {}), ...meta, fields }
         return { section_type: s.section_type, title: s.title.trim(), config }
       }),
     }
@@ -216,6 +232,7 @@ export function BmrTemplatesPage({ token, user }: Props) {
   function addField(i: number) { patchSec(i, { fields: [...form!.sections[i].fields, { label: '', type: 'text', unit: '', required: false }] }) }
   function patchField(i: number, fi: number, p: Partial<FieldDef>) { patchSec(i, { fields: form!.sections[i].fields.map((f, x) => x === fi ? { ...f, ...p } : f) }) }
   function removeField(i: number, fi: number) { patchSec(i, { fields: form!.sections[i].fields.filter((_, x) => x !== fi) }) }
+  function patchFormulaRow(i: number, ri: number, p: Partial<FormulaRow>) { patchSec(i, { formulaRows: (form!.sections[i].formulaRows ?? []).map((r, x) => x === ri ? { ...r, ...p } : r) }) }
 
   const activeProducts = useMemo(() => products.filter((p) => p.is_active || p.id === form?.product_id), [products, form?.product_id])
 
@@ -316,7 +333,52 @@ export function BmrTemplatesPage({ token, user }: Props) {
                         <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={sec.stage_title ?? ''} disabled={!editable} onChange={(e) => patchSec(i, { stage_title: e.target.value })} placeholder={t('bmrTpl.stagePlaceholder')} /></label>
                     </div>
 
-                    {sec.section_type === 'distribution_list' ? (
+                    {sec.section_type === 'production_formula' ? (
+                      <div>
+                        <div className="overflow-x-auto rounded-lg border border-slate-200">
+                          <table className="w-full min-w-[880px] text-left text-[12.5px]">
+                            <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+                              <tr>
+                                <th className="px-3 py-2">{t('bmrFill.composition')}</th>
+                                <th className="w-[260px] px-3 py-2">{t('bmrFill.specification')}</th>
+                                <th className="w-[170px] px-3 py-2">{t('bmrFill.perTablet')}</th>
+                                <th className="w-[170px] px-3 py-2">{t('bmrFill.perSeries')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(sec.formulaRows ?? []).map((row, ri) => (
+                                row.group ? (
+                                  <tr key={ri} className="border-t border-slate-200 bg-slate-100/70">
+                                    <td colSpan={4} className="px-3 py-2 text-[12px] font-semibold uppercase tracking-wide text-slate-700">
+                                      {editable ? (
+                                        <input className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-[12.5px]" value={row.group} onChange={(e) => patchFormulaRow(i, ri, { group: e.target.value })} />
+                                      ) : row.group}
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <tr key={ri} className="border-t border-slate-100 align-top">
+                                    <td className="px-3 py-2">
+                                      <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={row.name ?? ''} disabled={!editable} onChange={(e) => patchFormulaRow(i, ri, { name: e.target.value })} />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input className="h-8 w-full rounded border border-slate-200 px-2 text-[12.5px] disabled:bg-slate-50" value={row.spec ?? ''} disabled={!editable} onChange={(e) => patchFormulaRow(i, ri, { spec: e.target.value })} />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input className="h-8 w-full rounded border border-slate-200 px-2 font-mono text-[12.5px] disabled:bg-slate-50" value={row.per_tab ?? ''} disabled={!editable} onChange={(e) => patchFormulaRow(i, ri, { per_tab: e.target.value })} />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <input className="h-8 w-full rounded border border-slate-200 px-2 font-mono text-[12.5px] disabled:bg-slate-50" value={row.per_series ?? ''} disabled={!editable} onChange={(e) => patchFormulaRow(i, ri, { per_series: e.target.value })} />
+                                    </td>
+                                  </tr>
+                                )
+                              ))}
+                              {(sec.formulaRows ?? []).length === 0 && <tr><td colSpan={4} className="px-3 py-3 text-[12px] text-slate-400">{t('bmrTpl.noFields')}</td></tr>}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="mt-2 text-[11px] text-slate-400">Строки импортированы из таблицы «Производственная формула» и сохраняются в eBMR как справочный состав серии.</p>
+                      </div>
+                    ) : sec.section_type === 'distribution_list' ? (
                       <div>
                         <table className="w-full text-left text-[12.5px]">
                           <thead className="text-[10px] uppercase tracking-wide text-slate-500">
