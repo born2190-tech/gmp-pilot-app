@@ -1,3 +1,4 @@
+import { localizeApiError } from './errorMessages'
 import type { CurrentUser, LoginRequest, LoginResponse } from '../types/auth'
 import type {
   LocationsResponse,
@@ -170,7 +171,7 @@ async function request<T>(path: string, method: Method, options?: { token?: stri
     } catch {
       detail = response.statusText || detail
     }
-    throw new Error(detail)
+    throw new Error(localizeApiError(detail))
   }
 
   if (response.status === 204) {
