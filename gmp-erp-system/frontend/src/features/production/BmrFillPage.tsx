@@ -1019,28 +1019,72 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   if (kind === 'checklist') {
     const steps = section.config?.steps || []
     return wrap(
-      <table className="w-full">
-        <thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
-          <th className="w-10 px-3 py-2 text-center">№</th><th className="px-3 py-2">{t('bmrFill.processStep')}</th>
-          <th className="w-[170px] px-3 py-2">{t('bmrFill.doneDp')}</th><th className="w-[170px] px-3 py-2">{t('bmrFill.checkedDok')}</th>
-        </tr></thead>
-        <tbody>
-          {steps.map((st, i) => {
-            const dpE = entries[key(sid, 2 * i)]; const dokE = entries[key(sid, 2 * i + 1)]
+      <div className="divide-y divide-slate-100">
+        {steps.map((st, i) => {
+            const dpFi = typeof st.dp_field_index === 'number' ? st.dp_field_index : 2 * i
+            const dokFi = typeof st.dok_field_index === 'number' ? st.dok_field_index : dpFi + 1
+            const dpE = entries[key(sid, dpFi)]; const dokE = entries[key(sid, dokFi)]
             const dpSigned = !!(dpE?.value && dpE.value.signed_by)
-            const dpUnlocked = fieldUnlocked(allSections, entries, draft, sid, 2 * i)
-            const dokUnlocked = fieldUnlocked(allSections, entries, draft, sid, 2 * i + 1)
+            const dpUnlocked = fieldUnlocked(allSections, entries, draft, sid, dpFi)
+            const dokUnlocked = fieldUnlocked(allSections, entries, draft, sid, dokFi)
             return (
-              <tr key={i} className="border-b border-slate-100 align-middle">
-                <td className="px-3 py-2 text-center mono text-[12px] font-semibold text-slate-400">{st.no || i + 1}</td>
-                <td className="px-3 py-2 text-[13px] text-slate-800">{st.text}</td>
-                <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(2 * i, 'dp', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} /></td>
-                <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', dokUnlocked)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && dokUnlocked ? () => onSign(2 * i + 1, 'dok', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} /></td>
-              </tr>
+              <div key={i} className="p-3">
+                <div className="grid grid-cols-[52px_1fr] gap-3">
+                  <div className="mono flex h-8 items-center justify-center rounded-md bg-slate-100 text-[12px] font-semibold text-slate-500">{st.no || i + 1}</div>
+                  <div className="min-w-0">
+                    <div className="whitespace-pre-wrap text-[13px] leading-6 text-slate-800">{st.text}</div>
+                    {Array.isArray(st.tables) && st.tables.length > 0 && (
+                      <div className="mt-3 space-y-3">
+                        {st.tables.map((tbl, ti) => (
+                          <div key={ti} className="overflow-x-auto rounded-lg border border-slate-200">
+                            <table className="w-full min-w-[520px] border-collapse text-[12px]">
+                              <tbody>
+                                {(tbl.rows || []).map((row, ri) => (
+                                  <tr key={ri} className="border-b border-slate-100 last:border-b-0">
+                                    {(row.cells || []).map((cell, ci) => {
+                                      const fi = typeof cell.field_index === 'number' ? cell.field_index : null
+                                      const isInput = fi !== null
+                                      const text = String(cell.text || '')
+                                      const cellCls = ri === 0 && !isInput
+                                        ? 'bg-slate-50 font-semibold text-slate-600'
+                                        : 'bg-white text-slate-700'
+                                      return (
+                                        <td key={ci} className={`border-r border-slate-100 px-2 py-2 align-top last:border-r-0 ${cellCls}`}>
+                                          {isInput ? (
+                                            <div className="space-y-1">
+                                              {text && <div className="text-[10.5px] font-medium uppercase tracking-wide text-slate-400">{text}</div>}
+                                              {inputFor(fi, cell.type || 'text', cell.unit)}
+                                            </div>
+                                          ) : (
+                                            text || <span className="text-slate-300">—</span>
+                                          )}
+                                        </td>
+                                      )
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.doneDp')}</div>
+                        <SignCell role="dp" state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(dpFi, 'dp', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} />
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.checkedDok')}</div>
+                        <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', dokUnlocked)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && dokUnlocked ? () => onSign(dokFi, 'dok', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )
           })}
-        </tbody>
-      </table>
+      </div>
     )
   }
 

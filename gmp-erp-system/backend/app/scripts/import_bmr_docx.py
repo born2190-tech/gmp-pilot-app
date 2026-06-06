@@ -109,6 +109,88 @@ def _rows(t) -> list[list[str]]:
     return [[_clean(c.text) for c in r.cells] for r in t.rows]
 
 
+def _cell_text(cell) -> str:
+    return _clean(" ".join(p.text for p in cell.paragraphs))
+
+
+def _strip_signature_text(text: str) -> str:
+    text = re.sub(r"\s*(Выполнил|Проверил)\s+(ДП|ДОК).*$", "", text, flags=re.IGNORECASE)
+    return _clean(text)
+
+
+def _field_type(label: str) -> str:
+    low = label.lower()
+    if any(k in low for k in ("вес", "количество", "выход", "скорость", "температур", "влажност", "давлен")):
+        return "number"
+    return "text"
+
+
+def _field_unit(label: str) -> str | None:
+    low = label.lower()
+    if "кг" in low:
+        return "кг"
+    if "(г" in low or " г" in low:
+        return "г"
+    if "%" in low:
+        return "%"
+    if "об/мин" in low:
+        return "об/мин"
+    if "минут" in low:
+        return "мин"
+    return None
+
+
+def _label_needs_input(label: str) -> bool:
+    low = label.lower().strip(" :")
+    return any(k in low for k in (
+        "время начала", "время окончания", "дата начала", "дата окончания",
+        "количество", "вес", "выход", "отклонение", "другие", "согласование",
+    ))
+
+
+def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
+    raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
+    headers = raw[0] if raw else []
+    out_rows = []
+    for ri, row in enumerate(raw):
+        nonempty = [c for c in row if c]
+        merged_text = len(nonempty) > 1 and len(set(nonempty)) == 1
+        out_cells = []
+        for ci, text in enumerate(row):
+            text = _clean(text)
+            cell: dict = {"text": text}
+            header = headers[ci] if ci < len(headers) else ""
+            row_label = next((c for c in row if c), "")
+            label_base = _clean(" · ".join(x for x in (prefix, row_label, header) if x))
+            create_input = False
+            if ri > 0 and not nonempty and header:
+                create_input = True
+                label_base = _clean(" · ".join(x for x in (prefix, f"строка {ri}", header) if x))
+            elif ri > 0 and not merged_text and not text and nonempty:
+                create_input = True
+            elif ri > 0 and text and not merged_text and _label_needs_input(text):
+                create_input = True
+                label_base = _clean(" · ".join(x for x in (prefix, text) if x))
+            elif len(raw) == 1 and text and _label_needs_input(text):
+                create_input = True
+                label_base = _clean(" · ".join(x for x in (prefix, text) if x))
+
+            if create_input:
+                field_index = len(fields)
+                fields.append({
+                    "label": label_base or prefix,
+                    "type": _field_type(label_base or text),
+                    "unit": _field_unit(label_base or text),
+                })
+                cell["field_index"] = field_index
+                cell["type"] = fields[-1]["type"]
+                if fields[-1].get("unit"):
+                    cell["unit"] = fields[-1]["unit"]
+            out_cells.append(cell)
+        out_rows.append({"cells": out_cells})
+    return {"rows": out_rows}
+
+
 def _process_header(rows: list[list[str]]) -> dict | None:
     """Таблица 'Процесс: X / Комната … / Комната №: N' (ячейки объединённые)."""
     flat = " ".join(_clean(c) for r in rows for c in r)
@@ -130,11 +212,13 @@ def _process_header(rows: list[list[str]]) -> dict | None:
     return {"process": proc, "room": room, "room_no": room_no}
 
 
-def _steps(rows: list[list[str]]) -> list[dict]:
+def _steps(table) -> tuple[list[dict], list[dict]]:
     """Таблица '№ | ТЕХНОЛОГИЧЕСКИЕ ЭТАПЫ | Подпись' → шаги."""
     steps = []
-    for r in rows:
-        cells = [c for c in r if c]
+    fields: list[dict] = []
+    for row in table.rows:
+        raw_cells = [_cell_text(c) for c in row.cells]
+        cells = [c for c in raw_cells if c]
         if len(cells) < 2:
             continue
         head = " ".join(cells).lower()
@@ -142,11 +226,26 @@ def _steps(rows: list[list[str]]) -> list[dict]:
             continue
         no = cells[0]
         text = cells[1] if len(cells) > 1 else ""
+        step_cell = row.cells[1] if len(row.cells) > 1 else None
         if re.match(r"^\d+(\.\d+)*$", no) and len(text) > 2:
-            steps.append({"no": no, "text": text})
+            step = {"no": no, "text": _strip_signature_text(text)}
+            if step_cell is not None and step_cell.tables:
+                step["tables"] = [_nested_table(nt, f"Этап {no}", fields) for nt in step_cell.tables]
+            step["dp_field_index"] = len(fields)
+            fields.append({"label": f"Этап {no} · Выполнено ДП", "type": "signature_operator"})
+            step["dok_field_index"] = len(fields)
+            fields.append({"label": f"Этап {no} · Проверено ДОК", "type": "signature_qa"})
+            steps.append(step)
         elif len(text) > 5 and not re.search(r"подпис", no.lower()):
-            steps.append({"no": no, "text": text})
-    return steps
+            step = {"no": no, "text": _strip_signature_text(text)}
+            if step_cell is not None and step_cell.tables:
+                step["tables"] = [_nested_table(nt, f"Этап {no}", fields) for nt in step_cell.tables]
+            step["dp_field_index"] = len(fields)
+            fields.append({"label": f"Этап {no} · Выполнено ДП", "type": "signature_operator"})
+            step["dok_field_index"] = len(fields)
+            fields.append({"label": f"Этап {no} · Проверено ДОК", "type": "signature_qa"})
+            steps.append(step)
+    return steps, fields
 
 
 def _env_params(rows: list[list[str]]) -> list[dict]:
@@ -403,9 +502,9 @@ def build_sections(doc: Document) -> list[dict]:
             continue
 
         # технологические этапы (шаги процесса) с подписями
-        st = _steps(rows)
+        st, st_fields = _steps(val)
         if st and ("технолог" in flat or "этап" in flat or len(st) >= 2):
-            extra = {"steps": st, "fields": _sig_fields()}
+            extra = {"steps": st, "fields": st_fields}
             add("checklist", pending_title or "Технологические этапы", "checklist", extra)
             pending_title = ""
             continue
