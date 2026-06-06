@@ -104,6 +104,7 @@ from app.services.inventory_count_waves import (
 )
 from app.services.permissions import require_permission
 from app.services.qc_notification_pdf import render_qc_notification_pdf
+from app.services.scan_preview import scan_bytes_as_json
 from app.services.qc_notification_scans import (
     compute_state_hash,
     list_scans,
@@ -1008,10 +1009,16 @@ def list_qc_scans_route(
 @router.get("/qc-notifications/scans/{scan_id}/file")
 def download_qc_scan_route(
     scan_id: UUID,
+    as_json: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
     scan, blob = load_scan_file(db, current_user, scan_id)
+    if as_json:
+        # Превью: байты в base64 внутри JSON. Так ответ не выглядит как файл,
+        # и менеджеры загрузок/расширения не перехватывают его (иначе fetch
+        # PDF получает пустое тело → "PDF size is zero bytes").
+        return scan_bytes_as_json(blob, scan.mime_type or "application/pdf")
     raw_name = f"qc-scan-{scan.notification_id}-v{scan.version}.pdf"
     return Response(
         content=blob,

@@ -782,6 +782,36 @@ export async function downloadQcNotificationScan(token: string, scanId: string):
   return response.blob()
 }
 
+// Превью скана как base64-JSON. JSON-ответ менеджеры загрузок/расширения не
+// перехватывают (в отличие от ответа application/pdf), поэтому байты доходят
+// до страницы целыми. Декодируем в ArrayBuffer для PDF.js / <img>.
+export interface ScanPreview {
+  mime: string
+  bytes: ArrayBuffer
+}
+
+async function fetchScanAsBytes(url: string, token: string): Promise<ScanPreview> {
+  const response = await fetch(url, { method: 'GET', headers: { Authorization: `Bearer ${token}` } })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const json = (await response.json()) as { mime_type?: string; data_base64: string }
+  const bin = atob(json.data_base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i)
+  return { mime: json.mime_type || 'application/pdf', bytes: bytes.buffer }
+}
+
+export function previewQcNotificationScan(token: string, scanId: string): Promise<ScanPreview> {
+  return fetchScanAsBytes(`/api/inventory/qc-notifications/scans/${scanId}/file?as_json=true`, token)
+}
+
+export function previewSamplingScan(token: string, scanId: string): Promise<ScanPreview> {
+  return fetchScanAsBytes(`/api/quality/sampling-scans/${scanId}/file?as_json=true`, token)
+}
+
+export function previewQcReportScan(token: string, scanId: string): Promise<ScanPreview> {
+  return fetchScanAsBytes(`/api/quality/qc-report-scans/${scanId}/file?as_json=true`, token)
+}
+
 export function listPendingQcScans(token: string): Promise<QCPendingScansResponse> {
   return request<QCPendingScansResponse>('/api/inventory/qc-notifications/scans/pending', 'GET', { token })
 }

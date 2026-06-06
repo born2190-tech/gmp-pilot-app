@@ -12,10 +12,10 @@ import {
 import { useI18n } from '../../i18n/I18nProvider'
 import { PdfView } from '../../components/ui/PdfView'
 import {
-  downloadQcNotificationScan,
-  downloadQcReportScanFile,
-  downloadSamplingScanFile,
   listVerificationQueue,
+  previewQcNotificationScan,
+  previewQcReportScan,
+  previewSamplingScan,
   rejectQcReportScan,
   rejectQcScan,
   rejectSamplingScan,
@@ -23,6 +23,7 @@ import {
   verifyQcScan,
   verifySamplingScan,
 } from '../../lib/api'
+import type { ScanPreview } from '../../lib/api'
 import type { CurrentUser } from '../../types/auth'
 import type { VerificationDocType, VerificationQueueItem } from '../../types/inventory'
 
@@ -90,10 +91,10 @@ function sigRows(t: Translate, item: VerificationQueueItem): SigRow[] {
   return rows
 }
 
-async function downloadScanBlob(token: string, item: VerificationQueueItem): Promise<Blob> {
-  if (item.doc_type === 'qc_notification') return downloadQcNotificationScan(token, item.scan_id)
-  if (item.doc_type === 'sampling_act') return downloadSamplingScanFile(token, item.scan_id)
-  return downloadQcReportScanFile(token, item.scan_id)
+function fetchScanPreview(token: string, item: VerificationQueueItem): Promise<ScanPreview> {
+  if (item.doc_type === 'qc_notification') return previewQcNotificationScan(token, item.scan_id)
+  if (item.doc_type === 'sampling_act') return previewSamplingScan(token, item.scan_id)
+  return previewQcReportScan(token, item.scan_id)
 }
 
 export function QCScanVerificationPage({ token, user }: QCScanVerificationPageProps) {
@@ -157,17 +158,15 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     setDraft(emptyDraft())
     setRejecting(false)
     try {
-      const blob = await downloadScanBlob(token, item)
-      // Гарантируем корректный MIME (иначе object/iframe могут не отрисовать).
-      const mime = blob.type || 'application/pdf'
-      const typed = blob.type ? blob : new Blob([blob], { type: mime })
+      // Байты приходят в base64-JSON — менеджеры загрузок их не перехватывают.
+      const { mime, bytes } = await fetchScanPreview(token, item)
       setScanMime(mime)
-      // blob-URL нужен только для картинок (<img>) и кнопки «Открыть в новой вкладке».
-      setPdfUrl(URL.createObjectURL(typed))
-      // Для PDF отдаём PDF.js сами байты — без повторного fetch, который
-      // менеджер загрузок/расширение могут перехватить и вернуть 0 байт.
+      // blob-URL строим из уже полученных байтов (без отдельного fetch /file):
+      // нужен только для картинок (<img>) и кнопки «Открыть в новой вкладке».
+      setPdfUrl(URL.createObjectURL(new Blob([bytes], { type: mime })))
+      // Для PDF отдаём PDF.js сами байты — никакого собственного fetch.
       if (!mime.startsWith('image/')) {
-        setPdfData(await blob.arrayBuffer())
+        setPdfData(bytes)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('qcVerification.fileFailed'))

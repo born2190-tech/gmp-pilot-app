@@ -640,12 +640,16 @@ async def upload_qc_report_scan_route(
 @router.get("/qc-report-scans/{scan_id}/file")
 def download_qc_report_scan_route(
     scan_id: UUID,
+    as_json: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
     from app.services.qc_report_scans import load_scan_file
+    from app.services.scan_preview import scan_bytes_as_json
 
     raw, mime = load_scan_file(db, current_user, scan_id)
+    if as_json:
+        return scan_bytes_as_json(raw, mime)
     return Response(content=raw, media_type=mime)
 
 
@@ -754,10 +758,15 @@ async def upload_sampling_scan_route(
 @router.get("/sampling-scans/{scan_id}/file")
 def download_sampling_scan_route(
     scan_id: UUID,
+    as_json: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> Response:
+    from app.services.scan_preview import scan_bytes_as_json
+
     raw, mime = sampling_service.load_scan_file(db, current_user, scan_id)
+    if as_json:
+        return scan_bytes_as_json(raw, mime)
     return Response(content=raw, media_type=mime)
 
 
