@@ -406,12 +406,11 @@ def list_eligible_receipts_for_notification(db: Session, user: CurrentUser) -> l
             Warehouse.warehouse_type.in_(QC_NOTIFICATION_WAREHOUSES),
             ~ReceiptDocument.id.in_(notified),
         )
-        .order_by(ReceiptDocument.posted_at.desc().nullslast())
-        .limit(100)
     )
+    # Фильтр по складу пользователя — ДО order_by/limit (иначе InvalidRequestError).
     if user.warehouse_scope:
         query = query.filter(Warehouse.warehouse_type == user.warehouse_scope)
-    rows = query.all()
+    rows = query.order_by(ReceiptDocument.posted_at.desc().nullslast()).limit(100).all()
     out: list[dict] = []
     for r in rows:
         n = db.query(func.count(ReceiptLine.id)).filter(ReceiptLine.receipt_id == r.id).scalar() or 0

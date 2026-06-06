@@ -63,6 +63,8 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
   const [createOpen, setCreateOpen] = useState(false)
   const [eligible, setEligible] = useState<EligibleReceiptItem[]>([])
   const [creatingId, setCreatingId] = useState<string | null>(null)
+  // Номер извещения, вводимый складом при создании (по приходу). Пусто → авто-номер.
+  const [notiNoByReceipt, setNotiNoByReceipt] = useState<Record<string, string>>({})
 
   async function toggleCreate() {
     const next = !createOpen
@@ -78,7 +80,8 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
     setCreatingId(receiptId)
     setError(null)
     try {
-      await createQcNotification(token, { receipt_id: receiptId })
+      const notificationNo = (notiNoByReceipt[receiptId] || '').trim()
+      await createQcNotification(token, { receipt_id: receiptId, notification_no: notificationNo || undefined })
       setCreateOpen(false)
       await loadData()
     } catch (e) { setError(e instanceof Error ? e.message : t('qcNotifications.createFailed')) }
@@ -210,6 +213,13 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
                     <span className="text-[13px] font-semibold text-slate-900">{r.document_no}</span>
                     <span className="mono ml-2 text-[11px] text-slate-400">{formatDate(r.received_date, locale)} · {t('qcNotifications.positionsCount', { n: r.lines })}</span>
                   </div>
+                  <input
+                    autoComplete="off"
+                    value={notiNoByReceipt[r.receipt_id] ?? ''}
+                    onChange={(e) => setNotiNoByReceipt((prev) => ({ ...prev, [r.receipt_id]: e.target.value }))}
+                    placeholder={t('qcNotifications.notificationNoPlaceholder')}
+                    className="h-8 w-44 rounded-md border border-slate-300 bg-white px-2 font-mono text-[12px] outline-none focus:border-slate-400"
+                  />
                   <button type="button" disabled={creatingId === r.receipt_id} onClick={() => void createForReceipt(r.receipt_id)}
                     className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[12.5px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
                     <Plus size={13} /> {creatingId === r.receipt_id ? t('qcNotifications.creating') : t('qcNotifications.createAndSend')}
