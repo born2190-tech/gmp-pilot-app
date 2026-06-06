@@ -4,9 +4,11 @@
 // аналит. лист, акт отбора и т.п.).
 import { useEffect, useRef, useState } from 'react'
 import * as pdfjs from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+// Воркер встроен в бандл (inline) — НЕТ отдельной загрузки .mjs, поэтому
+// менеджеры загрузок/MIME-настройки сервера на него не влияют.
+import PdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker&inline'
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+pdfjs.GlobalWorkerOptions.workerPort = new PdfjsWorker()
 
 export function PdfView({ url, className }: { url: string; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
