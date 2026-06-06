@@ -191,9 +191,9 @@ def seed_foundation_data(db: Session) -> None:
         )
     db.flush()
 
-    substance = get_or_create_warehouse(db, "SUB", "Substance and excipient warehouse", "SUBSTANCE_WAREHOUSE")
-    packaging = get_or_create_warehouse(db, "PACK", "Packaging material warehouse", "PACKAGING_WAREHOUSE")
-    fg = get_or_create_warehouse(db, "FG", "Finished goods warehouse", "FG_WAREHOUSE")
+    substance = get_or_create_warehouse(db, "SUB", "Склад субстанций и вспомогательных веществ", "SUBSTANCE_WAREHOUSE")
+    packaging = get_or_create_warehouse(db, "PACK", "Склад упаковочных материалов", "PACKAGING_WAREHOUSE")
+    fg = get_or_create_warehouse(db, "FG", "Склад готовой продукции", "FG_WAREHOUSE")
     db.flush()
 
     for warehouse in [substance, packaging, fg]:
