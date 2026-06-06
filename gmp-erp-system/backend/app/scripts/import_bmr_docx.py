@@ -29,6 +29,17 @@ def _clean(s: str | None) -> str:
     return re.sub(r"\s+", " ", (s or "").replace("\x00", " ")).strip()
 
 
+def _short_label(s: str, limit: int = 80) -> str:
+    """Метка поля — короткая. Длинные ячейки-инструкции/расчёты не годятся как
+    подпись поля (полный текст всё равно остаётся в ячейке таблицы и виден при
+    заполнении). Режем по границе слова и добавляем многоточие."""
+    s = _clean(s)
+    if len(s) <= limit:
+        return s
+    cut = s[:limit].rsplit(" ", 1)[0] or s[:limit]
+    return f"{cut.rstrip(' ·,;:')}…"
+
+
 def _sig_fields() -> list[dict]:
     return [
         {"label": "Выполнено · ДП", "type": "signature_operator"},
@@ -150,17 +161,33 @@ def _label_needs_input(label: str) -> bool:
 
 def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
     raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
-    headers = raw[0] if raw else []
+    headers = [_clean(h) for h in (raw[0] if raw else [])]
+    ncols = max((len(r) for r in raw), default=0)
+    # Объединённые ячейки шапки в Word python-docx отдаёт повторно по каждому
+    # столбцу слияния (напр. «Статус отказа» в 3 ячейках). Схлопываем подряд
+    # идущие одинаковые непустые заголовки в один столбец, иначе на каждую такую
+    # ячейку плодится дубль-поле.
+    keep: list[int] = []
+    for ci in range(ncols):
+        h = headers[ci] if ci < len(headers) else ""
+        prev = headers[ci - 1] if 0 < ci <= len(headers) else ""
+        if ci > 0 and h and h == prev:
+            continue
+        keep.append(ci)
+
     out_rows = []
-    for ri, row in enumerate(raw):
+    for ri, full_row in enumerate(raw):
+        row = [_clean(full_row[ci]) if ci < len(full_row) else "" for ci in keep]
         nonempty = [c for c in row if c]
         merged_text = len(nonempty) > 1 and len(set(nonempty)) == 1
+        row_label = next((c for c in row if c), "")
         out_cells = []
-        for ci, text in enumerate(row):
-            text = _clean(text)
+        for ci in keep:
+            text = _clean(full_row[ci]) if ci < len(full_row) else ""
             cell: dict = {"text": text}
             header = headers[ci] if ci < len(headers) else ""
-            row_label = next((c for c in row if c), "")
+            # Метку поля НЕ префиксуем длинным заголовком секции — он и так
+            # показан над таблицей. В метке оставляем только строку и колонку.
             label_base = _clean(" · ".join(x for x in (prefix, row_label, header) if x))
             create_input = False
             if ri > 0 and not nonempty and header:
@@ -178,7 +205,7 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
             if create_input:
                 field_index = len(fields)
                 fields.append({
-                    "label": label_base or prefix,
+                    "label": _short_label(label_base or prefix or f"Поле {field_index + 1}"),
                     "type": _field_type(label_base or text),
                     "unit": _field_unit(label_base or text),
                 })
@@ -539,7 +566,10 @@ def build_sections(doc: Document) -> list[dict]:
         ))
         if meaningful:
             title = pending_title or "Контрольная таблица"
-            parsed = _generic_process_table(val, title)
+            # Префикс полей пустой: длинный текст-инструкция уже хранится в title
+            # секции и показывается над таблицей; дублировать его в каждую метку
+            # поля не нужно (иначе «<вся инструкция> · строка N · Дата»).
+            parsed = _generic_process_table(val, "")
             if parsed["rows"]:
                 add("process_table", title, "process_table", parsed)
             pending_title = ""
