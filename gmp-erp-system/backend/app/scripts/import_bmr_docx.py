@@ -191,6 +191,12 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
     return {"rows": out_rows}
 
 
+def _generic_process_table(table, prefix: str) -> dict:
+    fields: list[dict] = []
+    parsed = _nested_table(table, prefix, fields)
+    return {"rows": parsed.get("rows", []), "fields": fields}
+
+
 def _process_header(rows: list[list[str]]) -> dict | None:
     """Таблица 'Процесс: X / Комната … / Комната №: N' (ячейки объединённые)."""
     flat = " ".join(_clean(c) for r in rows for c in r)
@@ -228,15 +234,6 @@ def _steps(table) -> tuple[list[dict], list[dict]]:
         text = cells[1] if len(cells) > 1 else ""
         step_cell = row.cells[1] if len(row.cells) > 1 else None
         if re.match(r"^\d+(\.\d+)*$", no) and len(text) > 2:
-            step = {"no": no, "text": _strip_signature_text(text)}
-            if step_cell is not None and step_cell.tables:
-                step["tables"] = [_nested_table(nt, f"Этап {no}", fields) for nt in step_cell.tables]
-            step["dp_field_index"] = len(fields)
-            fields.append({"label": f"Этап {no} · Выполнено ДП", "type": "signature_operator"})
-            step["dok_field_index"] = len(fields)
-            fields.append({"label": f"Этап {no} · Проверено ДОК", "type": "signature_qa"})
-            steps.append(step)
-        elif len(text) > 5 and not re.search(r"подпис", no.lower()):
             step = {"no": no, "text": _strip_signature_text(text)}
             if step_cell is not None and step_cell.tables:
                 step["tables"] = [_nested_table(nt, f"Этап {no}", fields) for nt in step_cell.tables]
@@ -494,7 +491,10 @@ def build_sections(doc: Document) -> list[dict]:
             continue
 
         # оборудование
-        if "оборудован" in (pending_title.lower() + flat) and ("модель" in flat or "поверк" in flat or "серия" in flat):
+        if (
+            ("оборудован" in flat or "название оборудования" in flat)
+            and ("модель" in flat or "модел" in flat or "поверк" in flat or "серия" in flat or "марка" in flat)
+        ):
             extra = {"rows": _equipment(rows), "fields": []}
             if not dup("equipment", "equipment", extra):
                 add("equipment", pending_title or "Оборудование / приборы", "equipment", extra)
@@ -503,7 +503,7 @@ def build_sections(doc: Document) -> list[dict]:
 
         # технологические этапы (шаги процесса) с подписями
         st, st_fields = _steps(val)
-        if st and ("технолог" in flat or "этап" in flat or len(st) >= 2):
+        if st and ("технолог" in flat or "этап" in flat or len(st) >= 1):
             extra = {"steps": st, "fields": st_fields}
             add("checklist", pending_title or "Технологические этапы", "checklist", extra)
             pending_title = ""
@@ -523,6 +523,25 @@ def build_sections(doc: Document) -> list[dict]:
         if "утверждено док" in flat:
             add("stage", "Утверждение line clearance — ДОК", "qa_clearance",
                 {"fields": [{"label": "Утверждено · ДОК", "type": "signature_qa"}]})
+            pending_title = ""
+            continue
+
+        # Самостоятельные таблицы контроля/расчётов без шапки «Технологические
+        # этапы»: металлоискатель, параметры прессования, IPC, блистеровка,
+        # упаковочные материалы, итог выхода, финальные подписи и т.п.
+        meaningful_source = f"{pending_title.lower()} {flat}"
+        meaningful = any(word in meaningful_source for word in (
+            "металлоиск", "стандартные параметры", "в процессе", "внешний вид",
+            "склеивание", "упаковочные материалы", "итого", "фактический выход",
+            "рассмотрено", "подпись", "составлено", "этикетка статуса", "распечатка",
+            "расчет эффективности", "параметр испытаний", "признаваемые критерии",
+            "этапы процесса", "наименование документа", "статус",
+        ))
+        if meaningful:
+            title = pending_title or "Контрольная таблица"
+            parsed = _generic_process_table(val, title)
+            if parsed["rows"]:
+                add("process_table", title, "process_table", parsed)
             pending_title = ""
             continue
 

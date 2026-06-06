@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronRight, ClipboardCheck, Clock,
-  DoorOpen, Droplet, Eye, FileDown, Gauge, Layers, Loader2, Lock, Map, Pen, Save, ShieldCheck,
+  DoorOpen, Droplet, Eye, FileDown, FileText, Gauge, Layers, Loader2, Lock, Map, Pen, Save, ShieldCheck,
   Thermometer, Users, Wifi, WifiOff, X,
 } from 'lucide-react'
 import { BmrAssignDialog } from './BmrAssignDialog'
@@ -47,6 +47,9 @@ function roomFromWorkstation(ws?: string): string | null {
 
 type EntryMap = Record<string, BmrEntryItem>
 type SignRole = 'dp' | 'dok' | 'wh'
+type BmrProcessTableRow = {
+  cells?: { text?: string; field_index?: number; type?: string; unit?: string }[]
+}
 const key = (sid: string, fi: number) => `${sid}:${fi}`
 
 function signMeaning(role: SignRole, t: Translate): string { return t(`bmrFill.meaning.${role}` as Parameters<Translate>[0]) }
@@ -58,6 +61,12 @@ function sectionKind(section: BmrSectionItem): string {
 
 function stageCodeOf(section: BmrSectionItem): string {
   return section.config?.stage || section.config?.room || String(section.id)
+}
+
+function stageTitleFor(section: BmrSectionItem, sections: BmrSectionItem[]): string {
+  const code = stageCodeOf(section)
+  const header = sections.find((item) => sectionKind(item) === 'process_header' && stageCodeOf(item) === code)
+  return String(header?.config?.stage_title || header?.title || section.config?.room || code || '')
 }
 
 function fieldDone(entry: BmrEntryItem | undefined, draftValue: string | undefined): boolean {
@@ -82,6 +91,7 @@ function sectionIcon(kind: string) {
   if (kind === 'environment') return <Thermometer size={15} />
   if (kind === 'equipment') return <Gauge size={15} />
   if (kind === 'checklist') return <ClipboardCheck size={15} />
+  if (kind === 'process_table') return <FileText size={15} />
   return <Layers size={15} />
 }
 
@@ -967,14 +977,31 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   const { t } = useI18n()
   const sid = String(section.id)
   const kind = sectionKind(section)
+  const isProcessTable = kind === 'process_table'
+  const parentStageTitle = isProcessTable ? stageTitleFor(section, allSections) : ''
+  const sectionTitle = isProcessTable && section.title === 'Контрольная таблица'
+    ? 'Контрольная таблица этапа'
+    : section.title
   const Head = (
-    <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
-      <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">{sectionIcon(kind)}</span>
-      <h3 className="text-[14px] font-semibold text-slate-900">{section.ordinal}. {section.title}</h3>
-      {section.config?.room && <span className="mono ml-auto text-[11px] text-slate-400">{section.config.room}{section.config.sop ? ` · ${section.config.sop}` : ''}</span>}
+    <div className={`flex items-center gap-2 border-b px-3 py-2 ${isProcessTable ? 'border-cyan-100 bg-cyan-50/70' : 'border-slate-200 bg-slate-50'}`}>
+      <span className={`inline-flex h-7 w-7 items-center justify-center rounded-md text-white ${isProcessTable ? 'bg-cyan-600' : 'bg-blue-600'}`}>{sectionIcon(kind)}</span>
+      <div className="min-w-0">
+        {isProcessTable && parentStageTitle && (
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-700">Таблица этапа · {parentStageTitle}</div>
+        )}
+        <h3 className="truncate text-[14px] font-semibold text-slate-900">{section.ordinal}. {sectionTitle}</h3>
+      </div>
+      {section.config?.room && <span className="mono ml-auto shrink-0 text-[11px] text-slate-400">{section.config.room}{section.config.sop ? ` · ${section.config.sop}` : ''}</span>}
     </div>
   )
-  const wrap = (body: React.ReactNode) => <section id={`bmr-section-${section.id}`} className="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">{Head}{body}</section>
+  const wrap = (body: React.ReactNode) => (
+    <section
+      id={`bmr-section-${section.id}`}
+      className={`scroll-mt-4 overflow-hidden rounded-lg border bg-white shadow-sm ${isProcessTable ? 'border-cyan-200' : 'border-slate-200'}`}
+    >
+      {Head}{body}
+    </section>
+  )
 
   const inputFor = (fi: number, type: string, unit?: string) => {
     const v = draft[key(sid, fi)] ?? ''
@@ -988,6 +1015,37 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
       </div>
     )
   }
+
+  const renderProcessTable = (rows: BmrProcessTableRow[]) => (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[760px] border-collapse text-[12px]">
+        <tbody>
+          {(rows || []).map((row, ri) => (
+            <tr key={ri} className="border-b border-slate-100 last:border-b-0">
+              {(row.cells || []).map((cell, ci) => {
+                const fi = typeof cell.field_index === 'number' ? cell.field_index : null
+                const isInput = fi !== null
+                const text = String(cell.text || '')
+                const cellCls = ri === 0 && !isInput ? 'bg-slate-50 font-semibold text-slate-600' : 'bg-white text-slate-700'
+                return (
+                  <td key={ci} className={`border-r border-slate-100 px-2 py-2 align-top last:border-r-0 ${cellCls}`}>
+                    {isInput ? (
+                      <div className="space-y-1">
+                        {text && <div className="text-[10.5px] font-medium uppercase tracking-wide text-slate-400">{text}</div>}
+                        {inputFor(fi, cell.type || 'text', cell.unit)}
+                      </div>
+                    ) : (
+                      text || <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 
   /* ---- process_header ---- */
   if (kind === 'process_header') {
@@ -1037,34 +1095,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                       <div className="mt-3 space-y-3">
                         {st.tables.map((tbl, ti) => (
                           <div key={ti} className="overflow-x-auto rounded-lg border border-slate-200">
-                            <table className="w-full min-w-[520px] border-collapse text-[12px]">
-                              <tbody>
-                                {(tbl.rows || []).map((row, ri) => (
-                                  <tr key={ri} className="border-b border-slate-100 last:border-b-0">
-                                    {(row.cells || []).map((cell, ci) => {
-                                      const fi = typeof cell.field_index === 'number' ? cell.field_index : null
-                                      const isInput = fi !== null
-                                      const text = String(cell.text || '')
-                                      const cellCls = ri === 0 && !isInput
-                                        ? 'bg-slate-50 font-semibold text-slate-600'
-                                        : 'bg-white text-slate-700'
-                                      return (
-                                        <td key={ci} className={`border-r border-slate-100 px-2 py-2 align-top last:border-r-0 ${cellCls}`}>
-                                          {isInput ? (
-                                            <div className="space-y-1">
-                                              {text && <div className="text-[10.5px] font-medium uppercase tracking-wide text-slate-400">{text}</div>}
-                                              {inputFor(fi, cell.type || 'text', cell.unit)}
-                                            </div>
-                                          ) : (
-                                            text || <span className="text-slate-300">—</span>
-                                          )}
-                                        </td>
-                                      )
-                                    })}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                            {renderProcessTable(tbl.rows || [])}
                           </div>
                         ))}
                       </div>
@@ -1086,6 +1117,12 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
           })}
       </div>
     )
+  }
+
+  /* ---- process_table (универсальные контрольные/расчётные таблицы из BMR) ---- */
+  if (kind === 'process_table') {
+    const rows = (section.config?.rows || []) as BmrProcessTableRow[]
+    return wrap(<div className="p-3">{renderProcessTable(rows)}</div>)
   }
 
   /* ---- environment ---- */
