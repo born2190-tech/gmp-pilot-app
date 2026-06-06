@@ -420,7 +420,7 @@ function VerifyModal({
   const rows = sigRows(t, item)
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/40 p-4">
-      <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+      <div className="flex max-h-full min-h-0 w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
         <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
           <div>
             <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${docBadgeClass(item.doc_type)}`}>
@@ -438,8 +438,8 @@ function VerifyModal({
           </button>
         </div>
 
-        <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[1.5fr_1fr]">
-          <div className="flex flex-col border-r border-slate-200 bg-slate-100">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[1.5fr_1fr]">
+          <div className="flex min-h-0 flex-col overflow-hidden border-r border-slate-200 bg-slate-100">
             {pdfUrl ? (
               <>
                 <div className="flex justify-end border-b border-slate-200 bg-white px-2 py-1">
@@ -469,7 +469,7 @@ function VerifyModal({
             )}
           </div>
 
-          <div className="flex flex-col gap-4 overflow-y-auto p-5">
+          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-5">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">{t('qcVerification.checklistTitle')}</p>
               <p className="mt-1 text-xs text-slate-600">{t('qcVerification.checklistHint')}</p>
