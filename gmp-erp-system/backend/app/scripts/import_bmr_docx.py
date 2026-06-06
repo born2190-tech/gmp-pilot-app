@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import sys
+from difflib import SequenceMatcher
 from io import BytesIO
 
 from docx import Document
@@ -21,6 +22,7 @@ from docx.oxml.ns import qn
 from app.core.database import SessionLocal
 from app.models.identity import User
 from app.models.inventory import BmrSection, BmrTemplate, Product
+from app.models.master_data import Material
 
 
 def _clean(s: str | None) -> str:
@@ -32,6 +34,60 @@ def _sig_fields() -> list[dict]:
         {"label": "Выполнено · ДП", "type": "signature_operator"},
         {"label": "Проверено · ДОК", "type": "signature_qa"},
     ]
+
+
+def _process_fields() -> list[dict]:
+    return [
+        {"label": "Дата-время начала", "type": "datetime"},
+        {"label": "Дата-время окончания", "type": "datetime"},
+        {"label": "Предыдущий ЛС", "type": "text"},
+        {"label": "Предыдущая серия", "type": "text"},
+    ]
+
+
+def _norm_key(raw: str | None) -> str:
+    text = (raw or "").lower().replace("ё", "е")
+    text = re.sub(r"\*+", " ", text)
+    text = text.replace("(", " ").replace(")", " ")
+    text = re.sub(r"[^a-zа-я0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _material_alias_key(name: str | None) -> str:
+    key = _norm_key(name)
+    aliases = [
+        (("ситаглиптин", "фосфат"), "SITA-PHOS"),
+        (("коллоид", "кремн"), "EXC-AEROSIL"),
+        (("aerosil",), "EXC-AEROSIL"),
+        (("микрокристаллическ", "целлюлоз"), "EXC-MCC"),
+        (("pharmasel",), "EXC-MCC"),
+        (("стеарат", "магни"), "EXC-MGST"),
+        (("opadry", "blue"), "COAT-OPADRY"),
+        (("очищенная", "вода"), "UTIL-WATER"),
+    ]
+    for needles, code in aliases:
+        if all(n in key for n in needles):
+            return code
+    return ""
+
+
+def _field_pack(name: str) -> list[dict]:
+    return [
+        {"label": f"{name} · № серии сырья", "type": "text"},
+        {"label": f"{name} · № аналит. листа", "type": "text"},
+        {"label": f"{name} · вес нетто", "type": "number", "unit": "кг"},
+        {"label": f"{name} · Выдал (Склад)", "type": "signature_warehouse"},
+        {"label": f"{name} · Проверил (ДП)", "type": "signature_operator"},
+        {"label": f"{name} · Проверил (ДОК)", "type": "signature_qa"},
+    ]
+
+
+def _distribution_fields(groups: list[dict]) -> list[dict]:
+    fields: list[dict] = []
+    for group in groups:
+        for item in group.get("items", []):
+            fields.extend(_field_pack(item.get("name") or "Материал"))
+    return fields
 
 
 def _iter_blocks(doc: Document):
@@ -116,6 +172,7 @@ def _equipment(rows: list[list[str]]) -> list[dict]:
 
 def _formula(rows: list[list[str]]) -> list[dict]:
     out = []
+    seen_materials: set[tuple[str, str]] = set()
     for r in rows[1:]:
         cells = (r + [""] * 6)[:6]
         name = _clean(cells[2])
@@ -126,6 +183,13 @@ def _formula(rows: list[list[str]]) -> list[dict]:
         if len(set(vals)) == 1:
             out.append({"group": name})
             continue
+        item_key = (_norm_key(name), _clean(cells[5]))
+        # В Word одна и та же позиция часто идёт второй строкой без количества
+        # для ручного вписывания второй серии. В eBMR это даёт дубли при FEFO,
+        # поэтому пустой дубль не переносим как отдельный ингредиент.
+        if not _clean(cells[5]) and any(k[0] == item_key[0] for k in seen_materials):
+            continue
+        seen_materials.add(item_key)
         out.append({"name": name, "spec": _clean(cells[3]),
                     "per_tab": _clean(cells[4]), "per_series": _clean(cells[5])})
     # схлопываем подряд идущие дубли (одна и та же строка повторяется в шаблоне)
@@ -137,14 +201,113 @@ def _formula(rows: list[list[str]]) -> list[dict]:
     return dedup
 
 
-def _distribution(rows: list[list[str]]) -> list[dict]:
-    items = []
+def _formula_lookup(rows: list[dict]) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for row in rows:
+        name = row.get("name")
+        if name:
+            out.setdefault(_norm_key(name), row)
+    return out
+
+
+def _find_formula(name: str, formula_by_name: dict[str, dict]) -> dict:
+    key = _norm_key(name)
+    if key in formula_by_name:
+        return formula_by_name[key]
+    key_tokens = set(key.split())
+    best: tuple[float, dict] = (0.0, {})
+    for formula_key, row in formula_by_name.items():
+        formula_tokens = set(formula_key.split())
+        if key_tokens and formula_tokens and (
+            key_tokens.issubset(formula_tokens) or formula_tokens.issubset(key_tokens)
+        ):
+            return row
+        score = SequenceMatcher(None, key, formula_key).ratio()
+        if score > best[0]:
+            best = (score, row)
+    return best[1] if best[0] >= 0.72 else {}
+
+
+def _distribution(rows: list[list[str]], formula_by_name: dict[str, dict]) -> list[dict]:
+    groups: list[dict] = []
+    current: dict | None = None
+    seen_in_group: set[str] = set()
+
     for r in rows[1:]:
-        cells = [c for c in r if c]
-        nm = _clean(r[2]) if len(r) > 2 else (cells[0] if cells else "")
-        if nm and "наименован" not in nm.lower():
-            items.append({"name": nm})
-    return [{"title": "Материалы", "items": items}] if items else []
+        cells = (r + [""] * 8)[:8]
+        nonempty = [_clean(c) for c in cells if _clean(c)]
+        if not nonempty:
+            continue
+        flat = " ".join(nonempty).lower()
+        if "аналит" in flat and ("серия" in flat or "наименован" in flat):
+            continue
+        if "подпись" in flat or "выдано" in flat or "проверено" in flat:
+            continue
+
+        # Групповая строка в исходном BMR заполнена одним и тем же текстом во
+        # всех объединённых ячейках.
+        if len(nonempty) >= 3 and len(set(nonempty)) == 1 and not _clean(cells[2]):
+            title = nonempty[0]
+            current = {"title": title, "items": []}
+            groups.append(current)
+            seen_in_group = set()
+            continue
+        if len(nonempty) >= 3 and len(set(nonempty)) == 1 and _clean(cells[2]) == nonempty[0]:
+            title = nonempty[0]
+            current = {"title": title, "items": []}
+            groups.append(current)
+            seen_in_group = set()
+            continue
+
+        name = _clean(cells[2])
+        if not name or "наименован" in name.lower():
+            continue
+        norm = _norm_key(name)
+        if norm in seen_in_group:
+            continue
+        seen_in_group.add(norm)
+        formula = _find_formula(name, formula_by_name)
+        qty = _clean(cells[3]).replace("_", "").strip() or formula.get("per_series") or ""
+        spec = formula.get("spec") or ""
+        if current is None:
+            current = {"title": "Материалы", "items": []}
+            groups.append(current)
+        current["items"].append({"name": name.replace("*", "").strip(), "spec": spec, "qty": qty})
+
+    return [g for g in groups if g.get("items")]
+
+
+def _enrich_material_codes(db, sections: list[dict]) -> None:
+    materials = db.query(Material).all()
+    by_code = {m.code: m for m in materials}
+    by_name = {_norm_key(m.name): m for m in materials}
+
+    def resolve(name: str) -> str:
+        alias = _material_alias_key(name)
+        if alias and alias in by_code:
+            return alias
+        key = _norm_key(name)
+        if key in by_name:
+            return by_name[key].code
+        key_tokens = set(key.split())
+        for material_key, material in by_name.items():
+            material_tokens = set(material_key.split())
+            if key_tokens and material_tokens and (
+                key_tokens.issubset(material_tokens) or material_tokens.issubset(key_tokens)
+            ):
+                return material.code
+        return ""
+
+    for section in sections:
+        cfg = section.get("config") or {}
+        if cfg.get("kind") != "distribution_list":
+            continue
+        field_base = 0
+        for group in cfg.get("groups", []):
+            for item in group.get("items", []):
+                item["field_base"] = field_base
+                item["material_code"] = resolve(item.get("name") or "")
+                field_base += 6
 
 
 def build_sections(doc: Document) -> list[dict]:
@@ -153,6 +316,8 @@ def build_sections(doc: Document) -> list[dict]:
     cur_stage = "identity"
     cur_room = None
     pending_title = ""
+    formula_by_name: dict[str, dict] = {}
+    seen_distribution_fingerprints: set[str] = set()
 
     def add(stype: str, title: str, kind: str, extra: dict):
         nonlocal ordinal
@@ -187,16 +352,21 @@ def build_sections(doc: Document) -> list[dict]:
             if "очистка" in proc.lower():
                 # line clearance уникален по комнате (иначе все слипаются)
                 cur_stage = f"line_clearance_{room_slug or proc_slug}"
+            elif "взвеш" in proc.lower():
+                cur_stage = "weighing"
             else:
                 cur_stage = f"{proc_slug}_{room_slug}" if room_slug else proc_slug
             add("stage", f"Процесс: {proc} · {ph['room']} {ph['room_no']}".strip(), "process_header",
-                {"room_no": ph["room_no"], "process": proc, "fields": []})
+                {"room_no": ph["room_no"], "process": proc, "stage_title": proc, "fields": _process_fields()})
             pending_title = ""
             continue
 
         # производственная формула
         if "состав" in flat and ("кол-во" in flat or "количество на серию" in flat):
-            extra = {"rows": _formula(rows), "fields": []}
+            formula_rows = _formula(rows)
+            if formula_rows and not formula_by_name:
+                formula_by_name = _formula_lookup(formula_rows)
+            extra = {"rows": formula_rows, "fields": []}
             if not dup("production_formula", "production_formula", extra):
                 add("production_formula", pending_title or "Производственная формула", "production_formula", extra)
             pending_title = ""
@@ -204,7 +374,13 @@ def build_sections(doc: Document) -> list[dict]:
 
         # лист расположения / распределения
         if "лист располож" in pending_title.lower() or ("наименован" in flat and "серия субстанц" in flat):
-            extra = {"groups": _distribution(rows), "fields": []}
+            groups = _distribution(rows, formula_by_name)
+            fingerprint = repr(groups)
+            if fingerprint in seen_distribution_fingerprints:
+                pending_title = ""
+                continue
+            seen_distribution_fingerprints.add(fingerprint)
+            extra = {"stage": "weighing", "groups": groups, "fields": _distribution_fields(groups)}
             if not dup("distribution_list", "distribution_list", extra):
                 add("distribution_list", pending_title or "Лист расположения", "distribution_list", extra)
             pending_title = ""
@@ -268,6 +444,7 @@ def main(path: str, code: str, name: str) -> None:
             product = Product(code=code, name=name, dosage_form="Таблетки, покрытые оболочкой", market_code="UZ", market_name="Узбекистан")
             db.add(product)
             db.flush()
+        _enrich_material_codes(db, sections)
         # новая версия (draft)
         from sqlalchemy import func as f
         ver = (db.query(f.max(BmrTemplate.version)).filter(BmrTemplate.product_id == product.id).scalar() or 0) + 1
