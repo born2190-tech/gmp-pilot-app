@@ -400,6 +400,20 @@ def _distribution(rows: list[list[str]], formula_by_name: dict[str, dict]) -> li
     return [g for g in groups if g.get("items")]
 
 
+def _dedupe_labels(fields: list[dict]) -> None:
+    """Делает метки полей уникальными в пределах секции. Повторяющиеся блоки
+    колонок (напр. несколько тар в ряд) или одинаковые строки-проверки дают
+    совпадающие метки («строка 2 · Общий вес» ×4) — нумеруем повторы, чтобы в
+    обзоре полей не было визуального дублирования."""
+    seen: dict[str, int] = {}
+    for f in fields:
+        label = f.get("label") or ""
+        n = seen.get(label, 0) + 1
+        seen[label] = n
+        if n > 1:
+            f["label"] = f"{label} ({n})"
+
+
 def _enrich_material_codes(db, sections: list[dict]) -> None:
     materials = db.query(Material).all()
     by_code = {m.code: m for m in materials}
@@ -592,6 +606,8 @@ def main(path: str, code: str, name: str) -> None:
             product = Product(code=code, name=name, dosage_form="Таблетки, покрытые оболочкой", market_code="UZ", market_name="Узбекистан")
             db.add(product)
             db.flush()
+        for s in sections:
+            _dedupe_labels(s["config"].get("fields") or [])
         _enrich_material_codes(db, sections)
         # новая версия (draft)
         from sqlalchemy import func as f
