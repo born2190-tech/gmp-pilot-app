@@ -148,7 +148,8 @@ export function QCNotificationsPage({ token, user }: QCNotificationsPageProps) {
 
   function handleView(id: string) {
     void withPdfBlob(id, (url) => {
-      window.open(url, '_blank', 'noopener,noreferrer')
+      // Без noopener/noreferrer — иначе Chrome открывает blob-URL пустой вкладкой.
+      window.open(url, '_blank')
       // Revoke after a delay so the new tab has time to read it.
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     })
@@ -592,7 +593,7 @@ function ScansSection({ notification, locale, t, token, canUpload }: ScansSectio
     try {
       const blob = await downloadQcNotificationScan(token, scanId)
       const url = URL.createObjectURL(blob)
-      window.open(url, '_blank', 'noopener,noreferrer')
+      window.open(url, '_blank')
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('qcNotifications.scans.loadFailed'))

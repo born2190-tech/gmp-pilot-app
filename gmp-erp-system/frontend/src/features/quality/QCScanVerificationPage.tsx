@@ -104,6 +104,7 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
   const [filter, setFilter] = useState<DocFilter>('all')
   const [active, setActive] = useState<VerificationQueueItem | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [scanMime, setScanMime] = useState<string>('application/pdf')
   const [draft, setDraft] = useState<VerifyDraft>(emptyDraft())
   const [rejecting, setRejecting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -154,7 +155,11 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     setRejecting(false)
     try {
       const blob = await downloadScanBlob(token, item)
-      setPdfUrl(URL.createObjectURL(blob))
+      // Гарантируем корректный MIME (иначе object/iframe могут не отрисовать).
+      const mime = blob.type || (item.doc_no?.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/pdf')
+      const typed = blob.type ? blob : new Blob([blob], { type: mime })
+      setScanMime(mime)
+      setPdfUrl(URL.createObjectURL(typed))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('qcVerification.fileFailed'))
     }
@@ -367,6 +372,7 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
         <VerifyModal
           item={active}
           pdfUrl={pdfUrl}
+          scanMime={scanMime}
           draft={draft}
           onDraft={setDraft}
           onClose={closeModal}
@@ -384,10 +390,11 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
 }
 
 function VerifyModal({
-  item, pdfUrl, draft, onDraft, onClose, onVerify, onReject, submitting, rejectMode, setRejectMode, t, locale,
+  item, pdfUrl, scanMime, draft, onDraft, onClose, onVerify, onReject, submitting, rejectMode, setRejectMode, t, locale,
 }: {
   item: VerificationQueueItem
   pdfUrl: string | null
+  scanMime: string
   draft: VerifyDraft
   onDraft: (draft: VerifyDraft) => void
   onClose: () => void
@@ -425,10 +432,24 @@ function VerifyModal({
             {pdfUrl ? (
               <>
                 <div className="flex justify-end border-b border-slate-200 bg-white px-2 py-1">
-                  <button type="button" onClick={() => window.open(pdfUrl, '_blank', 'noopener')}
-                    className="text-[12px] font-medium text-blue-600 hover:underline">{t('qcVerification.openInNewTab')}</button>
+                  {/* Якорь вместо window.open(noopener): blob-URL открывается в новой вкладке надёжно. */}
+                  <a href={pdfUrl} target="_blank" rel="noreferrer"
+                    className="text-[12px] font-medium text-blue-600 hover:underline">{t('qcVerification.openInNewTab')}</a>
                 </div>
-                <iframe title="QC scan" src={pdfUrl} className="h-full min-h-[440px] w-full" />
+                {scanMime.startsWith('image/') ? (
+                  <div className="flex h-full min-h-[440px] items-start justify-center overflow-auto bg-slate-100 p-2">
+                    <img src={pdfUrl} alt="QC scan" className="max-w-full" />
+                  </div>
+                ) : (
+                  <object data={pdfUrl} type={scanMime} className="h-full min-h-[440px] w-full">
+                    {/* Фолбэк, если встроенный просмотрщик PDF отключён в браузере */}
+                    <div className="flex h-full min-h-[440px] flex-col items-center justify-center gap-2 px-4 text-center text-sm text-slate-600">
+                      <FileText size={20} className="text-slate-400" />
+                      <span>{t('qcVerification.previewUnavailable')}</span>
+                      <a href={pdfUrl} target="_blank" rel="noreferrer" className="font-medium text-blue-600 hover:underline">{t('qcVerification.openInNewTab')}</a>
+                    </div>
+                  </object>
+                )}
               </>
             ) : (
               <div className="flex h-full min-h-[480px] items-center justify-center px-4 text-center text-sm text-slate-500">
