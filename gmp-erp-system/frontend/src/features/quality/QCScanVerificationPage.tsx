@@ -105,6 +105,7 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
   const [filter, setFilter] = useState<DocFilter>('all')
   const [active, setActive] = useState<VerificationQueueItem | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [pdfData, setPdfData] = useState<ArrayBuffer | null>(null)
   const [scanMime, setScanMime] = useState<string>('application/pdf')
   const [draft, setDraft] = useState<VerifyDraft>(emptyDraft())
   const [rejecting, setRejecting] = useState(false)
@@ -151,16 +152,23 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     setSuccess(null)
     if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     setPdfUrl(null)
+    setPdfData(null)
     setActive(item)
     setDraft(emptyDraft())
     setRejecting(false)
     try {
       const blob = await downloadScanBlob(token, item)
       // Гарантируем корректный MIME (иначе object/iframe могут не отрисовать).
-      const mime = blob.type || (item.doc_no?.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/pdf')
+      const mime = blob.type || 'application/pdf'
       const typed = blob.type ? blob : new Blob([blob], { type: mime })
       setScanMime(mime)
+      // blob-URL нужен только для картинок (<img>) и кнопки «Открыть в новой вкладке».
       setPdfUrl(URL.createObjectURL(typed))
+      // Для PDF отдаём PDF.js сами байты — без повторного fetch, который
+      // менеджер загрузок/расширение могут перехватить и вернуть 0 байт.
+      if (!mime.startsWith('image/')) {
+        setPdfData(await blob.arrayBuffer())
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('qcVerification.fileFailed'))
     }
@@ -170,6 +178,7 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
     setActive(null)
     if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     setPdfUrl(null)
+    setPdfData(null)
     setDraft(emptyDraft())
     setRejecting(false)
   }
@@ -373,6 +382,7 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
         <VerifyModal
           item={active}
           pdfUrl={pdfUrl}
+          pdfData={pdfData}
           scanMime={scanMime}
           draft={draft}
           onDraft={setDraft}
@@ -391,10 +401,11 @@ export function QCScanVerificationPage({ token, user }: QCScanVerificationPagePr
 }
 
 function VerifyModal({
-  item, pdfUrl, scanMime, draft, onDraft, onClose, onVerify, onReject, submitting, rejectMode, setRejectMode, t, locale,
+  item, pdfUrl, pdfData, scanMime, draft, onDraft, onClose, onVerify, onReject, submitting, rejectMode, setRejectMode, t, locale,
 }: {
   item: VerificationQueueItem
   pdfUrl: string | null
+  pdfData: ArrayBuffer | null
   scanMime: string
   draft: VerifyDraft
   onDraft: (draft: VerifyDraft) => void
@@ -441,10 +452,14 @@ function VerifyModal({
                   <div className="flex h-full min-h-[440px] items-start justify-center overflow-auto bg-slate-100 p-2">
                     <img src={pdfUrl} alt="QC scan" className="max-w-full" />
                   </div>
+                ) : pdfData ? (
+                  // PDF.js: рендер в canvas из готовых байтов (PDF.js не делает
+                  // собственный fetch — не зависит от менеджеров загрузок).
+                  <PdfView data={pdfData} className="h-full min-h-[440px] overflow-auto bg-slate-100 p-2" />
                 ) : (
-                  // PDF.js: рендер в canvas в самой странице (не зависит от
-                  // настройки браузера и менеджеров загрузок).
-                  <PdfView url={pdfUrl} className="h-full min-h-[440px] overflow-auto bg-slate-100 p-2" />
+                  <div className="flex h-full min-h-[440px] items-center justify-center px-4 text-center text-sm text-slate-500">
+                    {t('qcVerification.loadingPdf')}
+                  </div>
                 )}
               </>
             ) : (

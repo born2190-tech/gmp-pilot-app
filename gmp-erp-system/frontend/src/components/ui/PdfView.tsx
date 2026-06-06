@@ -10,7 +10,10 @@ import PdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker&inline'
 
 pdfjs.GlobalWorkerOptions.workerPort = new PdfjsWorker()
 
-export function PdfView({ url, className }: { url: string; className?: string }) {
+// Принимает либо байты (`data` — предпочтительно: PDF.js НЕ делает собственный
+// fetch, поэтому менеджеры загрузок/расширения не могут перехватить ответ и
+// вернуть 0 байт), либо `url`. Для сканов передаём `data`.
+export function PdfView({ url, data, className }: { url?: string; data?: ArrayBuffer; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -23,7 +26,14 @@ export function PdfView({ url, className }: { url: string; className?: string })
     setError(null)
     setLoading(true)
 
-    const task = pdfjs.getDocument({ url })
+    // PDF.js «отсоединяет» (detach) переданный буфер — отдаём копию, чтобы
+    // исходный `data` пережил повторный рендер (StrictMode / смену зависимостей).
+    const source = data ? { data: data.slice(0) } : url ? { url } : null
+    if (!source) {
+      setLoading(false)
+      return
+    }
+    const task = pdfjs.getDocument(source)
     task.promise
       .then(async (doc) => {
         for (let i = 1; i <= doc.numPages; i += 1) {
@@ -51,7 +61,7 @@ export function PdfView({ url, className }: { url: string; className?: string })
       cancelled = true
       task.destroy?.()
     }
-  }, [url])
+  }, [url, data])
 
   if (error) {
     return <div className="flex h-full items-center justify-center p-4 text-center text-sm text-rose-700">{error}</div>
