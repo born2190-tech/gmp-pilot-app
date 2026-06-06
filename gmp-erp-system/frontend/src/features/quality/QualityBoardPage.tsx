@@ -59,8 +59,6 @@ import { QcPackagingWorkspace } from './QcPackagingWorkspace'
 
 type Phase = 'AWAITING_SAMPLING' | 'DRAFT' | 'SCAN_UPLOADED' | 'SAMPLING_VERIFIED' | 'RESULT_READY'
 
-const PHASE_ORDER: Phase[] = ['AWAITING_SAMPLING', 'DRAFT', 'SCAN_UPLOADED', 'SAMPLING_VERIFIED', 'RESULT_READY']
-
 function phaseOf(lot: LotItem, act: SamplingActItem | undefined): Phase {
   if (lot.qc_result_received_at) return 'RESULT_READY'
   if (act?.status === 'verified') return 'SAMPLING_VERIFIED'
@@ -97,7 +95,7 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
   const [phaseFilter, setPhaseFilter] = useState<Phase | null>(null)
   // Категория задач ДКК: субстанции / упаковка / ГП — отдельные доски.
   const [qcCategory, setQcCategory] = useState<'SUBSTANCE_WAREHOUSE' | 'PACKAGING_WAREHOUSE' | 'FG_WAREHOUSE'>('SUBSTANCE_WAREHOUSE')
-  const [collapsedPhases, setCollapsedPhases] = useState<Set<Phase>>(new Set())
+  const [collapsedNotis, setCollapsedNotis] = useState<Set<string>>(new Set())
   const [selectedLotId, setSelectedLotId] = useState('')
   const [filter, setFilter] = useState('')
   const panelRef = useRef<HTMLDivElement>(null)
@@ -251,15 +249,16 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
     })
   }, [categoryLots, filter, phaseFilter, lotPhases])
 
-  const groupedQc = useMemo(() => {
-    const groups = new Map<Phase, LotItem[]>()
+  // Группировка задач по документу-извещению Ф-14 (внутри выбранной категории).
+  const groupedByNotification = useMemo(() => {
+    const groups = new Map<string, LotItem[]>()
     for (const lot of filteredQcLots) {
-      const ph = lotPhases.get(lot.id)!
-      if (!groups.has(ph)) groups.set(ph, [])
-      groups.get(ph)!.push(lot)
+      const key = lot.qc_notification_no || '∅'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(lot)
     }
-    return PHASE_ORDER.filter((p) => groups.has(p)).map((p) => ({ phase: p, lots: groups.get(p)! }))
-  }, [filteredQcLots, lotPhases])
+    return Array.from(groups.entries()).map(([no, items]) => ({ no, lots: items }))
+  }, [filteredQcLots])
 
   const qaKpi = useMemo(() => ({
     pending: lots.filter((lot) => lot.quality_status === 'under_test' && lot.qc_result_received_at).length,
@@ -365,32 +364,34 @@ export function QualityBoardPage({ mode, token, user }: QualityBoardPageProps) {
           )}
         </div>
 
-        {/* Task cards grouped by phase */}
-        {groupedQc.length === 0 ? (
+        {/* Задачи сгруппированы по извещению Ф-14 */}
+        {groupedByNotification.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-16">
             <Inbox size={26} className="text-slate-300" />
             <p className="text-sm font-medium text-slate-700">{t('qc.emptyTasks')}</p>
           </div>
         ) : (
-          groupedQc.map((group) => {
-            const collapsed = collapsedPhases.has(group.phase)
+          groupedByNotification.map((group) => {
+            const collapsed = collapsedNotis.has(group.no)
+            const noLabel = group.no === '∅' ? t('qc.noNotification') : group.no
             return (
-            <div key={group.phase} className="space-y-2">
+            <div key={group.no} className="space-y-2 rounded-lg border border-slate-200 bg-white/70 p-2">
               <button
                 type="button"
                 onClick={() =>
-                  setCollapsedPhases((prev) => {
+                  setCollapsedNotis((prev) => {
                     const next = new Set(prev)
-                    if (next.has(group.phase)) next.delete(group.phase)
-                    else next.add(group.phase)
+                    if (next.has(group.no)) next.delete(group.no)
+                    else next.add(group.no)
                     return next
                   })
                 }
                 className="flex w-full items-center gap-2 px-1 text-left"
               >
                 <ChevronDown size={14} className={`text-slate-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
-                <span className={`h-1.5 w-1.5 rounded-full ${PHASE_DOT[group.phase]}`} />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{t(SECTION_KEY[group.phase] as never)}</span>
+                <FileText size={14} className="text-blue-500" />
+                <span className="text-[12px] font-semibold text-slate-700">{t('qc.notificationLabel')}</span>
+                <span className="font-mono text-[12.5px] font-semibold text-slate-900">{noLabel}</span>
                 <span className="text-[11px] font-medium text-slate-400">· {group.lots.length}</span>
                 <span className="ml-auto text-[11px] font-medium text-slate-400">
                   {collapsed ? t('common.expand') : t('common.collapse')}
@@ -1134,22 +1135,6 @@ function QaEmptyState({ icon: Icon, title, sub }: { icon: typeof Inbox; title: s
 }
 
 // ─── QC dashboard helpers ────────────────────────────────────────────────────
-
-const PHASE_DOT: Record<Phase, string> = {
-  AWAITING_SAMPLING: 'bg-slate-400',
-  DRAFT: 'bg-amber-500',
-  SCAN_UPLOADED: 'bg-sky-500',
-  SAMPLING_VERIFIED: 'bg-violet-500',
-  RESULT_READY: 'bg-emerald-500',
-}
-
-const SECTION_KEY: Record<Phase, string> = {
-  AWAITING_SAMPLING: 'qc.section.awaiting',
-  DRAFT: 'qc.section.draft',
-  SCAN_UPLOADED: 'qc.section.scan',
-  SAMPLING_VERIFIED: 'qc.section.analysis',
-  RESULT_READY: 'qc.section.result',
-}
 
 // Индекс текущей фазы для прогресс-полосы (4 шага: извещено→отобрано→анализ→результат)
 const PHASE_PROGRESS: Record<Phase, number> = {
