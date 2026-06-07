@@ -253,7 +253,51 @@ def _generic_process_table(table, prefix: str) -> dict:
     out = {"rows": parsed.get("rows", []), "fields": fields}
     if nested:
         out["tables"] = nested
+    if _is_efficiency_calculation(out):
+        out = _efficiency_calculation_table(out)
     return out
+
+
+def _is_efficiency_calculation(parsed: dict) -> bool:
+    text = " ".join(
+        str(cell.get("text") or "")
+        for row in (parsed.get("rows") or [])
+        for cell in (row.get("cells") or [])
+        if isinstance(cell, dict)
+    ).lower()
+    return "расчет эффективности" in text or "расчёт эффективности" in text
+
+
+def _efficiency_calculation_table(parsed: dict) -> dict:
+    original_text = " ".join(
+        str(cell.get("text") or "")
+        for row in (parsed.get("rows") or [])
+        for cell in (row.get("cells") or [])
+        if isinstance(cell, dict) and cell.get("text")
+    )
+    return {
+        **parsed,
+        "process_table_variant": "efficiency_calculation",
+        "original_text": original_text,
+        "formula": "C1 = 8,651 кг - ((A - 67,425 кг) + (B - 4,928 кг))",
+        "standard_metformin_kg": "67,425",
+        "standard_sitagliptin_kg": "4,928",
+        "standard_mcc_kg": "8,651",
+        "fields": [
+            {"label": "Метформин · партия / серия", "type": "text"},
+            {"label": "Метформин · количественное содержание", "type": "number", "unit": "%"},
+            {"label": "Метформин · количество воды", "type": "number", "unit": "%"},
+            {"label": "Метформин · фактическое количество (A)", "type": "number", "unit": "кг"},
+            {"label": "Ситаглиптин · партия / серия", "type": "text"},
+            {"label": "Ситаглиптин · количественное содержание", "type": "number", "unit": "%"},
+            {"label": "Ситаглиптин · количество воды", "type": "number", "unit": "%"},
+            {"label": "Ситаглиптин · фактическое количество (B)", "type": "number", "unit": "кг"},
+            {"label": "Микрокристаллическая целлюлоза · расчетное количество (C1)", "type": "number", "unit": "кг"},
+            {"label": "Примечания", "type": "text"},
+            {"label": "Рассчитал ДП", "type": "signature_operator"},
+            {"label": "Проверил ДОК", "type": "signature_qa"},
+        ],
+    }
 
 
 def _row_nested_tables(row, prefix: str, fields: list[dict]) -> list[dict]:

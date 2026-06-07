@@ -1203,6 +1203,7 @@ export interface BmrSectionConfig {
   room_assignment_required?: boolean
   room_source_text?: string
   operator_visible?: boolean
+  process_table_variant?: string
   process?: string
   room_no?: string
   sop?: string

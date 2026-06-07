@@ -1096,6 +1096,86 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     </div>
   )
 
+  const renderEfficiencyCalculation = () => {
+    const dpE = entries[key(sid, 10)]
+    const dokE = entries[key(sid, 11)]
+    const dpSigned = !!(dpE?.value && dpE.value.signed_by)
+    const dpUnlocked = fieldUnlocked(allSections, entries, draft, sid, 9)
+    const dokUnlocked = fieldUnlocked(allSections, entries, draft, sid, 10)
+    const fieldBox = (fi: number, label: string, type: string, unit?: string) => (
+      <div>
+        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+        {inputFor(fi, type, unit)}
+      </div>
+    )
+    return (
+      <div className="space-y-3 p-3">
+        <div className="rounded-lg border border-cyan-100 bg-cyan-50/50 px-3 py-2">
+          <div className="text-[12px] font-semibold text-cyan-900">Расчет эффективности активных веществ</div>
+          <div className="mt-1 text-[11.5px] leading-relaxed text-cyan-800">
+            Заполняется технологом/ДП по фактическим данным аналитического листа. ДОК проверяет расчет электронной подписью.
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[13px] font-semibold text-slate-900">Метформин гидрохлорид</div>
+                <div className="text-[11px] text-slate-400">A · стандартная серия 67,425 кг</div>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-semibold text-slate-500">API</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="sm:col-span-2">{fieldBox(0, 'Партия / серия', 'text')}</div>
+              {fieldBox(1, 'Количественное содержание', 'number', '%')}
+              {fieldBox(2, 'Количество воды', 'number', '%')}
+              <div className="sm:col-span-2">{fieldBox(3, 'Фактическое количество (A)', 'number', 'кг')}</div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[13px] font-semibold text-slate-900">Ситаглиптин фосфат</div>
+                <div className="text-[11px] text-slate-400">B · стандартная серия 4,928 кг</div>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-semibold text-slate-500">API</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="sm:col-span-2">{fieldBox(4, 'Партия / серия', 'text')}</div>
+              {fieldBox(5, 'Количественное содержание', 'number', '%')}
+              {fieldBox(6, 'Количество воды', 'number', '%')}
+              <div className="sm:col-span-2">{fieldBox(7, 'Фактическое количество (B)', 'number', 'кг')}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="mb-3 text-[13px] font-semibold text-slate-900">Расчет микрокристаллической целлюлозы</div>
+          <div className="rounded-md bg-slate-50 px-3 py-2 text-[12px] leading-relaxed text-slate-600">
+            C1 = 8,651 кг - ((A - 67,425 кг) + (B - 4,928 кг))
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr]">
+            {fieldBox(8, 'Количество взятой МКЦ (C1)', 'number', 'кг')}
+            {fieldBox(9, 'Примечания', 'text')}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.doneDp')}</div>
+            <SignCell role="dp" state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(10, 'dp', 'Расчет эффективности') : undefined} />
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.checkedDok')}</div>
+            <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', dokUnlocked)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && dokUnlocked ? () => onSign(11, 'dok', 'Проверка расчета эффективности') : undefined} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   /* ---- process_header ---- */
   if (kind === 'process_header') {
     const fields = section.config?.fields || []
@@ -1181,6 +1261,9 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   if (kind === 'process_table') {
     const rows = (section.config?.rows || []) as BmrProcessTableRow[]
     const tables = section.config?.tables || []
+    if (section.config?.process_table_variant === 'efficiency_calculation') {
+      return wrap(renderEfficiencyCalculation())
+    }
     return wrap(
       <div className="space-y-3 p-3">
         {renderProcessTable(rows)}

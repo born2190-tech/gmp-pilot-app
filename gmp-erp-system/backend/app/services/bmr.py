@@ -389,7 +389,7 @@ def _instance_dict(db: Session, instance: BmrInstance, user: CurrentUser | None 
         "completed_at": instance.completed_at,
         "reviewed_at": instance.reviewed_at,
         "sections": [
-            {"id": s.id, "ordinal": s.ordinal, "section_type": s.section_type, "title": s.title, "config": s.config or {}}
+            {"id": s.id, "ordinal": s.ordinal, "section_type": s.section_type, "title": s.title, "config": _effective_config(s)}
             for s in sections
         ],
         "entries": [
@@ -414,6 +414,58 @@ def _is_manual_signature_journal_section(section: BmrInstanceSection) -> bool:
         or "signature log" in title
         or kind in {"signature_journal", "signature_log"}
     )
+
+
+def _is_efficiency_calculation_config(config: dict, title: str | None = None) -> bool:
+    if config.get("process_table_variant") == "efficiency_calculation":
+        return True
+    haystack = " ".join(
+        [
+            str(title or ""),
+            str(config.get("title") or ""),
+            " ".join(
+                str(cell.get("text") or "")
+                for row in (config.get("rows") or [])
+                for cell in (row.get("cells") or [])
+                if isinstance(cell, dict)
+            ),
+        ]
+    ).lower()
+    return "расчет эффективности" in haystack or "расчёт эффективности" in haystack
+
+
+def _efficiency_calculation_fields() -> list[dict]:
+    return [
+        {"label": "Метформин · партия / серия", "type": "text"},
+        {"label": "Метформин · количественное содержание", "type": "number", "unit": "%"},
+        {"label": "Метформин · количество воды", "type": "number", "unit": "%"},
+        {"label": "Метформин · фактическое количество (A)", "type": "number", "unit": "кг"},
+        {"label": "Ситаглиптин · партия / серия", "type": "text"},
+        {"label": "Ситаглиптин · количественное содержание", "type": "number", "unit": "%"},
+        {"label": "Ситаглиптин · количество воды", "type": "number", "unit": "%"},
+        {"label": "Ситаглиптин · фактическое количество (B)", "type": "number", "unit": "кг"},
+        {"label": "Микрокристаллическая целлюлоза · расчетное количество (C1)", "type": "number", "unit": "кг"},
+        {"label": "Примечания", "type": "text"},
+        {"label": "Рассчитал ДП", "type": "signature_operator"},
+        {"label": "Проверил ДОК", "type": "signature_qa"},
+    ]
+
+
+def _effective_config(section: BmrInstanceSection) -> dict:
+    config = dict(section.config or {})
+    if str(config.get("kind") or section.section_type) == "process_table" and _is_efficiency_calculation_config(config, section.title):
+        config["process_table_variant"] = "efficiency_calculation"
+        config["fields"] = _efficiency_calculation_fields()
+        config.setdefault("formula", "C1 = 8,651 кг - ((A - 67,425 кг) + (B - 4,928 кг))")
+        config.setdefault("standard_metformin_kg", "67,425")
+        config.setdefault("standard_sitagliptin_kg", "4,928")
+        config.setdefault("standard_mcc_kg", "8,651")
+    return config
+
+
+def _section_fields(section: BmrInstanceSection) -> list[dict]:
+    fields = _effective_config(section).get("fields") or []
+    return fields if isinstance(fields, list) else []
 
 
 def _section_stage(section: BmrInstanceSection) -> str:
@@ -507,8 +559,8 @@ def _participants_of(db: Session, instance: BmrInstance) -> list[dict]:
     return out
 
 
-def _field_label(section: BmrInstanceSection, field_index: int) -> str | None:
-    config = section.config or {}
+def _entry_field_label(section: BmrInstanceSection, field_index: int) -> str | None:
+    config = _effective_config(section)
     fields = config.get("fields") or []
     if isinstance(fields, list) and 0 <= field_index < len(fields):
         item = fields[field_index] or {}
@@ -577,7 +629,7 @@ def _signature_log_of(db: Session, instance: BmrInstance) -> list[dict]:
             "stage": stage,
             "stage_title": stage_title.get(stage, stage) if stage else None,
             "section_title": section.title if section else None,
-            "field_label": _field_label(section, entry.field_index) if section else None,
+            "field_label": _entry_field_label(section, entry.field_index) if section else None,
             "signed_at": value.get("signed_at") or entry.filled_at,
             "workstation_id": None,
         })
@@ -778,8 +830,8 @@ def _ensure_instance_scope(instance: BmrInstance, user: CurrentUser) -> None:
     )
 
 
-def _field_label(section: BmrInstanceSection, field_index: int) -> str:
-    fields = (section.config or {}).get("fields", [])
+def _field_label_for_sequence(section: BmrInstanceSection, field_index: int) -> str:
+    fields = _section_fields(section)
     label = fields[field_index].get("label") if 0 <= field_index < len(fields) else None
     return f"{section.title} / {label or f'поле {field_index + 1}'}"
 
@@ -795,7 +847,9 @@ def _ordered_fields(instance: BmrInstance, user: CurrentUser) -> list[tuple[UUID
     ordered: list[tuple[UUID, int, str]] = []
     final_fields: list[tuple[UUID, int, str]] = []
     for section in _visible_sections(instance, user):
-        fields = (section.config or {}).get("fields", [])
+        if _is_manual_signature_journal_section(section):
+            continue
+        fields = _section_fields(section)
         for field_index, field in enumerate(fields):
             item = (section.id, field_index, str(field.get("type") or ""))
             if _is_process_end_field(section, field):
@@ -840,7 +894,7 @@ def _ensure_previous_complete(
         previous_section = section_map[previous_sid]
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Сначала завершите предыдущий пункт и подпись ДОК: {_field_label(previous_section, previous_idx)}",
+            detail=f"Сначала завершите предыдущий пункт и подпись ДОК: {_field_label_for_sequence(previous_section, previous_idx)}",
         )
 
 
@@ -875,7 +929,7 @@ def save_entries(db: Session, user: CurrentUser, instance_id: UUID, payload: Bmr
             continue
         _ensure_section_access(section, user)
         _ensure_weighing_gate(db, inst, section)
-        fields = (section.config or {}).get("fields", [])
+        fields = _section_fields(section)
         if item.field_index < 0 or item.field_index >= len(fields):
             continue
         field_type = str(fields[item.field_index].get("type") or "")
@@ -915,7 +969,7 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Секция не найдена")
     _ensure_section_access(section, user)
     _ensure_weighing_gate(db, inst, section)
-    fields = (section.config or {}).get("fields", [])
+    fields = _section_fields(section)
     if payload.field_index < 0 or payload.field_index >= len(fields):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Поле не найдено")
     ftype = fields[payload.field_index].get("type")
