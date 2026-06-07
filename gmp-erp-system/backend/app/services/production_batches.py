@@ -405,8 +405,6 @@ def start_batch(db: Session, user: CurrentUser, batch_id, payload: ProductionBat
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batch already started")
     if not batch.bmr_issued_at:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR must be issued by QA before batch start")
-    if not _all_start_checks(batch):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Start checklist is not complete")
     validate_signature(db, user, payload, "START_PRODUCTION_BATCH", "production_batch", str(batch.id))
     batch.status = "in_production"
     batch.started_by = user.id

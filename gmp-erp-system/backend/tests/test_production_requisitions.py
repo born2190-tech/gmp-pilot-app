@@ -155,7 +155,7 @@ def test_production_requisition_creation_auto_allocates_released_lots_by_fefo() 
     assert [row["allocated_quantity"] for row in allocations] == [80, 20]
 
 
-def test_production_batch_requires_bmr_and_start_checklist_before_start() -> None:
+def test_production_batch_requires_bmr_before_start() -> None:
     client = TestClient(create_app())
     prod_token = login(client, "shift_master", "prod123", "WS-PROD-01")
     qa_token = login(client, "head_qa", "qahead123", "WS-QA-01")
@@ -217,20 +217,6 @@ def test_production_batch_requires_bmr_and_start_checklist_before_start() -> Non
     )
     assert issued.status_code == 200, issued.text
     assert issued.json()["status"] == "bmr_issued"
-
-    checklist = client.patch(
-        f"/api/production/batches/{batch['id']}/checklist",
-        headers={"Authorization": f"Bearer {prod_token}"},
-        json={
-            "room_ready": True,
-            "equipment_ready": True,
-            "scales_checked": True,
-            "materials_ready": True,
-            "qa_line_clearance": True,
-        },
-    )
-    assert checklist.status_code == 200, checklist.text
-    assert checklist.json()["status"] == "ready_to_start"
 
     started = client.post(
         f"/api/production/batches/{batch['id']}/start",

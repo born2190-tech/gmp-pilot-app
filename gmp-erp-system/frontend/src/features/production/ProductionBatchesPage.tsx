@@ -31,7 +31,6 @@ import {
   requestProductionBmr,
   startProductionBatch,
   updateProduct,
-  updateProductionBatchChecklist,
 } from '../../lib/api'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
@@ -65,10 +64,6 @@ interface ProductionBatchesPageProps {
   token: string
   user: CurrentUser
 }
-
-type CheckKey = 'room_ready' | 'equipment_ready' | 'scales_checked' | 'materials_ready' | 'qa_line_clearance'
-
-const CHECK_KEYS: CheckKey[] = ['room_ready', 'equipment_ready', 'scales_checked', 'materials_ready', 'qa_line_clearance']
 
 const STATUS_STYLE: Record<string, string> = {
   draft: 'border-slate-200 bg-slate-100 text-slate-600',
@@ -366,19 +361,6 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
     }, t('prodBatch.bmrRequestedDone'))
   }
 
-  async function patchChecklist(batch: ProductionBatchItem, key: CheckKey, value: boolean) {
-    await runAction(async () => {
-      const updated = await updateProductionBatchChecklist(token, batch.id, {
-        room_ready: key === 'room_ready' ? value : batch.room_ready,
-        equipment_ready: key === 'equipment_ready' ? value : batch.equipment_ready,
-        scales_checked: key === 'scales_checked' ? value : batch.scales_checked,
-        materials_ready: key === 'materials_ready' ? value : batch.materials_ready,
-        qa_line_clearance: key === 'qa_line_clearance' ? value : batch.qa_line_clearance,
-      })
-      setSelectedId(updated.id)
-    }, t('prodBatch.checklistDone'))
-  }
-
   async function handleStart(batch: ProductionBatchItem) {
     await runAction(async () => {
       const updated = await startProductionBatch(token, batch.id, {
@@ -492,6 +474,10 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           <div className="relative min-w-[260px] flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
+              name="production-batch-registry-search"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder={t('prodBatch.searchPlaceholder')}
@@ -586,7 +572,6 @@ export function ProductionBatchesPage({ token, user }: ProductionBatchesPageProp
           onStartReason={setStartReason}
           onCompletePassword={setCompletePassword}
           onCompleteReason={setCompleteReason}
-          onChecklist={(key, value) => void patchChecklist(selected, key, value)}
           onStart={() => void handleStart(selected)}
           onComplete={() => void handleComplete(selected)}
           isLoading={isLoading}
@@ -700,7 +685,6 @@ function BatchDetail({
   onStartReason,
   onCompletePassword,
   onCompleteReason,
-  onChecklist,
   onStart,
   onComplete,
   isLoading,
@@ -729,14 +713,12 @@ function BatchDetail({
   onStartReason: (value: string) => void
   onCompletePassword: (value: string) => void
   onCompleteReason: (value: string) => void
-  onChecklist: (key: CheckKey, value: boolean) => void
   onStart: () => void
   onComplete: () => void
   isLoading: boolean
 }) {
   const { t } = useI18n()
-  const allChecks = CHECK_KEYS.every((key) => batch[key])
-  const canStart = canExecute && batch.bmr_issued_at && allChecks && !['in_production', 'completed', 'cancelled'].includes(batch.status)
+  const canStart = canExecute && batch.bmr_issued_at && !['in_production', 'completed', 'cancelled'].includes(batch.status)
   const canComplete = canExecute && batch.status === 'in_production' && !batch.completed_at
   const isTerminal = ['in_production', 'completed', 'cancelled'].includes(batch.status)
   const canCancel = canManage && !isTerminal
@@ -777,14 +759,12 @@ function BatchDetail({
         canExecute={canExecute}
         canStart={!!canStart}
         canComplete={!!canComplete}
-        allChecks={allChecks}
         startPassword={startPassword}
         startReason={startReason}
         completePassword={completePassword}
         completeReason={completeReason}
         onAssign={onAssign}
         onRequestBmr={onRequestBmr}
-        onChecklist={onChecklist}
         onStartPassword={onStartPassword}
         onStartReason={onStartReason}
         onCompletePassword={onCompletePassword}
@@ -882,14 +862,12 @@ function ActionPanel({
   canExecute,
   canStart,
   canComplete,
-  allChecks,
   startPassword,
   startReason,
   completePassword,
   completeReason,
   onAssign,
   onRequestBmr,
-  onChecklist,
   onStartPassword,
   onStartReason,
   onCompletePassword,
@@ -906,14 +884,12 @@ function ActionPanel({
   canExecute: boolean
   canStart: boolean
   canComplete: boolean
-  allChecks: boolean
   startPassword: string
   startReason: string
   completePassword: string
   completeReason: string
   onAssign: () => void
   onRequestBmr: () => void
-  onChecklist: (key: CheckKey, value: boolean) => void
   onStartPassword: (value: string) => void
   onStartReason: (value: string) => void
   onCompletePassword: (value: string) => void
@@ -960,14 +936,20 @@ function ActionPanel({
   if (batch.status === 'bmr_issued' || batch.status === 'ready_to_start') {
     return (
       <PanelShell icon={Play} tone="blue" title={t('prodBatch.startTitle')} sub={t('prodBatch.startSub')}>
-        <ReadinessChecklist batch={batch} canExecute={canExecute} onChecklist={onChecklist} />
-        {!allChecks && <p className="mt-3 text-xs text-amber-700">{t('prodBatch.startNeed')}</p>}
-        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
           <Field label={t('prodBatch.eSignPassword')}>
-            <input type="password" className="input" value={startPassword} onChange={(e) => onStartPassword(e.target.value)} disabled={!canStart} />
+            <input
+              type="password"
+              name="production-start-esign-password"
+              autoComplete="new-password"
+              className="input"
+              value={startPassword}
+              onChange={(e) => onStartPassword(e.target.value)}
+              disabled={!canStart}
+            />
           </Field>
           <Field label={t('prodBatch.basis')}>
-            <input autoComplete="off" className="input" value={startReason} onChange={(e) => onStartReason(e.target.value)} disabled={!canStart} />
+            <input name="production-start-reason" autoComplete="off" className="input" value={startReason} onChange={(e) => onStartReason(e.target.value)} disabled={!canStart} />
           </Field>
           <button type="button" disabled={!canStart || !startPassword || isLoading} onClick={onStart} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
             <Play size={16} />
@@ -982,7 +964,15 @@ function ActionPanel({
       <PanelShell icon={CheckCircle2} tone="violet" title={t('prodBatch.completeTitle')} sub={t('prodBatch.completeSub')}>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
           <Field label={t('prodBatch.eSignPassword')}>
-            <input type="password" className="input" value={completePassword} onChange={(e) => onCompletePassword(e.target.value)} disabled={!canComplete} />
+            <input
+              type="password"
+              name="production-complete-esign-password"
+              autoComplete="new-password"
+              className="input"
+              value={completePassword}
+              onChange={(e) => onCompletePassword(e.target.value)}
+              disabled={!canComplete}
+            />
           </Field>
           <Field label={t('prodBatch.basis')}>
             <input autoComplete="off" className="input" value={completeReason} onChange={(e) => onCompleteReason(e.target.value)} disabled={!canComplete} />
@@ -1009,29 +999,6 @@ function ActionPanel({
     <InfoStrip tone="slate" icon={FileText}>
       {bmrInstance ? `${bmrInstance.title}` : t('prodBatch.selectOrCreate')}
     </InfoStrip>
-  )
-}
-
-function ReadinessChecklist({ batch, canExecute, onChecklist }: { batch: ProductionBatchItem; canExecute: boolean; onChecklist: (key: CheckKey, value: boolean) => void }) {
-  const { t } = useI18n()
-  return (
-    <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
-      {CHECK_KEYS.map((key) => (
-        <label key={key} className="flex min-h-[74px] items-start gap-3 rounded-md border border-slate-200 px-3 py-2 hover:bg-slate-50">
-          <input
-            type="checkbox"
-            checked={batch[key]}
-            disabled={!canExecute || batch.status === 'in_production' || batch.status === 'completed'}
-            onChange={(e) => onChecklist(key, e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-slate-300"
-          />
-          <span className="min-w-0">
-            <span className="block text-sm font-medium text-slate-900">{t(`prodBatch.check.${key}` as Parameters<Translate>[0])}</span>
-            <span className="block text-xs text-slate-500">{t(`prodBatch.checkSop.${key}` as Parameters<Translate>[0])}</span>
-          </span>
-        </label>
-      ))}
-    </div>
   )
 }
 
@@ -1067,7 +1034,14 @@ function CancelStrip({
           <input autoComplete="off" className="input" value={cancelReason} onChange={(e) => onCancelReason(e.target.value)} placeholder={t('prodBatch.cancelReasonPh')} />
         </Field>
         <Field label={t('prodBatch.eSignPassword')}>
-          <input type="password" className="input" value={cancelPassword} onChange={(e) => onCancelPassword(e.target.value)} />
+          <input
+            type="password"
+            name="production-cancel-esign-password"
+            autoComplete="new-password"
+            className="input"
+            value={cancelPassword}
+            onChange={(e) => onCancelPassword(e.target.value)}
+          />
         </Field>
         <button type="button" disabled={!cancelReason.trim() || !cancelPassword || isLoading} onClick={onCancel} className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-rose-600 px-5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50">
           <Ban size={16} />
