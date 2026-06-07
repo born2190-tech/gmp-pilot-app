@@ -230,10 +230,34 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
     return {"rows": out_rows}
 
 
+def _unique_nested_tables(cells) -> list:
+    tables = []
+    seen: set[int] = set()
+    for cell in cells:
+        for nested in cell.tables:
+            key = id(nested._tbl)
+            if key in seen:
+                continue
+            seen.add(key)
+            tables.append(nested)
+    return tables
+
+
 def _generic_process_table(table, prefix: str) -> dict:
     fields: list[dict] = []
     parsed = _nested_table(table, prefix, fields)
-    return {"rows": parsed.get("rows", []), "fields": fields}
+    nested = [
+        _nested_table(nt, "Вложенная таблица", fields)
+        for nt in _unique_nested_tables(cell for row in table.rows for cell in row.cells)
+    ]
+    out = {"rows": parsed.get("rows", []), "fields": fields}
+    if nested:
+        out["tables"] = nested
+    return out
+
+
+def _row_nested_tables(row, prefix: str, fields: list[dict]) -> list[dict]:
+    return [_nested_table(nt, prefix, fields) for nt in _unique_nested_tables(row.cells)]
 
 
 def _plain_table(table) -> dict:
@@ -296,18 +320,23 @@ def _steps(table) -> tuple[list[dict], list[dict]]:
     for row in table.rows:
         raw_cells = [_cell_text(c) for c in row.cells]
         cells = [c for c in raw_cells if c]
-        if len(cells) < 2:
+        if not cells:
             continue
         head = " ".join(cells).lower()
         if "технолог" in head and "этап" in head:
             continue
         no = cells[0]
         text = cells[1] if len(cells) > 1 else ""
-        step_cell = row.cells[1] if len(row.cells) > 1 else None
-        if re.match(r"^\d+(\.\d+)*$", no) and len(text) > 2:
-            step = {"no": no, "text": _strip_signature_text(text)}
-            if step_cell is not None and step_cell.tables:
-                step["tables"] = [_nested_table(nt, f"Этап {no}", fields) for nt in step_cell.tables]
+        if re.match(r"^\d+(\.\d+)*$", no):
+            tables = _row_nested_tables(row, f"Этап {no}", fields)
+            if len(text) <= 2 and tables and steps and steps[-1].get("no") == no:
+                steps[-1].setdefault("tables", []).extend(tables)
+                continue
+            if len(text) <= 2 and not tables:
+                continue
+            step = {"no": no, "text": _strip_signature_text(text) or "Контрольная таблица"}
+            if tables:
+                step["tables"] = tables
             step["dp_field_index"] = len(fields)
             fields.append({"label": f"Этап {no} · Выполнено ДП", "type": "signature_operator"})
             step["dok_field_index"] = len(fields)
@@ -665,7 +694,8 @@ def build_sections(doc: Document) -> list[dict]:
             "склеивание", "упаковочные материалы", "итого", "фактический выход",
             "рассмотрено", "подпись", "составлено", "этикетка статуса", "распечатка",
             "расчет эффективности", "параметр испытаний", "признаваемые критерии",
-            "этапы процесса", "наименование документа", "статус",
+            "этапы процесса", "наименование документа", "статус", "пуансон",
+            "матрица", "отбор проб",
         ))
         if meaningful:
             title = _section_title(pending_title, "Контрольная таблица")

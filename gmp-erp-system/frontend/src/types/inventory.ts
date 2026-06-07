@@ -1209,6 +1209,7 @@ export interface BmrSectionConfig {
   steps?: BmrChecklistStep[]
   params?: BmrEnvParam[]
   rows?: BmrEquipmentRow[]
+  tables?: BmrStepTable[]
   groups?: BmrDistGroup[]
   phases?: BmrIpcPhase[]
   planned_label?: string

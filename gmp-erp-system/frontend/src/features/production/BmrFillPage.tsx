@@ -1132,7 +1132,17 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   /* ---- process_table (универсальные контрольные/расчётные таблицы из BMR) ---- */
   if (kind === 'process_table') {
     const rows = (section.config?.rows || []) as BmrProcessTableRow[]
-    return wrap(<div className="p-3">{renderProcessTable(rows)}</div>)
+    const tables = section.config?.tables || []
+    return wrap(
+      <div className="space-y-3 p-3">
+        {renderProcessTable(rows)}
+        {tables.map((tbl, ti) => (
+          <div key={ti} className="overflow-x-auto rounded-lg border border-slate-200">
+            {renderProcessTable(tbl.rows || [])}
+          </div>
+        ))}
+      </div>
+    )
   }
 
   /* ---- reference_table (служебные таблицы master-copy, без заполнения оператором) ---- */
