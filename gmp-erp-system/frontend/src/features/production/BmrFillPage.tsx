@@ -92,6 +92,7 @@ function sectionIcon(kind: string) {
   if (kind === 'equipment') return <Gauge size={15} />
   if (kind === 'checklist') return <ClipboardCheck size={15} />
   if (kind === 'process_table') return <FileText size={15} />
+  if (kind === 'reference_table') return <FileText size={15} />
   return <Layers size={15} />
 }
 
@@ -1123,6 +1124,12 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   if (kind === 'process_table') {
     const rows = (section.config?.rows || []) as BmrProcessTableRow[]
     return wrap(<div className="p-3">{renderProcessTable(rows)}</div>)
+  }
+
+  /* ---- reference_table (служебные таблицы master-copy, без заполнения оператором) ---- */
+  if (kind === 'reference_table') {
+    const rows = (section.config?.rows || []) as BmrProcessTableRow[]
+    return wrap(<div className="p-3 bg-slate-50/60">{renderProcessTable(rows)}</div>)
   }
 
   /* ---- environment ---- */

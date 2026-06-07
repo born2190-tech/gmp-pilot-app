@@ -627,13 +627,27 @@ def _section_room(section: BmrInstanceSection) -> str | None:
     return str(room).strip() if room else None
 
 
+def _section_rooms(section: BmrInstanceSection) -> list[str]:
+    config = section.config or {}
+    raw = config.get("rooms")
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    room = _section_room(section)
+    if not room:
+        return []
+    matches = re.findall(r"Комн\.\s*\d{2,3}", room)
+    return matches or [room]
+
+
 def _section_visible_for_user(section: BmrInstanceSection, user: CurrentUser) -> bool:
     if _is_bmr_supervisor(user):
         return True
-    room = _section_room(section)
-    if not room:
+    if (section.config or {}).get("operator_visible") is False:
+        return False
+    rooms = _section_rooms(section)
+    if not rooms:
         return True
-    return room == _room_from_workstation(user.workstation_id)
+    return _room_from_workstation(user.workstation_id) in rooms
 
 
 def _has_user_room_stage(instance: BmrInstance, user: CurrentUser) -> bool:
@@ -642,7 +656,7 @@ def _has_user_room_stage(instance: BmrInstance, user: CurrentUser) -> bool:
     user_room = _room_from_workstation(user.workstation_id)
     if not user_room:
         return False
-    return any(_section_room(section) == user_room for section in instance.sections)
+    return any(user_room in _section_rooms(section) for section in instance.sections)
 
 
 def _visible_sections(instance: BmrInstance, user: CurrentUser) -> list[BmrInstanceSection]:
@@ -653,7 +667,8 @@ def _visible_sections(instance: BmrInstance, user: CurrentUser) -> list[BmrInsta
 
 def _ensure_section_access(section: BmrInstanceSection, user: CurrentUser) -> None:
     if not _section_visible_for_user(section, user):
-        room = _section_room(section) or "общая секция"
+        rooms = _section_rooms(section)
+        room = " / ".join(rooms) if rooms else (_section_room(section) or "общая секция")
         user_room = _room_from_workstation(user.workstation_id) or user.workstation_id or "не определено"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -1199,6 +1199,8 @@ export interface BmrSectionConfig {
   stage?: string
   stage_title?: string
   room?: string
+  rooms?: string[]
+  operator_visible?: boolean
   process?: string
   room_no?: string
   sop?: string

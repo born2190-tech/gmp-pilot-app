@@ -224,6 +224,38 @@ def _generic_process_table(table, prefix: str) -> dict:
     return {"rows": parsed.get("rows", []), "fields": fields}
 
 
+def _plain_table(table) -> dict:
+    return {
+        "rows": [
+            {"cells": [{"text": _cell_text(cell)} for cell in row.cells]}
+            for row in table.rows
+        ],
+        "fields": [],
+    }
+
+
+def _room_labels(room_no: str | None) -> list[str]:
+    labels: list[str] = []
+    for num in re.findall(r"\d{2,3}", room_no or ""):
+        label = f"Комн. {num}"
+        if label not in labels:
+            labels.append(label)
+    return labels
+
+
+def _formula_fingerprint(rows: list[dict]) -> str:
+    return "|".join(_norm_key(row.get("group") or row.get("name") or "") for row in rows)
+
+
+def _formula_score(rows: list[dict]) -> int:
+    score = 0
+    for row in rows:
+        score += len(row.get("name") or row.get("group") or "")
+        score += len(row.get("per_tab") or "")
+        score += len(row.get("per_series") or "")
+    return score
+
+
 def _process_header(rows: list[list[str]]) -> dict | None:
     """Таблица 'Процесс: X / Комната … / Комната №: N' (ячейки объединённые)."""
     flat = " ".join(_clean(c) for r in rows for c in r)
@@ -452,13 +484,18 @@ def build_sections(doc: Document) -> list[dict]:
     ordinal = 0
     cur_stage = "identity"
     cur_room = None
+    cur_rooms: list[str] = []
     pending_title = ""
     formula_by_name: dict[str, dict] = {}
+    seen_formula_sections: dict[str, int] = {}
+    seen_formula_scores: dict[str, int] = {}
     seen_distribution_fingerprints: set[str] = set()
 
     def add(stype: str, title: str, kind: str, extra: dict):
         nonlocal ordinal
         cfg = {"kind": kind, "stage": cur_stage, "room": cur_room, **extra}
+        if cur_rooms and "rooms" not in cfg:
+            cfg["rooms"] = cur_rooms
         sections.append({"ordinal": ordinal, "section_type": stype, "title": title[:255], "config": cfg})
         ordinal += 1
 
@@ -480,7 +517,9 @@ def build_sections(doc: Document) -> list[dict]:
 
         ph = _process_header(rows)
         if ph:
-            cur_room = ph["room"] or cur_room
+            room_labels = _room_labels(ph["room_no"])
+            cur_rooms = room_labels
+            cur_room = " / ".join(room_labels) if room_labels else (ph["room"] or cur_room)
             proc = ph["process"]
             room_slug = re.sub(r"[^a-zа-я0-9]+", "_", (ph["room"] or ph["room_no"]).lower()).strip("_")[:24]
             proc_slug = re.sub(r"[^a-zа-я0-9]+", "_", proc.lower()).strip("_")[:32]
@@ -494,7 +533,25 @@ def build_sections(doc: Document) -> list[dict]:
             else:
                 cur_stage = f"{proc_slug}_{room_slug}" if room_slug else proc_slug
             add("stage", f"Процесс: {proc} · {ph['room']} {ph['room_no']}".strip(), "process_header",
-                {"room_no": ph["room_no"], "process": proc, "stage_title": proc, "fields": _process_fields()})
+                {"room_no": ph["room_no"], "rooms": room_labels, "process": proc, "stage_title": proc, "fields": _process_fields()})
+            pending_title = ""
+            continue
+
+        # Справочные таблицы шапки BMR. Они нужны руководителю/ДОК как часть
+        # master-copy, но не должны становиться заданиями оператора на планшете.
+        if "утверждение" in flat and "департамент производства" in flat:
+            extra = {**_plain_table(val), "operator_visible": False}
+            add("reference_table", "Матрица утверждения BMR", "reference_table", extra)
+            pending_title = ""
+            continue
+        if "ф.и.о" in flat and "инициалы" in flat and "департамент" in flat:
+            extra = {**_plain_table(val), "operator_visible": False}
+            add("reference_table", "Журнал подписей BMR", "reference_table", extra)
+            pending_title = ""
+            continue
+        if "version" in flat and "reason" in flat:
+            extra = {**_plain_table(val), "operator_visible": False}
+            add("reference_table", "История изменений BMR", "reference_table", extra)
             pending_title = ""
             continue
 
@@ -504,7 +561,16 @@ def build_sections(doc: Document) -> list[dict]:
             if formula_rows and not formula_by_name:
                 formula_by_name = _formula_lookup(formula_rows)
             extra = {"rows": formula_rows, "fields": []}
-            if not dup("production_formula", "production_formula", extra):
+            fingerprint = _formula_fingerprint(formula_rows)
+            score = _formula_score(formula_rows)
+            if fingerprint in seen_formula_sections:
+                section = sections[seen_formula_sections[fingerprint]]
+                if score > seen_formula_scores.get(fingerprint, 0):
+                    section["config"]["rows"] = formula_rows
+                    seen_formula_scores[fingerprint] = score
+            elif not dup("production_formula", "production_formula", extra):
+                seen_formula_sections[fingerprint] = len(sections)
+                seen_formula_scores[fingerprint] = score
                 add("production_formula", pending_title or "Производственная формула", "production_formula", extra)
             pending_title = ""
             continue
@@ -585,7 +651,10 @@ def build_sections(doc: Document) -> list[dict]:
             # поля не нужно (иначе «<вся инструкция> · строка N · Дата»).
             parsed = _generic_process_table(val, "")
             if parsed["rows"]:
-                add("process_table", title, "process_table", parsed)
+                extra = parsed
+                if "расчет эффективности" in meaningful_source and cur_stage == "identity":
+                    extra = {**parsed, "stage": "weighing", "room": "Комн. 39", "rooms": ["Комн. 39"]}
+                add("process_table", title, "process_table", extra)
             pending_title = ""
             continue
 

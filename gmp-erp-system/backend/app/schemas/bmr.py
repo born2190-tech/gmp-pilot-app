@@ -11,6 +11,7 @@ from app.schemas.inventory import SignatureRequest
 SECTION_TYPES = (
     "product_header",
     "process_header",
+    "reference_table",
     "production_formula",
     "distribution_list",
     "stage",
