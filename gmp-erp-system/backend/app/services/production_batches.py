@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
 from app.models.identity import User
-from app.models.inventory import Product, ProductionBatch
+from app.models.inventory import BmrTemplate, Product, ProductionBatch
 from app.schemas.production import (
     ProductionBatchBmrIssueRequest,
     ProductionBatchChecklistUpdate,
@@ -277,10 +277,27 @@ def get_batch(db: Session, user: CurrentUser, batch_id) -> ProductionBatch:
     return batch
 
 
+def _approved_bmr_template_for_batch(db: Session, batch: ProductionBatch) -> BmrTemplate | None:
+    if not batch.product_id:
+        return None
+    return (
+        db.query(BmrTemplate)
+        .filter(BmrTemplate.product_id == batch.product_id, BmrTemplate.status == "approved")
+        .order_by(BmrTemplate.version.desc())
+        .first()
+    )
+
+
 def request_bmr(db: Session, user: CurrentUser, batch_id) -> ProductionBatch:
     """Производство запрашивает у ДОК подготовку/выдачу ЗПС/BMR (СОП-11 п.5.1.3)."""
     _require_any_permission(user, ("MANAGE_PRODUCTION",))
     batch = get_batch(db, user, batch_id)
+    template = _approved_bmr_template_for_batch(db, batch)
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Для этого ЛС нет утверждённого BMR-шаблона. Сначала утвердите master-template в ДОК.",
+        )
     if batch.status not in ("assigned", "bmr_requested"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -306,6 +323,12 @@ def request_bmr(db: Session, user: CurrentUser, batch_id) -> ProductionBatch:
 def issue_bmr(db: Session, user: CurrentUser, batch_id, payload: ProductionBatchBmrIssueRequest) -> ProductionBatch:
     _require_any_permission(user, ("QA_DECISION",))
     batch = get_batch(db, user, batch_id)
+    template = _approved_bmr_template_for_batch(db, batch)
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Нельзя выдать ЗПС/BMR: для этого ЛС нет утверждённого BMR-шаблона.",
+        )
     if batch.bmr_issued_at:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR already issued")
     if not batch.bmr_requested_at:
@@ -330,7 +353,12 @@ def issue_bmr(db: Session, user: CurrentUser, batch_id, payload: ProductionBatch
     )
     # Создаём экземпляр электронного BMR из утверждённого шаблона продукта (СОП-11).
     from app.services.bmr import create_instance_for_batch
-    create_instance_for_batch(db, user, batch)
+    instance = create_instance_for_batch(db, user, batch)
+    if not instance:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ЗПС/BMR не создан: утверждённый шаблон не найден для выбранного ЛС.",
+        )
     db.commit()
     db.refresh(batch)
     return batch
