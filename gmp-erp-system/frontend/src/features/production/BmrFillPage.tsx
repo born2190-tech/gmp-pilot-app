@@ -1032,8 +1032,8 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     ? 'Контрольная таблица этапа'
     : section.title
   const Head = (
-    <div className={`flex items-center gap-2 border-b px-3 py-2 ${isProcessTable ? 'border-cyan-100 bg-cyan-50/70' : 'border-slate-200 bg-slate-50'}`}>
-      <span className={`inline-flex h-7 w-7 items-center justify-center rounded-md text-white ${isProcessTable ? 'bg-cyan-600' : 'bg-blue-600'}`}>{sectionIcon(kind)}</span>
+    <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">{sectionIcon(kind)}</span>
       <div className="min-w-0">
         {isProcessTable && parentStageTitle && (
           <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-700">Таблица этапа · {parentStageTitle}</div>
@@ -1046,7 +1046,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   const wrap = (body: React.ReactNode) => (
     <section
       id={`bmr-section-${section.id}`}
-      className={`scroll-mt-4 overflow-hidden rounded-lg border bg-white shadow-sm ${isProcessTable ? 'border-cyan-200' : 'border-slate-200'}`}
+      className="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
     >
       {Head}{body}
     </section>
