@@ -644,6 +644,8 @@ def _section_visible_for_user(section: BmrInstanceSection, user: CurrentUser) ->
         return True
     if (section.config or {}).get("operator_visible") is False:
         return False
+    if (section.config or {}).get("room_assignment_required"):
+        return False
     rooms = _section_rooms(section)
     if not rooms:
         return True
@@ -656,7 +658,7 @@ def _has_user_room_stage(instance: BmrInstance, user: CurrentUser) -> bool:
     user_room = _room_from_workstation(user.workstation_id)
     if not user_room:
         return False
-    return any(user_room in _section_rooms(section) for section in instance.sections)
+    return any(user_room in _section_rooms(section) for section in instance.sections if not (section.config or {}).get("room_assignment_required"))
 
 
 def _visible_sections(instance: BmrInstance, user: CurrentUser) -> list[BmrInstanceSection]:

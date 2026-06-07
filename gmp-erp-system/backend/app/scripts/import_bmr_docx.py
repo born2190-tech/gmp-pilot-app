@@ -40,6 +40,13 @@ def _short_label(s: str, limit: int = 80) -> str:
     return f"{cut.rstrip(' ·,;:')}…"
 
 
+def _section_title(raw: str | None, fallback: str) -> str:
+    title = _clean(raw)
+    if not title or not re.search(r"[A-Za-zА-Яа-я0-9]", title):
+        return fallback
+    return title
+
+
 def _sig_fields() -> list[dict]:
     return [
         {"label": "Выполнено · ДП", "type": "signature_operator"},
@@ -506,7 +513,10 @@ def build_sections(doc: Document) -> list[dict]:
         cfg = {"kind": kind, "stage": cur_stage, "room": cur_room, **extra}
         if cur_rooms and "rooms" not in cfg:
             cfg["rooms"] = cur_rooms
-        sections.append({"ordinal": ordinal, "section_type": stype, "title": title[:255], "config": cfg})
+        if cur_room and not cur_rooms and "room_assignment_required" not in cfg:
+            cfg["room_assignment_required"] = True
+            cfg["room_source_text"] = cur_room
+        sections.append({"ordinal": ordinal, "section_type": stype, "title": _section_title(title, "Контрольная таблица")[:255], "config": cfg})
         ordinal += 1
 
     def dup(stype, kind, extra) -> bool:
@@ -542,8 +552,11 @@ def build_sections(doc: Document) -> list[dict]:
                 cur_stage = "weighing"
             else:
                 cur_stage = f"{proc_slug}_{room_slug}" if room_slug else proc_slug
-            add("stage", f"Процесс: {proc} · {ph['room']} {ph['room_no']}".strip(), "process_header",
-                {"room_no": ph["room_no"], "rooms": room_labels, "process": proc, "stage_title": proc, "fields": _process_fields()})
+            header_extra = {"room_no": ph["room_no"], "rooms": room_labels, "process": proc, "stage_title": proc, "fields": _process_fields()}
+            if not room_labels:
+                header_extra["room_assignment_required"] = True
+                header_extra["room_source_text"] = ph["room"] or ph["room_no"] or ""
+            add("stage", f"Процесс: {proc} · {ph['room']} {ph['room_no']}".strip(), "process_header", header_extra)
             pending_title = ""
             continue
 
@@ -655,7 +668,7 @@ def build_sections(doc: Document) -> list[dict]:
             "этапы процесса", "наименование документа", "статус",
         ))
         if meaningful:
-            title = pending_title or "Контрольная таблица"
+            title = _section_title(pending_title, "Контрольная таблица")
             # Префикс полей пустой: длинный текст-инструкция уже хранится в title
             # секции и показывается над таблицей; дублировать его в каждую метку
             # поля не нужно (иначе «<вся инструкция> · строка N · Дата»).

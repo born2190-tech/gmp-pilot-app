@@ -1052,10 +1052,19 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   if (kind === 'process_header') {
     const fields = section.config?.fields || []
     const regularFields = fields.map((f, fi) => ({ f, fi })).filter((item) => !isProcessEndField(section, item.f))
+    const roomAssignmentRequired = !!section.config?.room_assignment_required
     return wrap(
       <div className="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-2">
         <Meta label={t('bmrFill.process')} value={section.config?.process || section.title} />
         <Meta label={t('bmrFill.roomNo')} value={`${section.config?.room || '—'}${section.config?.room_no ? ` / ${section.config.room_no}` : ''}`} />
+        {roomAssignmentRequired && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-800 sm:col-span-2">
+            <div className="font-semibold">{t('bmrFill.roomAssignmentRequired')}</div>
+            <div className="mt-0.5 text-amber-700">
+              {t('bmrFill.roomAssignmentRequiredHint', { room: section.config?.room_source_text || section.config?.room || '—' })}
+            </div>
+          </div>
+        )}
         {regularFields.map(({ f, fi }) => (
           <div key={fi}>
             <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{f.label}</div>
