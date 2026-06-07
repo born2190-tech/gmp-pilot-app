@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -176,10 +177,67 @@ def _parse_qty(raw) -> float:
         return 0.0
 
 
+def _norm_material_key(raw: str | None) -> str:
+    import re
+
+    text = (raw or "").lower().replace("ё", "е")
+    text = re.sub(r"\*+", " ", text)
+    text = re.sub(r"[^a-zа-я0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _material_alias_code(name: str | None) -> str:
+    key = _norm_material_key(name)
+    aliases = [
+        (("метформин", "гидрохлорид"), "API-MET"),
+        (("ситаглиптин", "фосфат"), "API-SITA"),
+        (("повидон",), "EXC-POV"),
+        (("лаурил", "сульфат"), "EXC-SLS"),
+        (("кроскармеллоз",), "EXC-SOD"),
+        (("коллоид", "кремн"), "EXC-AEROSIL"),
+        (("aerosil",), "EXC-AEROSIL"),
+        (("микрокристаллическ", "целлюлоз"), "EXC-MCC"),
+        (("pharmasel",), "EXC-MCC"),
+        (("стеарат", "магни"), "EXC-MGST"),
+        (("opadry", "blue"), "EXC-OPA-BLUE"),
+        (("opadry",), "COAT-OPADRY"),
+        (("очищенная", "вода"), "UTIL-WATER"),
+    ]
+    for needles, code in aliases:
+        if all(needle in key for needle in needles):
+            return code
+    return ""
+
+
+def _resolve_material_from_bmr_row(db: Session, row: dict) -> Material | None:
+    code = row.get("material_code") or _material_alias_code(row.get("name"))
+    if code:
+        material = db.query(Material).filter(Material.code == code).first()
+        if material:
+            return material
+    name_key = _norm_material_key(row.get("name"))
+    if not name_key:
+        return None
+    materials = db.query(Material).all()
+    by_name = {_norm_material_key(material.name): material for material in materials}
+    if name_key in by_name:
+        return by_name[name_key]
+    name_tokens = set(name_key.split())
+    for material_key, material in by_name.items():
+        material_tokens = set(material_key.split())
+        if name_tokens and material_tokens and (
+            name_tokens.issubset(material_tokens) or material_tokens.issubset(name_tokens)
+        ):
+            return material
+    return None
+
+
 def prefill_requisition(db: Session, user: CurrentUser, batch_id: uuid.UUID) -> dict:
-    """Автозаполнение требования по серии: реквизиты из production_batch + строки
-    материалов из листа распределения утверждённого BMR-шаблона продукта
-    (material_code → Material, кол-во/серию). Дубли материала суммируются.
+    """Автозаполнение требования по серии: реквизиты из production_batch + плановые
+    количества из производственной формулы утверждённого BMR-шаблона.
+
+    Лист распределения в BMR заполняется позже фактом складской выдачи (FEFO):
+    серии сырья, номера аналитических листов и фактические кг.
     Возвращает черновик (оператор проверяет/правит и отправляет обычным create)."""
     _require_any_permission(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION"))
     from app.models.inventory import BmrTemplate  # локально: избегаем цикла импорта
@@ -197,27 +255,28 @@ def prefill_requisition(db: Session, user: CurrentUser, batch_id: uuid.UUID) -> 
     if template:
         for section in template.sections:
             config = section.config or {}
-            if config.get("kind") != "distribution_list" or config.get("stage") != "weighing":
+            if config.get("kind") != "production_formula":
                 continue
-            for group in config.get("groups", []):
-                for item in group.get("items", []):
-                    code = item.get("material_code")
-                    if not code or code == "UTIL-WATER":
-                        continue
-                    material = db.query(Material).filter(Material.code == code).first()
-                    if not material:
-                        continue
-                    key = str(material.id)
-                    if key not in agg:
-                        agg[key] = {
-                            "material_id": material.id,
-                            "material_name": material.name,
-                            "material_code": material.code,
-                            "requested_quantity": 0.0,
-                            "unit": material.default_unit or "kg",
-                        }
-                        order.append(key)
-                    agg[key]["requested_quantity"] += _parse_qty(item.get("qty"))
+            for row in config.get("rows", []):
+                if not row.get("name"):
+                    continue
+                material = _resolve_material_from_bmr_row(db, row)
+                if not material or material.code == "UTIL-WATER":
+                    continue
+                qty = _parse_qty(row.get("per_series"))
+                if qty <= 0:
+                    continue
+                key = str(material.id)
+                if key not in agg:
+                    agg[key] = {
+                        "material_id": material.id,
+                        "material_name": material.name,
+                        "material_code": material.code,
+                        "requested_quantity": 0.0,
+                        "unit": material.default_unit or "kg",
+                    }
+                    order.append(key)
+                agg[key]["requested_quantity"] = round(agg[key]["requested_quantity"] + qty, 6)
     return {
         "product_name": batch.product_name,
         "product_series": batch.batch_no,
@@ -262,8 +321,11 @@ def verify_requisition_scan(db: Session, user: CurrentUser, requisition_id: uuid
 def _spill_distribution_to_bmr(db: Session, req: ProductionRequisition, alloc_lines: list, user: CurrentUser) -> None:
     """Ф2: при выдаче накладной заполняет лист распределения BMR серии данными
     выданных партий — № серии сырья (supplier_lot), № аналит. листа (report_no),
-    вес (план/серию) и подпись «Выдал (Склад)». Уже заполненные/подписанные
-    ячейки не перезаписываются."""
+    фактический вес по накладной и подпись «Выдал (Склад)».
+
+    Плановое количество остаётся в производственной формуле. Если FEFO выдаёт
+    один материал несколькими складскими сериями, в экземпляр BMR добавляются
+    дополнительные строки листа распределения."""
     if not req.production_batch_id:
         return
     from app.models.inventory import BmrEntry, BmrInstance
@@ -280,17 +342,83 @@ def _spill_distribution_to_bmr(db: Session, req: ProductionRequisition, alloc_li
     )
     if not section:
         return
-    # material_code → [(field_base, planned_qty)]
-    code_map: dict[str, list[tuple[int, str | None]]] = {}
+    config = section.config or {}
+    if not section.config:
+        section.config = config
+
+    def _dist_field_pack(name: str) -> list[dict]:
+        return [
+            {"label": f"{name} · № серии сырья", "type": "text"},
+            {"label": f"{name} · № аналит. листа", "type": "text"},
+            {"label": f"{name} · вес нетто", "type": "number", "unit": "кг"},
+            {"label": f"{name} · Выдал (Склад)", "type": "signature_warehouse"},
+            {"label": f"{name} · Проверил (ДП)", "type": "signature_operator"},
+            {"label": f"{name} · Проверил (ДОК)", "type": "signature_qa"},
+        ]
+
+    # material_code → строки листа распределения в экземпляре BMR
+    code_map: dict[str, list[dict]] = {}
     base = 0
-    for group in (section.config or {}).get("groups", []):
+    for group in config.get("groups", []):
         for item in group.get("items", []):
-            code_map.setdefault(item.get("material_code"), []).append((base, item.get("qty")))
+            code = item.get("material_code")
+            if not code:
+                material = _resolve_material_from_bmr_row(db, item)
+                code = material.code if material else ""
+                if code:
+                    item["material_code"] = code
+            if code:
+                code_map.setdefault(code, []).append({"field_base": base, "item": item, "group": group})
             base += 6
 
     signer = db.get(User, user.id)
     signer_name = signer.full_name if signer else user.username
     now = now_utc()
+    config_changed = False
+
+    def _entry_value(field_index: int) -> dict | None:
+        entry = (
+            db.query(BmrEntry)
+            .filter(BmrEntry.instance_id == instance.id, BmrEntry.section_id == section.id, BmrEntry.field_index == field_index)
+            .first()
+        )
+        return entry.value if entry else None
+
+    def _slot_is_empty(field_base: int) -> bool:
+        value = _entry_value(field_base)
+        return not value or value.get("v") in (None, "")
+
+    def _append_distribution_slot(material: Material, source_slot: dict | None) -> dict:
+        nonlocal base, config_changed
+        groups = config.setdefault("groups", [])
+        if source_slot:
+            group = source_slot["group"]
+            source_item = source_slot["item"]
+            item = {
+                "name": source_item.get("name") or material.name,
+                "spec": source_item.get("spec") or "",
+                "qty": source_item.get("qty") or "",
+                "material_code": material.code,
+                "generated_from_requisition": True,
+            }
+        else:
+            if not groups:
+                groups.append({"title": "Фактическая выдача склада", "items": []})
+            group = groups[0]
+            item = {
+                "name": material.name,
+                "spec": "",
+                "qty": "",
+                "material_code": material.code,
+                "generated_from_requisition": True,
+            }
+        group.setdefault("items", []).append(item)
+        config.setdefault("fields", []).extend(_dist_field_pack(item["name"]))
+        slot = {"field_base": base, "item": item, "group": group}
+        code_map.setdefault(material.code, []).append(slot)
+        base += 6
+        config_changed = True
+        return slot
 
     def _set(field_index: int, value: dict) -> None:
         entry = (
@@ -314,23 +442,33 @@ def _spill_distribution_to_bmr(db: Session, req: ProductionRequisition, alloc_li
             continue
         targets = code_map.get(material.code)
         if not targets:
-            continue
+            targets = [_append_distribution_slot(material, None)]
+        target = next((slot for slot in targets if _slot_is_empty(slot["field_base"])), None)
+        if target is None:
+            target = _append_distribution_slot(material, targets[0] if targets else None)
         lot = db.get(Lot, alloc.lot_id)
         supplier_lot = (lot.supplier_lot or lot.internal_lot) if lot else None
         qc = (
-            db.query(QCReport).filter(QCReport.lot_id == alloc.lot_id).order_by(QCReport.created_at.desc()).first()
+            db.query(QCReport)
+            .filter(QCReport.lot_id == alloc.lot_id)
+            .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
+            .first()
             if lot else None
         )
         report_no = qc.report_no if qc else None
-        for field_base, planned in targets:
-            if supplier_lot:
-                _set(field_base + 0, {"v": supplier_lot, "source": "requisition"})
-            if report_no:
-                _set(field_base + 1, {"v": report_no, "source": "requisition"})
-            planned_qty = _parse_qty(planned)
-            if planned_qty:
-                _set(field_base + 2, {"v": planned_qty, "source": "requisition"})
-            _set(field_base + 3, {"signed_by": signer_name, "role": "warehouse", "signed_at": now.isoformat()})
+        field_base = target["field_base"]
+        if supplier_lot:
+            _set(field_base + 0, {"v": supplier_lot, "source": "requisition", "requisition_no": req.requisition_no})
+        if report_no:
+            _set(field_base + 1, {"v": report_no, "source": "requisition", "requisition_no": req.requisition_no})
+        _set(field_base + 2, {
+            "v": round(float(alloc.allocated_quantity), 6),
+            "source": "requisition",
+            "requisition_no": req.requisition_no,
+        })
+        _set(field_base + 3, {"signed_by": signer_name, "role": "warehouse", "signed_at": now.isoformat()})
+    if config_changed:
+        flag_modified(section, "config")
     db.flush()
 
 

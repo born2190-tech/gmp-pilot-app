@@ -67,13 +67,18 @@ def _norm_key(raw: str | None) -> str:
 def _material_alias_key(name: str | None) -> str:
     key = _norm_key(name)
     aliases = [
-        (("ситаглиптин", "фосфат"), "SITA-PHOS"),
+        (("метформин", "гидрохлорид"), "API-MET"),
+        (("ситаглиптин", "фосфат"), "API-SITA"),
+        (("повидон",), "EXC-POV"),
+        (("лаурил", "сульфат"), "EXC-SLS"),
+        (("кроскармеллоз",), "EXC-SOD"),
         (("коллоид", "кремн"), "EXC-AEROSIL"),
         (("aerosil",), "EXC-AEROSIL"),
         (("микрокристаллическ", "целлюлоз"), "EXC-MCC"),
         (("pharmasel",), "EXC-MCC"),
         (("стеарат", "магни"), "EXC-MGST"),
-        (("opadry", "blue"), "COAT-OPADRY"),
+        (("opadry", "blue"), "EXC-OPA-BLUE"),
+        (("opadry",), "COAT-OPADRY"),
         (("очищенная", "вода"), "UTIL-WATER"),
     ]
     for needles, code in aliases:
@@ -469,6 +474,11 @@ def _enrich_material_codes(db, sections: list[dict]) -> None:
 
     for section in sections:
         cfg = section.get("config") or {}
+        if cfg.get("kind") == "production_formula":
+            for row in cfg.get("rows", []):
+                if row.get("name"):
+                    row["material_code"] = resolve(row.get("name") or "")
+            continue
         if cfg.get("kind") != "distribution_list":
             continue
         field_base = 0
