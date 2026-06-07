@@ -320,12 +320,13 @@ def verify_requisition_scan(db: Session, user: CurrentUser, requisition_id: uuid
 
 def _spill_distribution_to_bmr(db: Session, req: ProductionRequisition, alloc_lines: list, user: CurrentUser) -> None:
     """Ф2: при выдаче накладной заполняет лист распределения BMR серии данными
-    выданных партий — № серии сырья (supplier_lot), № аналит. листа (report_no),
-    фактический вес по накладной и подпись «Выдал (Склад)».
+    выданных партий — № серии сырья (supplier_lot), № аналит. листа (report_no)
+    и подпись «Выдал (Склад)».
 
     Плановое количество остаётся в производственной формуле. Если FEFO выдаёт
     один материал несколькими складскими сериями, в экземпляр BMR добавляются
-    дополнительные строки листа распределения."""
+    дополнительные строки листа распределения. Вес нетто оператор заполняет
+    вручную по факту взвешивания на планшете."""
     if not req.production_batch_id:
         return
     from app.models.inventory import BmrEntry, BmrInstance
@@ -461,11 +462,6 @@ def _spill_distribution_to_bmr(db: Session, req: ProductionRequisition, alloc_li
             _set(field_base + 0, {"v": supplier_lot, "source": "requisition", "requisition_no": req.requisition_no})
         if report_no:
             _set(field_base + 1, {"v": report_no, "source": "requisition", "requisition_no": req.requisition_no})
-        _set(field_base + 2, {
-            "v": round(float(alloc.allocated_quantity), 6),
-            "source": "requisition",
-            "requisition_no": req.requisition_no,
-        })
         _set(field_base + 3, {"signed_by": signer_name, "role": "warehouse", "signed_at": now.isoformat()})
     if config_changed:
         flag_modified(section, "config")
