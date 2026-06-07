@@ -150,6 +150,21 @@ class BmrParticipantItem(BaseModel):
     signed: bool = False
 
 
+class BmrSignatureLogItem(BaseModel):
+    full_name: str | None = None
+    username: str | None = None
+    role: str | None = None
+    department: str | None = None
+    duty: str
+    meaning: str
+    stage: str | None = None
+    stage_title: str | None = None
+    section_title: str | None = None
+    field_label: str | None = None
+    signed_at: datetime | None = None
+    workstation_id: str | None = None
+
+
 class BmrRouteStageItem(BaseModel):
     stage: str
     title: str
@@ -183,6 +198,7 @@ class BmrInstanceItem(BaseModel):
     assignments: dict[str, list[str]] = Field(default_factory=dict)
     stages: list[BmrStageItem] = Field(default_factory=list)
     participants: list[BmrParticipantItem] = Field(default_factory=list)
+    signature_log: list[BmrSignatureLogItem] = Field(default_factory=list)
     route: list[BmrRouteStageItem] = Field(default_factory=list)
 
 

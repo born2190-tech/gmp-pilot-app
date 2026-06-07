@@ -1298,6 +1298,7 @@ export interface BmrInstanceItem {
   assignments?: Record<string, string[]>
   stages?: BmrStageItem[]
   participants?: BmrParticipantItem[]
+  signature_log?: BmrSignatureLogItem[]
   route?: BmrRouteStageItem[]
 }
 
@@ -1389,6 +1390,20 @@ export interface BmrParticipantItem {
   stages: string[]
   assigned: boolean
   signed: boolean
+}
+export interface BmrSignatureLogItem {
+  full_name: string | null
+  username: string | null
+  role: string | null
+  department: string | null
+  duty: string
+  meaning: string
+  stage: string | null
+  stage_title: string | null
+  section_title: string | null
+  field_label: string | null
+  signed_at: string | null
+  workstation_id: string | null
 }
 export interface BmrOperatorItem { id: string; username: string; full_name: string; role: string | null; is_operator: boolean }
 export interface BmrOperatorsResponse { operators: BmrOperatorItem[] }

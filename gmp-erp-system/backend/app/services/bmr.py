@@ -365,6 +365,7 @@ def _ensure_previous_process_entries(db: Session, instance: BmrInstance) -> bool
 def _instance_dict(db: Session, instance: BmrInstance, user: CurrentUser | None = None) -> dict:
     batch = db.get(ProductionBatch, instance.production_batch_id)
     sections = _visible_sections(instance, user) if user else list(instance.sections)
+    sections = [s for s in sections if not _is_manual_signature_journal_section(s)]
     section_ids = {s.id for s in sections}
     rows = []
     entries_query = (
@@ -399,8 +400,20 @@ def _instance_dict(db: Session, instance: BmrInstance, user: CurrentUser | None 
         "assignments": instance.assignments or {},
         "stages": _stages_of(instance),
         "participants": _participants_of(db, instance),
+        "signature_log": _signature_log_of(db, instance),
         "route": _stage_route(db, instance),
     }
+
+
+def _is_manual_signature_journal_section(section: BmrInstanceSection) -> bool:
+    title = (section.title or "").strip().lower()
+    kind = str((section.config or {}).get("kind") or section.section_type or "").lower()
+    return (
+        "журнал подпис" in title
+        or "signature journal" in title
+        or "signature log" in title
+        or kind in {"signature_journal", "signature_log"}
+    )
 
 
 def _section_stage(section: BmrInstanceSection) -> str:
@@ -491,6 +504,83 @@ def _participants_of(db: Session, instance: BmrInstance) -> list[dict]:
         "assigned": r["assigned"], "signed": r["signed"],
     } for r in acc.values()]
     out.sort(key=lambda x: (not x["assigned"], x["full_name"] or ""))
+    return out
+
+
+def _field_label(section: BmrInstanceSection, field_index: int) -> str | None:
+    config = section.config or {}
+    fields = config.get("fields") or []
+    if isinstance(fields, list) and 0 <= field_index < len(fields):
+        item = fields[field_index] or {}
+        if isinstance(item, dict):
+            return item.get("label") or item.get("name")
+
+    kind = str(config.get("kind") or section.section_type or "")
+    if kind == "process_steps":
+        steps = config.get("steps") or []
+        for step in steps if isinstance(steps, list) else []:
+            if not isinstance(step, dict):
+                continue
+            if step.get("dp_field_index") == field_index:
+                return f"{step.get('no') or ''} Выполнено ДП".strip()
+            if step.get("dok_field_index") == field_index:
+                return f"{step.get('no') or ''} Проверено ДОК".strip()
+    if kind == "distribution_list":
+        offset = field_index % 6
+        return {
+            0: "№ аналитического листа",
+            1: "Серия производителя",
+            2: "Фактическое количество",
+            3: "Склад выдал",
+            4: "ДП проверил",
+            5: "ДОК проверил",
+        }.get(offset)
+    if kind == "equipment":
+        names = ["Оборудование", "Модель", "Серийный номер", "СОП", "Калибровка", "ДП", "ДОК"]
+        return names[field_index % len(names)]
+    if kind == "environment":
+        names = ["Дата-время начала", "Дата-время окончания", "Температура", "Влажность", "Перепад давления", "ДП", "ДОК"]
+        return names[field_index % len(names)]
+    return None
+
+
+def _signature_log_of(db: Session, instance: BmrInstance) -> list[dict]:
+    """Фактический online-журнал e-подписей BMR.
+
+    Источник правды — подписанные поля BmrEntry, а не ручная бумажная таблица.
+    """
+    sections_by_id = {s.id: s for s in instance.sections}
+    stage_title = {s["stage"]: s["title"] for s in _stages_of(instance)}
+    entries = (
+        db.query(BmrEntry, User.full_name, User.username, User.role, User.department)
+        .outerjoin(User, User.id == BmrEntry.filled_by)
+        .filter(BmrEntry.instance_id == instance.id)
+        .order_by(BmrEntry.filled_at.asc(), BmrEntry.id.asc())
+        .all()
+    )
+    out: list[dict] = []
+    for entry, full_name, username, role, department in entries:
+        value = entry.value or {}
+        if not value.get("signed_by"):
+            continue
+        section = sections_by_id.get(entry.section_id)
+        stage = _section_stage(section) if section else None
+        sign_role = str(value.get("role") or "")
+        duty = {"qa": "ДОК", "dok": "ДОК", "dp": "ДП", "wh": "Склад"}.get(sign_role, sign_role or "Подпись")
+        out.append({
+            "full_name": full_name or value.get("signed_by"),
+            "username": username,
+            "role": role.name if role else None,
+            "department": department,
+            "duty": duty,
+            "meaning": sign_role,
+            "stage": stage,
+            "stage_title": stage_title.get(stage, stage) if stage else None,
+            "section_title": section.title if section else None,
+            "field_label": _field_label(section, entry.field_index) if section else None,
+            "signed_at": value.get("signed_at") or entry.filled_at,
+            "workstation_id": None,
+        })
     return out
 
 
