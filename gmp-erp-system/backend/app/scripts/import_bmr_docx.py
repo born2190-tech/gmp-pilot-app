@@ -389,6 +389,34 @@ def _steps(table) -> tuple[list[dict], list[dict]]:
     return steps, fields
 
 
+def _line_clearance_steps_from_rows(rows: list[list[str]]) -> tuple[list[dict], list[dict]]:
+    """Line clearance sometimes has typoed headers and empty merged cells.
+    Treat it as a GMP checklist: each row is signed by DP, then verified by DOK.
+    """
+    steps: list[dict] = []
+    fields: list[dict] = []
+    for row in rows:
+        cells = [_clean(c) for c in row]
+        if not any(cells):
+            continue
+        row_text = " ".join(cells).lower()
+        if "технолог" in row_text and ("этап" in row_text or "подпись" in row_text):
+            continue
+        no = cells[0] if cells else ""
+        text = cells[1] if len(cells) > 1 else " ".join(cells[1:])
+        if not text or text.lower() in {"технологические этапы", "технологоческие этапы"}:
+            continue
+        if not no or not re.search(r"\d", no):
+            no = str(len(steps) + 1)
+        no = no.strip(".")
+        step = {"no": no, "text": text, "dp_field_index": len(fields)}
+        fields.append({"label": f"Этап {no} · Выполнено ДП", "type": "signature_operator"})
+        step["dok_field_index"] = len(fields)
+        fields.append({"label": f"Этап {no} · Проверено ДОК", "type": "signature_qa"})
+        steps.append(step)
+    return steps, fields
+
+
 def _env_params(rows: list[list[str]]) -> list[dict]:
     params = []
     for r in rows[1:]:
@@ -712,6 +740,15 @@ def build_sections(doc: Document) -> list[dict]:
             pending_title = ""
             continue
 
+        # line clearance in paper BMR is a checklist with DP execution and DOK
+        # verification per row. Do not import it as a free-form process table.
+        if cur_stage.startswith("line_clearance") and ("выполнено дп" in flat or "подпись" in flat):
+            lc_steps, lc_fields = _line_clearance_steps_from_rows(rows)
+            if lc_steps:
+                add("checklist", pending_title or "Контрольная таблица очистки линии", "checklist", {"steps": lc_steps, "fields": lc_fields})
+                pending_title = ""
+                continue
+
         # шапка идентификации
         if "код продукта" in flat:
             kv = {}
@@ -722,10 +759,9 @@ def build_sections(doc: Document) -> list[dict]:
             pending_title = ""
             continue
 
-        # утверждено ДОК — добавим подпись-секцию к текущей стадии
+        # Бумажное «утверждено ДОК» теперь отражается в каждой строке line
+        # clearance как e-подпись «Проверено ДОК», отдельная секция не нужна.
         if "утверждено док" in flat:
-            add("stage", "Утверждение line clearance — ДОК", "qa_clearance",
-                {"fields": [{"label": "Утверждено · ДОК", "type": "signature_qa"}]})
             pending_title = ""
             continue
 

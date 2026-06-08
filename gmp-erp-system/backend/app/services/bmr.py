@@ -365,7 +365,7 @@ def _ensure_previous_process_entries(db: Session, instance: BmrInstance) -> bool
 def _instance_dict(db: Session, instance: BmrInstance, user: CurrentUser | None = None) -> dict:
     batch = db.get(ProductionBatch, instance.production_batch_id)
     sections = _visible_sections(instance, user) if user else list(instance.sections)
-    sections = [s for s in sections if not _is_manual_signature_journal_section(s)]
+    sections = [s for s in sections if not _is_hidden_bmr_section(s)]
     section_ids = {s.id for s in sections}
     rows = []
     entries_query = (
@@ -416,6 +416,12 @@ def _is_manual_signature_journal_section(section: BmrInstanceSection) -> bool:
     )
 
 
+def _is_hidden_bmr_section(section: BmrInstanceSection) -> bool:
+    """Backward-compatible technical sections that must not be displayed/fillable."""
+    kind = str((section.config or {}).get("kind") or section.section_type or "").lower()
+    return _is_manual_signature_journal_section(section) or kind == "qa_clearance"
+
+
 def _is_efficiency_calculation_config(config: dict, title: str | None = None) -> bool:
     if config.get("process_table_variant") == "efficiency_calculation":
         return True
@@ -432,6 +438,56 @@ def _is_efficiency_calculation_config(config: dict, title: str | None = None) ->
         ]
     ).lower()
     return "расчет эффективности" in haystack or "расчёт эффективности" in haystack
+
+
+def _is_line_clearance_control_table(config: dict, title: str | None = None) -> bool:
+    if str(config.get("kind") or "").lower() != "process_table":
+        return False
+    stage = str(config.get("stage") or "").lower()
+    text = " ".join(
+        str(cell.get("text") or "")
+        for row in (config.get("rows") or [])
+        for cell in (row.get("cells") or [])
+        if isinstance(cell, dict)
+    ).lower()
+    return (
+        stage.startswith("line_clearance")
+        and ("технолог" in text or "технологич" in text)
+        and ("выполнено дп" in text or "подпись" in text)
+    )
+
+
+def _line_clearance_checklist_config(config: dict) -> dict:
+    steps: list[dict] = []
+    fields: list[dict] = []
+    for row in config.get("rows") or []:
+        cells = [str((cell or {}).get("text") or "").strip() for cell in (row.get("cells") or [])]
+        if not any(cells):
+            continue
+        row_text = " ".join(cells).lower()
+        if "технолог" in row_text and ("этап" in row_text or "подпись" in row_text):
+            continue
+        no = cells[0] if cells else ""
+        text = cells[1] if len(cells) > 1 else " ".join(cells[1:])
+        if not text or text.lower() in {"технологические этапы", "технологоческие этапы"}:
+            continue
+        if not no or not any(ch.isdigit() for ch in no):
+            no = str(len(steps) + 1)
+        no = no.strip(".")
+        step = {"no": no, "text": text, "dp_field_index": len(fields)}
+        fields.append({"label": f"Этап {no} · Выполнено ДП", "type": "signature_operator"})
+        step["dok_field_index"] = len(fields)
+        fields.append({"label": f"Этап {no} · Проверено ДОК", "type": "signature_qa"})
+        steps.append(step)
+
+    out = dict(config)
+    out["kind"] = "checklist"
+    out["line_clearance_checklist"] = True
+    out["steps"] = steps
+    out["fields"] = fields
+    out.pop("rows", None)
+    out.pop("tables", None)
+    return out
 
 
 def _efficiency_calculation_fields() -> list[dict]:
@@ -453,6 +509,8 @@ def _efficiency_calculation_fields() -> list[dict]:
 
 def _effective_config(section: BmrInstanceSection) -> dict:
     config = dict(section.config or {})
+    if _is_line_clearance_control_table(config, section.title):
+        return _line_clearance_checklist_config(config)
     if str(config.get("kind") or section.section_type) == "process_table" and _is_efficiency_calculation_config(config, section.title):
         config["process_table_variant"] = "efficiency_calculation"
         config["fields"] = _efficiency_calculation_fields()
@@ -482,6 +540,8 @@ def _stages_of(instance: BmrInstance) -> list[dict]:
     out: list[dict] = []
     seen: set[str] = set()
     for section in instance.sections:
+        if _is_hidden_bmr_section(section):
+            continue
         code = _section_stage(section)
         if code in seen:
             continue
@@ -616,6 +676,8 @@ def _signature_log_of(db: Session, instance: BmrInstance) -> list[dict]:
         if not value.get("signed_by"):
             continue
         section = sections_by_id.get(entry.section_id)
+        if section and _is_hidden_bmr_section(section):
+            continue
         stage = _section_stage(section) if section else None
         sign_role = str(value.get("role") or "")
         duty = {"qa": "ДОК", "dok": "ДОК", "dp": "ДП", "wh": "Склад"}.get(sign_role, sign_role or "Подпись")
@@ -653,6 +715,8 @@ def _stage_route(db: Session, instance: BmrInstance) -> list[dict]:
     order: list[str] = []
     groups: dict[str, list[BmrInstanceSection]] = {}
     for section in instance.sections:
+        if _is_hidden_bmr_section(section):
+            continue
         code = _section_stage(section)
         if code not in groups:
             groups[code] = []
@@ -668,7 +732,7 @@ def _stage_route(db: Session, instance: BmrInstance) -> list[dict]:
         last_signer: str | None = None
         last_at: str | None = None
         for section in sections:
-            fields = (section.config or {}).get("fields", [])
+            fields = _section_fields(section)
             block_done = 0
             for field_index, field in enumerate(fields):
                 entry = entry_map.get((section.id, field_index))
@@ -782,6 +846,8 @@ def _section_rooms(section: BmrInstanceSection) -> list[str]:
 
 
 def _section_visible_for_user(section: BmrInstanceSection, user: CurrentUser) -> bool:
+    if _is_hidden_bmr_section(section):
+        return False
     if _is_bmr_supervisor(user):
         return True
     if str((section.config or {}).get("kind") or section.section_type) == "production_formula":
@@ -802,7 +868,7 @@ def _has_user_room_stage(instance: BmrInstance, user: CurrentUser) -> bool:
     user_room = _room_from_workstation(user.workstation_id)
     if not user_room:
         return False
-    return any(user_room in _section_rooms(section) for section in instance.sections if not (section.config or {}).get("room_assignment_required"))
+    return any(user_room in _section_rooms(section) for section in instance.sections if not _is_hidden_bmr_section(section) and not (section.config or {}).get("room_assignment_required"))
 
 
 def _visible_sections(instance: BmrInstance, user: CurrentUser) -> list[BmrInstanceSection]:
@@ -849,7 +915,7 @@ def _ordered_fields(instance: BmrInstance, user: CurrentUser) -> list[tuple[UUID
     ordered: list[tuple[UUID, int, str]] = []
     final_fields: list[tuple[UUID, int, str]] = []
     for section in _visible_sections(instance, user):
-        if _is_manual_signature_journal_section(section):
+        if _is_hidden_bmr_section(section):
             continue
         fields = _section_fields(section)
         for field_index, field in enumerate(fields):
