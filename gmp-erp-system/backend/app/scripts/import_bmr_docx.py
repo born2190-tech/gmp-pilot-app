@@ -467,13 +467,44 @@ def _env_params(rows: list[list[str]]) -> list[dict]:
 
 def _equipment(rows: list[list[str]]) -> list[dict]:
     out = []
+    headers = [_clean(c).lower() for c in (rows[0] if rows else [])]
+    has_brand = any("марка" in h for h in headers)
+    has_combined_model_serial = any("модель/сер" in h or ("модель" in h and "сер" in h) for h in headers)
     for r in rows[1:]:
-        cells = (r + ["", "", "", "", ""])[:6]
+        cells = [_clean(c) for c in (r + [""] * 7)[:7]]
         name = _clean(cells[1]) or _clean(cells[0])
         if not name or name.lower() in ("№", "no"):
             continue
-        out.append({"name": name, "model": _clean(cells[2]), "serial": _clean(cells[3]),
-                    "sop": _clean(cells[4]), "calib": _clean(cells[5])})
+        if has_brand and len(cells) >= 7:
+            out.append({
+                "name": name,
+                "model": cells[2],
+                "brand": cells[3],
+                "serial": cells[4],
+                "sop": cells[5],
+                "calib": cells[6],
+            })
+            continue
+        # Старый формат бумажного BMR: "Модель/сер.№" в одной колонке,
+        # затем СОП и дата поверки. Не раскладываем СОП в серийный номер.
+        if has_combined_model_serial or len([c for c in cells if c]) <= 5:
+            out.append({
+                "name": name,
+                "model": cells[2],
+                "brand": "",
+                "serial": "",
+                "sop": cells[3],
+                "calib": cells[4],
+            })
+            continue
+        out.append({
+            "name": name,
+            "model": cells[2],
+            "brand": cells[3],
+            "serial": cells[4],
+            "sop": cells[5],
+            "calib": cells[6],
+        })
     return out
 
 

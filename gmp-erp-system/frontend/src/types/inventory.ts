@@ -1187,7 +1187,7 @@ export interface BmrChecklistStep {
   dok_field_index?: number
 }
 export interface BmrEnvParam { name: string; unit?: string; limit?: string; lo?: number; hi?: number; samples?: number }
-export interface BmrEquipmentRow { name: string; model?: string; serial?: string; sop?: string; calib?: string; spec?: string; per_tab?: string; per_series?: string }
+export interface BmrEquipmentRow { name: string; model?: string; brand?: string; serial?: string; sop?: string; calib?: string; spec?: string; per_tab?: string; per_series?: string }
 export interface BmrDistItem { name: string; spec?: string; qty?: string }
 export interface BmrDistGroup { title: string; items: BmrDistItem[] }
 export interface BmrIpcPhase { key: string; title: string }

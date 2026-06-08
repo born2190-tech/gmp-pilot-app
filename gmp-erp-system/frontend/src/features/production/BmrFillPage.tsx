@@ -1359,12 +1359,12 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     return wrap(
       <table className="w-full">
         <thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
-          <th className="px-3 py-2">{t('bmrFill.eqName')}</th><th className="px-3 py-2">{t('bmrFill.eqModel')}</th><th className="px-3 py-2">{t('bmrFill.eqSerial')}</th><th className="px-3 py-2">{t('bmrFill.eqSop')}</th><th className="px-3 py-2">{t('bmrFill.eqCalib')}</th>
+          <th className="px-3 py-2">{t('bmrFill.eqName')}</th><th className="px-3 py-2">{t('bmrFill.eqModel')}</th><th className="px-3 py-2">{t('bmrFill.eqBrand')}</th><th className="px-3 py-2">{t('bmrFill.eqSerial')}</th><th className="px-3 py-2">{t('bmrFill.eqSop')}</th><th className="px-3 py-2">{t('bmrFill.eqCalib')}</th>
         </tr></thead>
         <tbody>{rows.map((r, i) => (
           <tr key={i} className="border-b border-slate-100 text-[12.5px] text-slate-700">
             <td className="px-3 py-2">{r.name}</td><td className="mono px-3 py-2 text-slate-500">{r.model || '—'}</td>
-            <td className="mono px-3 py-2 text-slate-500">{r.serial || '—'}</td><td className="mono px-3 py-2 text-slate-500">{r.sop || '—'}</td>
+            <td className="mono px-3 py-2 text-slate-500">{r.brand || '—'}</td><td className="mono px-3 py-2 text-slate-500">{r.serial || '—'}</td><td className="mono px-3 py-2 text-slate-500">{r.sop || '—'}</td>
             <td className="px-3 py-2 text-slate-500">{r.calib || '—'}</td>
           </tr>
         ))}</tbody>

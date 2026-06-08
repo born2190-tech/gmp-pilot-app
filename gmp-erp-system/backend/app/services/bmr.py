@@ -478,6 +478,57 @@ def _with_line_clearance_approval(config: dict) -> dict:
     return out
 
 
+def _normalize_equipment_config(config: dict) -> dict:
+    rows = config.get("rows")
+    if not isinstance(rows, list):
+        return config
+    normalized: list[dict] = []
+    changed = False
+    for row in rows:
+        if not isinstance(row, dict):
+            normalized.append(row)
+            continue
+        item = dict(row)
+        model = str(item.get("model") or "")
+        brand = str(item.get("brand") or "")
+        serial = str(item.get("serial") or "")
+        sop = str(item.get("sop") or "")
+        calib = str(item.get("calib") or "")
+        serial_looks_sop = bool(re.search(r"\b(дпск|соп)\b", serial.lower()))
+        calib_looks_sop = bool(re.search(r"\b(дпск|соп)\b", calib.lower()))
+        # Existing imported 5-column tables were stored as:
+        # model=<model/serial>, serial=<SOP>, sop="", calib="".
+        if serial_looks_sop:
+            item["sop"] = serial
+            item["serial"] = ""
+            if sop and not calib:
+                item["calib"] = sop
+            item.setdefault("brand", brand)
+            changed = True
+        elif serial.strip() in {"", "-", "˗", "—"} and sop.lower().strip() == "не подлежит" and not calib:
+            item["serial"] = ""
+            item["sop"] = serial or "-"
+            item["calib"] = sop
+            item.setdefault("brand", brand)
+            changed = True
+        # Existing imported 7-column tables were stored as:
+        # model=<model>, serial=<brand>, sop=<serial>, calib=<SOP>.
+        elif calib_looks_sop and sop and not brand:
+            item["brand"] = serial
+            item["serial"] = sop
+            item["sop"] = calib
+            item["calib"] = ""
+            changed = True
+        else:
+            item.setdefault("brand", brand)
+        normalized.append(item)
+    if not changed and all(isinstance(row, dict) and "brand" in row for row in rows):
+        return config
+    out = dict(config)
+    out["rows"] = normalized
+    return out
+
+
 def _line_clearance_checklist_config(config: dict) -> dict:
     steps: list[dict] = []
     fields: list[dict] = []
@@ -534,6 +585,8 @@ def _effective_config(section: BmrInstanceSection) -> dict:
         return _line_clearance_checklist_config(config)
     if config.get("line_clearance_checklist") and str(config.get("kind") or section.section_type) == "checklist":
         return _with_line_clearance_approval(config)
+    if str(config.get("kind") or section.section_type) == "equipment":
+        return _normalize_equipment_config(config)
     if str(config.get("kind") or section.section_type) == "process_table" and _is_efficiency_calculation_config(config, section.title):
         config["process_table_variant"] = "efficiency_calculation"
         config["fields"] = _efficiency_calculation_fields()
