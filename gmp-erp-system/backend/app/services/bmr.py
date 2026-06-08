@@ -529,6 +529,154 @@ def _normalize_equipment_config(config: dict) -> dict:
     return out
 
 
+def _operator_input_type(label: str) -> str:
+    low = label.lower()
+    if any(k in low for k in ("количество", "вес", "потер", "выход", "кг", " г", "%", "об/мин", "минут")):
+        return "number"
+    return "text"
+
+
+def _operator_input_unit(label: str) -> str | None:
+    low = label.lower()
+    if "кг" in low:
+        return "кг"
+    if "(г" in low or re.search(r"\bг\b", low):
+        return "г"
+    if "%" in low:
+        return "%"
+    if "об/мин" in low:
+        return "об/мин"
+    if "минут" in low:
+        return "мин"
+    return None
+
+
+def _operator_cell_needs_input(text: str, row_label: str) -> bool:
+    low = str(text or "").lower().strip(" :")
+    if "___" in low:
+        return True
+    if low in {"", "—", "-"}:
+        return False
+    return any(k in low for k in (
+        "время начала", "время окончания", "время окончание",
+        "дата начала", "дата окончания", "дата окончание",
+    ))
+
+
+def _operator_field_label(prefix: str, row_label: str, cell_text: str, fallback: str) -> str:
+    text = str(cell_text or "").strip()
+    row = str(row_label or "").strip()
+    if "___" in text and row:
+        text = row
+    label = " · ".join(x for x in (prefix, text or row or fallback) if x)
+    return label[:140] if label else fallback
+
+
+def _normalize_operator_checklist_config(config: dict) -> dict:
+    """Make imported paper-process blanks real fillable fields in checklist steps.
+
+    Some DOCX tables contain cells like "_________(г или кг)" without a field_index.
+    In an electronic BMR those must be editable and signed before moving forward.
+    """
+    if str(config.get("kind") or "").lower() != "checklist":
+        return config
+    steps = config.get("steps")
+    if not isinstance(steps, list):
+        return config
+    old_fields = config.get("fields") if isinstance(config.get("fields"), list) else []
+    new_fields: list[dict] = []
+    old_to_new: dict[int, int] = {}
+    changed = False
+
+    def copy_old_field(old_index: int) -> int:
+        nonlocal changed
+        if old_index in old_to_new:
+            return old_to_new[old_index]
+        if 0 <= old_index < len(old_fields):
+            field = dict(old_fields[old_index] or {})
+        else:
+            field = {"label": f"Поле {len(new_fields) + 1}", "type": "text"}
+            changed = True
+        new_index = len(new_fields)
+        new_fields.append(field)
+        old_to_new[old_index] = new_index
+        if new_index != old_index:
+            changed = True
+        return new_index
+
+    normalized_steps: list[dict] = []
+    for step_no, step in enumerate(steps, start=1):
+        if not isinstance(step, dict):
+            normalized_steps.append(step)
+            continue
+        out_step = dict(step)
+        prefix = f"Этап {out_step.get('no') or step_no}"
+        normalized_tables: list[dict] = []
+        for table in out_step.get("tables") or []:
+            rows_out: list[dict] = []
+            rows = table.get("rows") if isinstance(table, dict) else []
+            for ri, row in enumerate(rows or []):
+                cells = row.get("cells") if isinstance(row, dict) else []
+                texts = [str((cell or {}).get("text") or "").strip() for cell in cells]
+                nonempty = [text for text in texts if text]
+                row_label = nonempty[0] if nonempty else ""
+                cells_out: list[dict] = []
+                for ci, cell in enumerate(cells or []):
+                    item = dict(cell or {})
+                    text = str(item.get("text") or "")
+                    old_index = item.get("field_index")
+                    if isinstance(old_index, int):
+                        item["field_index"] = copy_old_field(old_index)
+                    elif _operator_cell_needs_input(text, row_label):
+                        label = _operator_field_label(prefix, row_label, text, f"Поле {len(new_fields) + 1}")
+                        field: dict = {"label": label, "type": _operator_input_type(label + " " + text)}
+                        unit = _operator_input_unit(label + " " + text)
+                        if unit:
+                            field["unit"] = unit
+                            item["unit"] = unit
+                        item["field_index"] = len(new_fields)
+                        item["type"] = field["type"]
+                        new_fields.append(field)
+                        changed = True
+                    cells_out.append(item)
+                rows_out.append({"cells": cells_out})
+            normalized_tables.append({"rows": rows_out})
+        if normalized_tables:
+            out_step["tables"] = normalized_tables
+
+        dp_old = out_step.get("dp_field_index")
+        dok_old = out_step.get("dok_field_index")
+        if isinstance(dp_old, int):
+            out_step["dp_field_index"] = copy_old_field(dp_old)
+        else:
+            out_step["dp_field_index"] = len(new_fields)
+            new_fields.append({"label": f"{prefix} · Выполнено ДП", "type": "signature_operator"})
+            changed = True
+        if isinstance(dok_old, int):
+            out_step["dok_field_index"] = copy_old_field(dok_old)
+        else:
+            out_step["dok_field_index"] = len(new_fields)
+            new_fields.append({"label": f"{prefix} · Проверено ДОК", "type": "signature_qa"})
+            changed = True
+        normalized_steps.append(out_step)
+
+    for old_index, field in enumerate(old_fields):
+        if old_index not in old_to_new:
+            label = str((field or {}).get("label") or "")
+            if "итоговое утверждение" in label.lower():
+                copy_old_field(old_index)
+
+    if not changed and len(new_fields) == len(old_fields):
+        return config
+    out = dict(config)
+    out["steps"] = normalized_steps
+    out["fields"] = new_fields
+    approval_index = out.get("approval_field_index")
+    if isinstance(approval_index, int) and approval_index in old_to_new:
+        out["approval_field_index"] = old_to_new[approval_index]
+    return out
+
+
 def _line_clearance_checklist_config(config: dict) -> dict:
     steps: list[dict] = []
     fields: list[dict] = []
@@ -585,6 +733,8 @@ def _effective_config(section: BmrInstanceSection) -> dict:
         return _line_clearance_checklist_config(config)
     if config.get("line_clearance_checklist") and str(config.get("kind") or section.section_type) == "checklist":
         return _with_line_clearance_approval(config)
+    if str(config.get("kind") or section.section_type) == "checklist":
+        config = _normalize_operator_checklist_config(config)
     if str(config.get("kind") or section.section_type) == "equipment":
         return _normalize_equipment_config(config)
     if str(config.get("kind") or section.section_type) == "process_table" and _is_efficiency_calculation_config(config, section.title):

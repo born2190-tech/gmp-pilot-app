@@ -1065,6 +1065,11 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     )
   }
 
+  const compactPlaceholder = (text: string) => text.replace(/_+/g, '').replace(/\s+/g, ' ').trim()
+  const tableHasInputs = (rows: BmrProcessTableRow[]) => (rows || []).some((row) =>
+    (row.cells || []).some((cell) => typeof cell.field_index === 'number')
+  )
+
   const renderProcessTable = (rows: BmrProcessTableRow[]) => (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] border-collapse text-[12px]">
@@ -1095,6 +1100,73 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
       </table>
     </div>
   )
+
+  const renderOperatorTable = (rows: BmrProcessTableRow[], tableNo: number) => {
+    if (!tableHasInputs(rows)) {
+      return (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          {renderProcessTable(rows)}
+        </div>
+      )
+    }
+    const headerCells = (rows[0]?.cells || []).map((cell) => compactPlaceholder(String(cell.text || ''))).filter(Boolean)
+    const tableTitle = headerCells.length ? headerCells.join(' · ') : `${t('bmrFill.operatorData')} ${tableNo + 1}`
+    const readRows: string[] = []
+    const inputCards: React.ReactNode[] = []
+
+    ;(rows || []).forEach((row, ri) => {
+      const cells = row.cells || []
+      const inputCells = cells
+        .map((cell, ci) => ({ cell, ci }))
+        .filter(({ cell }) => typeof cell.field_index === 'number')
+      const rowTexts = cells
+        .filter((cell) => typeof cell.field_index !== 'number')
+        .map((cell) => compactPlaceholder(String(cell.text || '')))
+        .filter(Boolean)
+      if (!inputCells.length) {
+        const text = rowTexts.join(' · ')
+        if (ri > 0 && text) readRows.push(text)
+        return
+      }
+      inputCells.forEach(({ cell, ci }) => {
+        const fi = cell.field_index as number
+        const cellLabel = compactPlaceholder(String(cell.text || ''))
+        const label = rowTexts.length ? rowTexts.join(' · ') : cellLabel || `${t('bmrFill.field')} ${fi + 1}`
+        inputCards.push(
+          <div key={`${ri}:${ci}:${fi}`} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+            {inputFor(fi, cell.type || 'text', cell.unit)}
+          </div>
+        )
+      })
+    })
+
+    return (
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
+            <div className="mt-0.5 text-[12.5px] font-semibold text-slate-800">{tableTitle}</div>
+          </div>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{t('bmrFill.recordValues')}</span>
+        </div>
+        <div className="space-y-3 p-3">
+          {readRows.length > 0 && (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {readRows.map((text, idx) => (
+                <div key={idx} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] leading-relaxed text-slate-600">
+                  {text}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {inputCards}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const renderEfficiencyCalculation = () => {
     const dpE = entries[key(sid, 10)]
@@ -1228,21 +1300,22 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
             const dpUnlocked = fieldUnlocked(allSections, entries, draft, sid, dpFi)
             const dokUnlocked = fieldUnlocked(allSections, entries, draft, sid, dokFi)
             return (
-              <div key={i} className="p-3">
-                <div className="grid grid-cols-[52px_1fr] gap-3">
-                  <div className="mono flex h-8 items-center justify-center rounded-md bg-slate-100 text-[12px] font-semibold text-slate-500">{st.no || i + 1}</div>
-                  <div className="min-w-0">
-                    <div className="whitespace-pre-wrap text-[13px] leading-6 text-slate-800">{st.text}</div>
+              <div key={i} className="bg-white p-3 sm:p-4">
+                <div className="grid grid-cols-[44px_1fr] gap-3">
+                  <div className="mono flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-[12px] font-bold text-blue-700 ring-1 ring-inset ring-blue-100">{st.no || i + 1}</div>
+                  <div className="min-w-0 space-y-3">
+                    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{t('bmrFill.processStep')}</div>
+                      <div className="mt-1 whitespace-pre-wrap text-[13.5px] leading-6 text-slate-800">{st.text}</div>
+                    </div>
                     {Array.isArray(st.tables) && st.tables.length > 0 && (
-                      <div className="mt-3 space-y-3">
+                      <div className="space-y-3">
                         {st.tables.map((tbl, ti) => (
-                          <div key={ti} className="overflow-x-auto rounded-lg border border-slate-200">
-                            {renderProcessTable(tbl.rows || [])}
-                          </div>
+                          <div key={ti}>{renderOperatorTable(tbl.rows || [], ti)}</div>
                         ))}
                       </div>
                     )}
-                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.doneDp')}</div>
                         <SignCell role="dp" state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(dpFi, 'dp', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} />

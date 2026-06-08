@@ -143,7 +143,7 @@ def _strip_signature_text(text: str) -> str:
 
 def _field_type(label: str) -> str:
     low = label.lower()
-    if any(k in low for k in ("вес", "количество", "выход", "скорость", "температур", "влажност", "давлен")):
+    if any(k in low for k in ("вес", "количество", "выход", "скорость", "температур", "влажност", "давлен", "кг", " г", "%")):
         return "number"
     return "text"
 
@@ -165,8 +165,10 @@ def _field_unit(label: str) -> str | None:
 
 def _label_needs_input(label: str) -> bool:
     low = label.lower().strip(" :")
+    if "___" in low or "____" in low:
+        return True
     return any(k in low for k in (
-        "время начала", "время окончания", "дата начала", "дата окончания",
+        "время начала", "время окончания", "время окончание", "дата начала", "дата окончания",
         "количество", "вес", "выход", "отклонение", "другие", "согласование",
     ))
 
