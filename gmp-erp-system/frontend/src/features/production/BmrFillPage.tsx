@@ -920,7 +920,7 @@ function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, si
 }
 
 /* ---- Signature cell ---- */
-function SignCell({ role, state, who, at, onSign }: { role: SignRole; state: 'locked' | 'ready' | 'signed'; who?: string; at?: string; onSign?: () => void }) {
+function SignCell({ role, state, who, at, onSign, lockedLabel }: { role: SignRole; state: 'locked' | 'ready' | 'signed'; who?: string; at?: string; onSign?: () => void; lockedLabel?: string }) {
   const { t } = useI18n()
   const dok = role === 'dok'
   const wh = role === 'wh'
@@ -935,7 +935,7 @@ function SignCell({ role, state, who, at, onSign }: { role: SignRole; state: 'lo
       <div className="leading-tight"><div className={`text-[12px] font-semibold ${signedName}`}>{who}</div><div className={`mono text-[10px] ${signedMeta}`}>{signRoleLabel(role, t)} · {at}</div></div>
     </div>
   )
-  if (state === 'locked') return <div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-400"><Lock size={13} /> {dok ? t('bmrFill.afterDp') : t('bmrFill.awaiting')}</div>
+  if (state === 'locked') return <div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-400"><Lock size={13} /> {lockedLabel || (dok ? t('bmrFill.afterDp') : t('bmrFill.awaiting'))}</div>
   return <button onClick={onSign} className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-semibold text-white shadow-sm active:scale-[0.98] ${btnTone}`}><Pen size={13} /> {t('bmrFill.sign')} · {signRoleLabel(role, t)}</button>
 }
 
@@ -1214,6 +1214,10 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   /* ---- checklist ---- */
   if (kind === 'checklist') {
     const steps = section.config?.steps || []
+    const approvalIndex = typeof section.config?.approval_field_index === 'number' ? section.config.approval_field_index : null
+    const approvalEntry = approvalIndex !== null ? entries[key(sid, approvalIndex)] : undefined
+    const approvalUnlocked = approvalIndex !== null ? fieldUnlocked(allSections, entries, draft, sid, approvalIndex) : false
+    const approvalLabel = approvalIndex !== null ? (section.config?.fields?.[approvalIndex]?.label || t('bmrFill.lineClearanceFinalApproval')) : ''
     return wrap(
       <div className="divide-y divide-slate-100">
         {steps.map((st, i) => {
@@ -1253,6 +1257,29 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
               </div>
             )
           })}
+        {approvalIndex !== null && (
+          <div className="bg-slate-50/70 p-3">
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-slate-400">{t('bmrFill.lineClearanceApproval')}</div>
+                  <div className="mt-1 text-[14px] font-semibold text-slate-900">{approvalLabel}</div>
+                  <div className="mt-1 text-[12px] leading-relaxed text-slate-500">{t('bmrFill.lineClearanceApprovalHint')}</div>
+                </div>
+                <div className="shrink-0">
+                  <SignCell
+                    role="dok"
+                    state={sigState(approvalEntry, true, 'dok', approvalUnlocked)}
+                    who={approvalEntry?.value?.signed_by}
+                    at={fmtTime(approvalEntry?.value?.signed_at)}
+                    lockedLabel={t('bmrFill.afterAllLineClearance')}
+                    onSign={canDok && !closed && approvalUnlocked ? () => onSign(approvalIndex, 'dok', t('bmrFill.reasonLineClearanceApproval')) : undefined}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }

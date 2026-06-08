@@ -414,6 +414,8 @@ def _line_clearance_steps_from_rows(rows: list[list[str]]) -> tuple[list[dict], 
         step["dok_field_index"] = len(fields)
         fields.append({"label": f"Этап {no} · Проверено ДОК", "type": "signature_qa"})
         steps.append(step)
+    if steps:
+        fields.append({"label": "Итоговое утверждение line clearance · ДОК", "type": "signature_qa"})
     return steps, fields
 
 
@@ -745,7 +747,17 @@ def build_sections(doc: Document) -> list[dict]:
         if cur_stage.startswith("line_clearance") and ("выполнено дп" in flat or "подпись" in flat):
             lc_steps, lc_fields = _line_clearance_steps_from_rows(rows)
             if lc_steps:
-                add("checklist", pending_title or "Контрольная таблица очистки линии", "checklist", {"steps": lc_steps, "fields": lc_fields})
+                add(
+                    "checklist",
+                    pending_title or "Контрольная таблица очистки линии",
+                    "checklist",
+                    {
+                        "steps": lc_steps,
+                        "fields": lc_fields,
+                        "line_clearance_checklist": True,
+                        "approval_field_index": len(lc_fields) - 1,
+                    },
+                )
                 pending_title = ""
                 continue
 

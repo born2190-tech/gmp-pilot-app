@@ -1204,6 +1204,8 @@ export interface BmrSectionConfig {
   room_source_text?: string
   operator_visible?: boolean
   process_table_variant?: string
+  line_clearance_checklist?: boolean
+  approval_field_index?: number
   process?: string
   room_no?: string
   sop?: string

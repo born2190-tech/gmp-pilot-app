@@ -480,11 +480,14 @@ def _line_clearance_checklist_config(config: dict) -> dict:
         fields.append({"label": f"Этап {no} · Проверено ДОК", "type": "signature_qa"})
         steps.append(step)
 
+    approval_index = len(fields)
+    fields.append({"label": "Итоговое утверждение line clearance · ДОК", "type": "signature_qa"})
     out = dict(config)
     out["kind"] = "checklist"
     out["line_clearance_checklist"] = True
     out["steps"] = steps
     out["fields"] = fields
+    out["approval_field_index"] = approval_index
     out.pop("rows", None)
     out.pop("tables", None)
     return out
