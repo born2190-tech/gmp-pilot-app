@@ -419,6 +419,43 @@ def _line_clearance_steps_from_rows(rows: list[list[str]]) -> tuple[list[dict], 
     return steps, fields
 
 
+def _looks_like_line_clearance_checklist(title: str, flat: str, steps: list[dict]) -> bool:
+    text = " ".join([title, flat, " ".join(str(step.get("text") or "") for step in steps)]).lower()
+    markers = (
+        "контрольная таблица очист",
+        "весь персонал",
+        "ничего не осталось от предыдущей серии",
+        "стикер «зелёный»",
+        "стикер \"зелёный\"",
+        "журналы для конкретной машины",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _line_clearance_extra(extra: dict, stage: str, title: str = "", flat: str = "") -> dict:
+    steps = extra.get("steps") or []
+    if not stage.startswith("line_clearance") or not _looks_like_line_clearance_checklist(title, flat, steps):
+        return extra
+    fields = list(extra.get("fields") or [])
+    approval_index = next(
+        (
+            idx for idx, field in enumerate(fields)
+            if "итоговое утверждение" in str((field or {}).get("label") or "").lower()
+            and "line clearance" in str((field or {}).get("label") or "").lower()
+        ),
+        None,
+    )
+    if approval_index is None:
+        approval_index = len(fields)
+        fields.append({"label": "Итоговое утверждение line clearance · ДОК", "type": "signature_qa"})
+    return {
+        **extra,
+        "fields": fields,
+        "line_clearance_checklist": True,
+        "approval_field_index": approval_index,
+    }
+
+
 def _env_params(rows: list[list[str]]) -> list[dict]:
     params = []
     for r in rows[1:]:
@@ -737,7 +774,7 @@ def build_sections(doc: Document) -> list[dict]:
         # технологические этапы (шаги процесса) с подписями
         st, st_fields = _steps(val)
         if st and ("технолог" in flat or "этап" in flat or len(st) >= 1):
-            extra = {"steps": st, "fields": st_fields}
+            extra = _line_clearance_extra({"steps": st, "fields": st_fields}, cur_stage, pending_title, flat)
             add("checklist", pending_title or "Технологические этапы", "checklist", extra)
             pending_title = ""
             continue
@@ -751,12 +788,10 @@ def build_sections(doc: Document) -> list[dict]:
                     "checklist",
                     pending_title or "Контрольная таблица очистки линии",
                     "checklist",
-                    {
+                    _line_clearance_extra({
                         "steps": lc_steps,
                         "fields": lc_fields,
-                        "line_clearance_checklist": True,
-                        "approval_field_index": len(lc_fields) - 1,
-                    },
+                    }, cur_stage, pending_title or "Контрольная таблица очистки линии", flat),
                 )
                 pending_title = ""
                 continue

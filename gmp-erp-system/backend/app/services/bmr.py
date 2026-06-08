@@ -457,6 +457,27 @@ def _is_line_clearance_control_table(config: dict, title: str | None = None) -> 
     )
 
 
+def _with_line_clearance_approval(config: dict) -> dict:
+    fields = list(config.get("fields") or [])
+    approval_index = config.get("approval_field_index")
+    if isinstance(approval_index, int) and 0 <= approval_index < len(fields):
+        return config
+    for idx, field in enumerate(fields):
+        label = str((field or {}).get("label") or "").lower()
+        if "итоговое утверждение" in label and "line clearance" in label:
+            out = dict(config)
+            out["line_clearance_checklist"] = True
+            out["approval_field_index"] = idx
+            return out
+    approval_index = len(fields)
+    fields.append({"label": "Итоговое утверждение line clearance · ДОК", "type": "signature_qa"})
+    out = dict(config)
+    out["line_clearance_checklist"] = True
+    out["fields"] = fields
+    out["approval_field_index"] = approval_index
+    return out
+
+
 def _line_clearance_checklist_config(config: dict) -> dict:
     steps: list[dict] = []
     fields: list[dict] = []
@@ -480,17 +501,14 @@ def _line_clearance_checklist_config(config: dict) -> dict:
         fields.append({"label": f"Этап {no} · Проверено ДОК", "type": "signature_qa"})
         steps.append(step)
 
-    approval_index = len(fields)
-    fields.append({"label": "Итоговое утверждение line clearance · ДОК", "type": "signature_qa"})
     out = dict(config)
     out["kind"] = "checklist"
     out["line_clearance_checklist"] = True
     out["steps"] = steps
     out["fields"] = fields
-    out["approval_field_index"] = approval_index
     out.pop("rows", None)
     out.pop("tables", None)
-    return out
+    return _with_line_clearance_approval(out)
 
 
 def _efficiency_calculation_fields() -> list[dict]:
@@ -514,6 +532,8 @@ def _effective_config(section: BmrInstanceSection) -> dict:
     config = dict(section.config or {})
     if _is_line_clearance_control_table(config, section.title):
         return _line_clearance_checklist_config(config)
+    if config.get("line_clearance_checklist") and str(config.get("kind") or section.section_type) == "checklist":
+        return _with_line_clearance_approval(config)
     if str(config.get("kind") or section.section_type) == "process_table" and _is_efficiency_calculation_config(config, section.title):
         config["process_table_variant"] = "efficiency_calculation"
         config["fields"] = _efficiency_calculation_fields()
