@@ -1347,21 +1347,64 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
 
   /* ---- production_formula (справочный состав серии, read-only) ---- */
   if (kind === 'production_formula') {
-    const rows = section.config?.rows || []
+    const rows = (section.config?.rows || []) as Array<{ group?: string; name?: string; spec?: string; per_tab?: string; per_series?: string; material_code?: string }>
+    const groups: Array<{ title: string; items: typeof rows }> = []
+    rows.forEach((row) => {
+      if (row.group) {
+        groups.push({ title: row.group, items: [] })
+        return
+      }
+      if (!row.name) return
+      if (groups.length === 0) groups.push({ title: t('bmrFill.materials'), items: [] })
+      groups[groups.length - 1].items.push(row)
+    })
+    const displayGroups = groups.filter((group) => group.items.length > 0)
+    const isTotalRow = (name?: string) => /(^|\s)(основной|общий)\s+вес/i.test(name || '')
     return wrap(
-      <div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px]">
-            <thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-2">{t('bmrFill.composition')}</th><th className="px-3 py-2">{t('bmrFill.specification')}</th><th className="px-3 py-2">{t('bmrFill.perTablet')}</th><th className="px-3 py-2">{t('bmrFill.perSeries')}</th>
-            </tr></thead>
-            <tbody>{rows.map((r, i) => (
-              <tr key={i} className="border-b border-slate-100 text-[12.5px] text-slate-700">
-                <td className="px-3 py-2">{r.name}</td><td className="mono px-3 py-2 text-slate-500">{r.spec || '—'}</td>
-                <td className="mono px-3 py-2 text-slate-600">{r.per_tab || '—'}</td><td className="mono px-3 py-2 text-slate-600">{r.per_series || '—'}</td>
-              </tr>
-            ))}</tbody>
-          </table>
+      <div className="space-y-3 p-3">
+        <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+          <div className="text-[12.5px] font-semibold text-blue-900">{t('bmrFill.formulaPlanTitle')}</div>
+          <div className="mt-1 text-[11.5px] leading-relaxed text-blue-700">{t('bmrFill.formulaPlanHint')}</div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
+          {displayGroups.map((group, gi) => (
+            <div key={`${group.title}-${gi}`} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-[13px] font-semibold text-slate-900">{group.title}</div>
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10.5px] font-semibold text-slate-600">
+                  {group.items.length} {t('bmrFill.formulaItems')}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[620px]">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-white text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      <th className="px-3 py-2">{t('bmrFill.composition')}</th>
+                      <th className="px-3 py-2">{t('bmrFill.specification')}</th>
+                      <th className="px-3 py-2 text-right">{t('bmrFill.perTablet')}</th>
+                      <th className="px-3 py-2 text-right">{t('bmrFill.perSeries')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.items.map((r, i) => {
+                      const total = isTotalRow(r.name)
+                      return (
+                        <tr key={`${r.name}-${i}`} className={`border-b border-slate-100 text-[12.5px] last:border-b-0 ${total ? 'bg-slate-50 font-semibold text-slate-800' : 'text-slate-700'}`}>
+                          <td className="px-3 py-2">
+                            <div className="font-medium text-slate-900">{r.name}</div>
+                            {r.material_code && <div className="mt-1 inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">{r.material_code}</div>}
+                          </td>
+                          <td className="mono px-3 py-2 text-slate-500">{r.spec || '—'}</td>
+                          <td className="mono px-3 py-2 text-right text-slate-600">{r.per_tab || '—'}</td>
+                          <td className="mono px-3 py-2 text-right text-slate-600">{r.per_series || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
         {section.config?.note && <div className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">{section.config.note}</div>}
       </div>

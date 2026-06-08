@@ -784,6 +784,8 @@ def _section_rooms(section: BmrInstanceSection) -> list[str]:
 def _section_visible_for_user(section: BmrInstanceSection, user: CurrentUser) -> bool:
     if _is_bmr_supervisor(user):
         return True
+    if str((section.config or {}).get("kind") or section.section_type) == "production_formula":
+        return False
     if (section.config or {}).get("operator_visible") is False:
         return False
     if (section.config or {}).get("room_assignment_required"):
