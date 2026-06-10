@@ -144,10 +144,44 @@ def _cell_text(cell) -> str:
 
 def _strip_signature_text(text: str) -> str:
     # Бумажные строки подписи в конце шага: «Выполнил: ДП (Подпись и Дата)
-    # Проверил: ДОК (Подпись и Дата)» — в eBMR их заменяют кнопки э-подписи.
-    text = re.sub(r"\s*(Выполнил|Выполнено|Проверил|Проверено)\s*:?\s*\(?\s*(ДП|ДОК)\b.*$", "", text, flags=re.IGNORECASE)
+    # Проверил: ДОК (Подпись и Дата)», «Подтвержден ДОК ____» — в eBMR их
+    # заменяют кнопки э-подписи.
+    text = re.sub(r"\s*(Выполнил|Выполнено|Проверил|Проверено|Подтвержден[оа]?)\s*:?\s*\(?\s*(ДП|ДОК)\b.*$", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s*\(\s*Подпись\s*(и|/)\s*Дата\s*\)\s*:?", "", text, flags=re.IGNORECASE)
     return _clean(text)
+
+
+_BLANK_RE = re.compile(r"_{3,}")
+
+
+def _text_blank_unit(after: str) -> tuple[str | None, str]:
+    """Единица измерения по тексту сразу после прочерка → (unit, type)."""
+    m = re.match(r"\s*(%|кг|мин\b|г\b|см\b|мл\b|°c)", after, re.IGNORECASE)
+    if not m:
+        return None, "text"
+    return m.group(1).rstrip("."), "number"
+
+
+def _extract_text_blanks(text: str, fields: list[dict], context: str) -> list[dict] | None:
+    """Прочерки в тексте инструкции («Содержание влаги: ___% по массе») —
+    это места ввода данных: на каждый создаём поле; фронт рендерит ввод
+    прямо в строке текста (text_blanks по порядку прочерков)."""
+    if not _BLANK_RE.search(text):
+        return None
+    parts = _BLANK_RE.split(text)
+    blanks: list[dict] = []
+    for i in range(len(parts) - 1):
+        before = parts[i]
+        after = parts[i + 1]
+        unit, ftype = _text_blank_unit(after)
+        # Метка — хвост предложения перед прочерком («Содержание влаги»).
+        tail = re.split(r"[.!?]", before)[-1]
+        tail = _clean(tail).rstrip(" :=(")
+        label = _short_label(" · ".join(x for x in (context, tail) if x) or f"Значение {i + 1}", 90)
+        fi = len(fields)
+        fields.append({"label": label, "type": ftype, "unit": unit})
+        blanks.append({"field_index": fi, "type": ftype, "unit": unit})
+    return blanks
 
 
 def _field_type(label: str) -> str:
@@ -596,6 +630,9 @@ def _steps(table) -> tuple[list[dict], list[dict]]:
             if len(stripped) <= 2 and not tables:
                 continue
             step = {"no": no, "text": stripped or "Контрольная таблица"}
+            text_blanks = _extract_text_blanks(stripped, fields, f"Этап {no}")
+            if text_blanks:
+                step["text_blanks"] = text_blanks
             if tables:
                 step["tables"] = tables
             step["dp_field_index"] = len(fields)
@@ -909,6 +946,9 @@ def build_sections(doc: Document) -> list[dict]:
         if cur_room and not cur_rooms and "room_assignment_required" not in cfg:
             cfg["room_assignment_required"] = True
             cfg["room_source_text"] = cur_room
+        # Прочерки «впиши номер комнаты от руки» в заголовках стадий — мусор:
+        # комната в eBMR назначается отдельным полем.
+        title = _clean(re.sub(r"\s*_{2,}\s*", " ", title or ""))
         sections.append({"ordinal": ordinal, "section_type": stype, "title": _section_title(title, "Контрольная таблица")[:255], "config": cfg})
         # Висячие сноски, встреченные до этой секции, прикрепляем к ней.
         if note_buffer:

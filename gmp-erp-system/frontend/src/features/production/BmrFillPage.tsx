@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronRight, ClipboardCheck, Clock,
   DoorOpen, Droplet, Eye, FileDown, FileText, Gauge, Layers, Loader2, Lock, Map, Pen, Save, ShieldCheck,
@@ -1416,7 +1416,24 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                   <div className="min-w-0 space-y-3">
                     <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
                       <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{t('bmrFill.processStep')}</div>
-                      <div className="mt-1 whitespace-pre-wrap text-[13.5px] leading-6 text-slate-800">{st.text}</div>
+                      {Array.isArray(st.text_blanks) && st.text_blanks.length > 0 ? (
+                        // Прочерки в инструкции («Содержание влаги: ___ %») —
+                        // поля ввода прямо в строке текста, как на бумаге.
+                        <div className="mt-1 text-[13.5px] leading-7 text-slate-800">
+                          {st.text.split(/_{3,}/).map((part, pi, arr) => (
+                            <React.Fragment key={pi}>
+                              {part}
+                              {pi < arr.length - 1 && pi < st.text_blanks!.length && (
+                                <span className="mx-1 inline-flex align-middle">
+                                  {inputFor(st.text_blanks![pi].field_index, st.text_blanks![pi].type || 'text', st.text_blanks![pi].unit)}
+                                </span>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-1 whitespace-pre-wrap text-[13.5px] leading-6 text-slate-800">{st.text}</div>
+                      )}
                     </div>
                     {Array.isArray(st.tables) && st.tables.length > 0 && (
                       <div className="space-y-3">

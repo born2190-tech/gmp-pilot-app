@@ -1191,10 +1191,12 @@ export interface BmrStepTable {
   divisor?: string
   items?: BmrReqCalcItem[]
 }
+export interface BmrTextBlank { field_index: number; type?: string; unit?: string }
 export interface BmrChecklistStep {
   no?: string
   text: string
   tables?: BmrStepTable[]
+  text_blanks?: BmrTextBlank[]
   dp_field_index?: number
   dok_field_index?: number
 }
