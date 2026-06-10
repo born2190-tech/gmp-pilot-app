@@ -1114,8 +1114,11 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                   <td key={ci} className={`border-r border-slate-100 px-2 py-2 align-top last:border-r-0 ${cellCls}`}>
                     {isInput ? (
                       <div className="space-y-1">
-                        {text && <div className="text-[10.5px] font-medium uppercase tracking-wide text-slate-500">{text}</div>}
-                        {cellControl(fi, cell.type, cell.unit, text || sectionTitle)}
+                        {(() => {
+                          const label = text || fieldCardLabel(fi, '')
+                          return label ? <div className="text-[10.5px] font-medium leading-snug tracking-wide text-slate-600">{label}</div> : null
+                        })()}
+                        {cellControl(fi, cell.type, cell.unit, text || fieldCardLabel(fi, sectionTitle))}
                       </div>
                     ) : (
                       text || <span className="text-slate-300">—</span>
@@ -1129,6 +1132,23 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
       </table>
     </div>
   )
+
+  // Полное пояснение поля: строка таблицы (что измеряем) + колонка из метки
+  // шаблона («Перед просеиванием» / «Контроль»). Префикс «Этап N.N» срезаем —
+  // номер шага и так виден. Без колонки две ячейки одной строки получают
+  // одинаковую подпись («#0,8» и «#0,8») и неотличимы.
+  const fieldCardLabel = (fi: number, fallback: string) => {
+    const raw = String(section.config?.fields?.[fi]?.label || '')
+    const cleaned = raw.replace(/^Этап\s+[\d.]+\s*·\s*/i, '').trim()
+    const segs: string[] = []
+    const seen = new Set<string>()
+    for (const part of [...fallback.split('·'), ...cleaned.split('·')]) {
+      const seg = part.trim()
+      const k = seg.toLowerCase()
+      if (seg && !seen.has(k)) { seen.add(k); segs.push(seg) }
+    }
+    return segs.join(' · ') || fallback || cleaned
+  }
 
   const renderOperatorTable = (rows: BmrProcessTableRow[], tableNo: number) => {
     if (!tableHasInputs(rows)) {
@@ -1160,10 +1180,11 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
       inputCells.forEach(({ cell, ci }) => {
         const fi = cell.field_index as number
         const cellLabel = compactPlaceholder(String(cell.text || ''))
-        const label = rowTexts.length ? rowTexts.join(' · ') : cellLabel || `${t('bmrFill.field')} ${fi + 1}`
+        const fallback = (rowTexts.length ? rowTexts.join(' · ') : cellLabel) || `${t('bmrFill.field')} ${fi + 1}`
+        const label = fieldCardLabel(fi, fallback)
         inputCards.push(
-          <div key={`${ri}:${ci}:${fi}`} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+          <div key={`${ri}:${ci}:${fi}`} className="flex flex-col gap-1.5 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="text-[11px] font-semibold leading-snug tracking-wide text-slate-600">{label}</div>
             {cellControl(fi, cell.type, cell.unit, label)}
           </div>
         )
