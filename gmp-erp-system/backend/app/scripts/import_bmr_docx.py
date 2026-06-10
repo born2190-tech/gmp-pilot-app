@@ -143,7 +143,10 @@ def _cell_text(cell) -> str:
 
 
 def _strip_signature_text(text: str) -> str:
-    text = re.sub(r"\s*(Выполнил|Проверил)\s+(ДП|ДОК).*$", "", text, flags=re.IGNORECASE)
+    # Бумажные строки подписи в конце шага: «Выполнил: ДП (Подпись и Дата)
+    # Проверил: ДОК (Подпись и Дата)» — в eBMR их заменяют кнопки э-подписи.
+    text = re.sub(r"\s*(Выполнил|Выполнено|Проверил|Проверено)\s*:?\s*\(?\s*(ДП|ДОК)\b.*$", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*\(\s*Подпись\s*(и|/)\s*Дата\s*\)\s*:?", "", text, flags=re.IGNORECASE)
     return _clean(text)
 
 
@@ -174,7 +177,8 @@ def _label_needs_input(label: str) -> bool:
     if "___" in low or "____" in low:
         return True
     return any(k in low for k in (
-        "время начала", "время окончания", "время окончание", "дата начала", "дата окончания",
+        # «время окон-я», «время окончание/окончания», «дата нач.» и т.п.
+        "время нач", "время окон", "дата нач", "дата окон",
         "количество", "вес", "выход", "отклонение", "другие", "согласование",
     ))
 
@@ -451,7 +455,7 @@ def _split_time_tables(tables: list[dict]) -> list[dict]:
             return None
         if "время нач" in low or "дата нач" in low:
             return "start"
-        if "время оконч" in low or "дата оконч" in low:
+        if "время окон" in low or "дата окон" in low:
             return "end"
         return None
 
