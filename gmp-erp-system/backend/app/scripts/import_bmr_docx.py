@@ -173,6 +173,29 @@ def _label_needs_input(label: str) -> bool:
     ))
 
 
+def _signature_role(text: str) -> str | None:
+    """Распознаёт ячейку-подпись и роль: ДП (оператор), ДОК (контроль), Склад.
+    'Выполнено ДП', 'Исполнитель ДП', 'ИСПЫТАНО: ДП', 'Проверено ДОК',
+    'УТВЕРЖДЕНО: ДОК', 'Утверждение (Подпись/Дата)', просто 'Подпись'."""
+    low = _clean(text).lower()
+    if not low:
+        return None
+    if re.search(r"\bдок\b", low) or "проверил" in low or "проверено" in low or "утвержд" in low:
+        return "signature_qa"
+    if re.search(r"\bдп\b", low) or "выполн" in low or "исполнит" in low or "испытан" in low:
+        return "signature_operator"
+    if "склад" in low or "кладовщик" in low:
+        return "signature_warehouse"
+    if "подпись" in low:
+        return "signature_operator"
+    return None
+
+
+def _is_fill_blank(text: str) -> bool:
+    """Ячейка с прочерком для ручного ввода: '_________(г или кг)'."""
+    return "___" in (text or "")
+
+
 def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
     raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
     headers = [_clean(h) for h in (raw[0] if raw else [])]
@@ -204,7 +227,29 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
             # показан над таблицей. В метке оставляем только строку и колонку.
             label_base = _clean(" · ".join(x for x in (prefix, row_label, header) if x))
             create_input = False
-            if ri > 0 and not nonempty and header:
+            force_type: str | None = None
+            header_sig = _signature_role(header)
+            self_sig = _signature_role(text) if text else None
+            row_ctx = row_label if (row_label and row_label != text) else f"строка {ri}"
+            if ri > 0 and header_sig and (merged_text or not text):
+                # Колонка-подпись («Подпись», «Выполнено ДП», «Проверено ДОК») —
+                # пустые ячейки данных под ней становятся слотом э-подписи.
+                create_input = True
+                force_type = header_sig
+                label_base = _clean(" · ".join(x for x in (row_ctx, header) if x))
+            elif self_sig and len(text) <= 60 and ("подпись" in text.lower() or "испытан" in text.lower()
+                               or "утвержд" in text.lower() or "исполнит" in text.lower()
+                               or "выполн" in text.lower() or re.search(r"\bд[оп]к?\b", text.lower())):
+                # Ячейка, которая сама и есть метка подписи («ИСПЫТАНО: ДП»).
+                create_input = True
+                force_type = self_sig
+                label_base = _clean(" · ".join(x for x in (prefix, text) if x))
+            elif _is_fill_blank(text):
+                # Прочерк под ручной ввод: «_________(г или кг)».
+                create_input = True
+                clean_txt = _clean(re.sub(r"_+", " ", text))
+                label_base = _clean(" · ".join(x for x in (prefix, row_ctx if row_ctx != f"строка {ri}" else "", header, clean_txt) if x)) or clean_txt
+            elif ri > 0 and not nonempty and header:
                 create_input = True
                 label_base = _clean(" · ".join(x for x in (prefix, f"строка {ri}", header) if x))
             elif ri > 0 and not merged_text and not text and nonempty:
@@ -218,15 +263,17 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
 
             if create_input:
                 field_index = len(fields)
+                ftype = force_type or _field_type(label_base or text)
+                funit = None if force_type else _field_unit(label_base or text)
                 fields.append({
                     "label": _short_label(label_base or prefix or f"Поле {field_index + 1}"),
-                    "type": _field_type(label_base or text),
-                    "unit": _field_unit(label_base or text),
+                    "type": ftype,
+                    "unit": funit,
                 })
                 cell["field_index"] = field_index
-                cell["type"] = fields[-1]["type"]
-                if fields[-1].get("unit"):
-                    cell["unit"] = fields[-1]["unit"]
+                cell["type"] = ftype
+                if funit:
+                    cell["unit"] = funit
             out_cells.append(cell)
         out_rows.append({"cells": out_cells})
     return {"rows": out_rows}

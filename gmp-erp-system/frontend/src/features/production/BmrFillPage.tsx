@@ -1065,6 +1065,24 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     )
   }
 
+  // Ячейка таблицы: для типа signature_* — слот э-подписи (SignCell),
+  // иначе обычное поле ввода. Так подписи ДП/ДОК в таблицах подписываются,
+  // а не вводятся текстом.
+  const cellControl = (fi: number, type: string | undefined, unit: string | undefined, reason: string) => {
+    if (type && type.startsWith('signature')) {
+      const role: SignRole = type === 'signature_qa' ? 'dok' : type === 'signature_warehouse' ? 'wh' : 'dp'
+      const e = entries[key(sid, fi)]
+      const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi)
+      const can = role === 'dok' ? canDok : role === 'wh' ? (canWh || canDp) : canDp
+      return (
+        <SignCell role={role} state={sigState(e, true, role, unlocked)}
+          who={e?.value?.signed_by} at={fmtTime(e?.value?.signed_at)}
+          onSign={can && !closed && unlocked ? () => onSign(fi, role, reason) : undefined} />
+      )
+    }
+    return inputFor(fi, type || 'text', unit)
+  }
+
   const compactPlaceholder = (text: string) => text.replace(/_+/g, '').replace(/\s+/g, ' ').trim()
   const tableHasInputs = (rows: BmrProcessTableRow[]) => (rows || []).some((row) =>
     (row.cells || []).some((cell) => typeof cell.field_index === 'number')
@@ -1085,8 +1103,8 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                   <td key={ci} className={`border-r border-slate-100 px-2 py-2 align-top last:border-r-0 ${cellCls}`}>
                     {isInput ? (
                       <div className="space-y-1">
-                        {text && <div className="text-[10.5px] font-medium uppercase tracking-wide text-slate-400">{text}</div>}
-                        {inputFor(fi, cell.type || 'text', cell.unit)}
+                        {text && <div className="text-[10.5px] font-medium uppercase tracking-wide text-slate-500">{text}</div>}
+                        {cellControl(fi, cell.type, cell.unit, text || sectionTitle)}
                       </div>
                     ) : (
                       text || <span className="text-slate-300">—</span>
@@ -1134,8 +1152,8 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         const label = rowTexts.length ? rowTexts.join(' · ') : cellLabel || `${t('bmrFill.field')} ${fi + 1}`
         inputCards.push(
           <div key={`${ri}:${ci}:${fi}`} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-            {inputFor(fi, cell.type || 'text', cell.unit)}
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+            {cellControl(fi, cell.type, cell.unit, label)}
           </div>
         )
       })
