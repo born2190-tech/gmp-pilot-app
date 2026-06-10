@@ -365,7 +365,14 @@ def _steps(table) -> tuple[list[dict], list[dict]]:
     fields: list[dict] = []
     for row in table.rows:
         raw_cells = [_cell_text(c) for c in row.cells]
-        cells = [c for c in raw_cells if c]
+        # Объединённые ячейки Word python-docx отдаёт повторно по каждому столбцу
+        # слияния: строка этапа выглядит как ['3.1','3.1','Установите…','Установите…'].
+        # Схлопываем подряд идущие дубли, иначе text=cells[1] берёт повтор номера,
+        # а сама инструкция (cells[2]) теряется → в eBMR виден только «3.1».
+        cells: list[str] = []
+        for c in raw_cells:
+            if c and (not cells or cells[-1] != c):
+                cells.append(c)
         if not cells:
             continue
         head = " ".join(cells).lower()
