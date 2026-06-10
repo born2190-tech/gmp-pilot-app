@@ -1187,8 +1187,61 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     </div>
   )
 
+  // Лист «Определение влаги и потери при сушке» (этапы 6.6/8.6/10.6).
+  const renderMoistureLoss = (tbl: BmrStepTable) => {
+    const stages = tbl.stages || []
+    const cell = (fi?: number, unit?: string) =>
+      typeof fi === 'number' ? <div className="min-w-[7rem]">{inputFor(fi, 'number', unit)}</div> : null
+    const stageRow = (label: string, items: { stage: string; fi: number }[] | undefined, totalFi: number | undefined, unit: string) => (
+      <div className="space-y-2">
+        <div className="text-[12px] font-semibold text-slate-800">{label}</div>
+        <div className="flex flex-wrap gap-3">
+          {(items || []).map((it) => (
+            <div key={it.fi} className="flex flex-col gap-1">
+              <div className="text-[10.5px] font-medium uppercase tracking-wide text-slate-500">{it.stage} · {unit}</div>
+              {cell(it.fi, unit)}
+            </div>
+          ))}
+          <div className="flex flex-col gap-1">
+            <div className="text-[10.5px] font-semibold uppercase tracking-wide text-blue-600">Всего · {unit}</div>
+            {cell(totalFi, unit)}
+          </div>
+        </div>
+      </div>
+    )
+    return (
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
+        <div className="border-b border-slate-200 bg-white px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
+          <div className="mt-0.5 text-[12.5px] font-semibold text-slate-800">Определение влаги и потери при сушке</div>
+        </div>
+        <div className="space-y-4 p-3">
+          {stageRow('a · Определение влаги (% по массе)', tbl.moisture, tbl.moisture_total_fi, '%')}
+          {stageRow(`b · Потери по стадиям (кг)${stages.length ? '' : ''}`, tbl.losses, tbl.losses_total_fi, 'кг')}
+          <div className="flex flex-wrap gap-4">
+            <div className="flex flex-col gap-1">
+              <div className="text-[10.5px] font-medium uppercase tracking-wide text-slate-500">c · Фактический выход · кг</div>
+              {cell(tbl.actual_yield_fi, 'кг')}
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="text-[10.5px] font-medium uppercase tracking-wide text-slate-500">d · Ожидаемый вес · кг</div>
+              {cell(tbl.expected_weight_fi, 'кг')}
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-slate-700">
+              <span className="font-medium">Предел отчётности по сушке = (a + b + c) × 100 ÷ d =</span>
+              {cell(tbl.drying_limit_fi, '%')}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const renderOperatorTable = (tbl: BmrStepTable, tableNo: number) => {
     if (tbl.process_table_variant === 'requirement_calculation') return renderRequirementCalc(tbl)
+    if (tbl.process_table_variant === 'moisture_loss') return renderMoistureLoss(tbl)
     const rows = (tbl.rows || []) as BmrProcessTableRow[]
     if (!tableHasInputs(rows)) {
       return (

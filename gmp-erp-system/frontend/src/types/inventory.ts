@@ -1185,11 +1185,21 @@ export interface BmrReqCalcItem {
   taken_fi: number
   discard_fi: number
 }
+export interface BmrMoistureStageField { stage: string; fi: number }
 export interface BmrStepTable {
   rows: BmrStepTableRow[]
   process_table_variant?: string
   divisor?: string
   items?: BmrReqCalcItem[]
+  // moisture_loss variant
+  stages?: string[]
+  moisture?: BmrMoistureStageField[]
+  moisture_total_fi?: number
+  losses?: BmrMoistureStageField[]
+  losses_total_fi?: number
+  actual_yield_fi?: number
+  expected_weight_fi?: number
+  drying_limit_fi?: number
 }
 export interface BmrTextBlank { field_index: number; type?: string; unit?: string }
 export interface BmrChecklistStep {

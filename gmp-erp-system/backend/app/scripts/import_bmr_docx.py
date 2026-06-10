@@ -493,10 +493,73 @@ def _requirement_calc_table(table, prefix: str, fields: list[dict]) -> dict | No
     }
 
 
+def _moisture_loss_table(table, prefix: str, fields: list[dict]) -> dict | None:
+    """Лист «Определение влаги и потери при сушке» (этапы 6.6/8.6/10.6).
+
+    Свободная вёрстка Word с разделами a/b/c/d и формулой (a+b+c)×100/d.
+    Генерик-парсер размазывает её в десятки дублей — разбираем осмысленно:
+    влага и потери по стадиям + итоги, фактический выход, ожидаемый вес и
+    результат-процент.
+    """
+    raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
+    flat = " ".join(" ".join(r) for r in raw).lower()
+    if "определение влаги" not in flat or "потери" not in flat:
+        return None
+    if "ожидаемый вес" not in flat and "фактический выход" not in flat:
+        return None
+
+    # Названия стадий из строки с «Грануляция/Сушка/…» (без «b.», «Стадия», «Всего»).
+    stages: list[str] = []
+    for r in raw:
+        ded: list[str] = []
+        for c in r:
+            c = _clean(c)
+            if c and (not ded or ded[-1] != c):
+                ded.append(c)
+        low = " ".join(ded).lower()
+        if ("грануляц" in low or "сушк" in low or "смешив" in low or "опудрив" in low) and "потери" not in low:
+            for x in ded:
+                xl = x.lower().strip(". ")
+                if xl in ("a", "b", "c", "d", "стадия", "всего", "образец") or "потери" in xl or "определение" in xl:
+                    continue
+                if x not in stages:
+                    stages.append(x)
+            if stages:
+                break
+    if not stages:
+        stages = ["Грануляция", "Сушка"]
+
+    def add(label: str, unit: str | None) -> int:
+        fi = len(fields)
+        fields.append({"label": _short_label(f"{prefix} · {label}"), "type": "number", "unit": unit})
+        return fi
+
+    moisture = [{"stage": s, "fi": add(f"Определение влаги · {s}", "%")} for s in stages]
+    moisture_total_fi = add("Определение влаги · Всего (a)", "%")
+    losses = [{"stage": s, "fi": add(f"Потери · {s}", "кг")} for s in stages]
+    losses_total_fi = add("Потери · Всего (b)", "кг")
+    actual_yield_fi = add("Фактический выход (c)", "кг")
+    expected_weight_fi = add("Ожидаемый вес (d)", "кг")
+    drying_limit_fi = add("Предел отчётности по сушке", "%")
+
+    return {
+        "process_table_variant": "moisture_loss",
+        "stages": stages,
+        "moisture": moisture,
+        "moisture_total_fi": moisture_total_fi,
+        "losses": losses,
+        "losses_total_fi": losses_total_fi,
+        "actual_yield_fi": actual_yield_fi,
+        "expected_weight_fi": expected_weight_fi,
+        "drying_limit_fi": drying_limit_fi,
+        "rows": [],
+    }
+
+
 def _row_nested_tables(row, prefix: str, fields: list[dict]) -> list[dict]:
     out: list[dict] = []
     for nt in _unique_nested_tables(row.cells):
-        special = _requirement_calc_table(nt, prefix, fields)
+        special = _requirement_calc_table(nt, prefix, fields) or _moisture_loss_table(nt, prefix, fields)
         out.append(special if special is not None else _nested_table(nt, prefix, fields))
     return out
 
