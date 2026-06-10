@@ -1140,12 +1140,16 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   const fieldCardLabel = (fi: number, fallback: string) => {
     const raw = String(section.config?.fields?.[fi]?.label || '')
     const cleaned = raw.replace(/^Этап\s+[\d.]+\s*·\s*/i, '').trim()
+    // Метки шаблона обрезаны («…»), поэтому сравниваем по префиксу, а не на
+    // точное равенство — иначе тот же текст добавляется второй раз.
+    const norm = (s: string) => s.toLowerCase().replace(/…/g, '').replace(/\s+/g, ' ').trim()
     const segs: string[] = []
-    const seen = new Set<string>()
     for (const part of [...fallback.split('·'), ...cleaned.split('·')]) {
       const seg = part.trim()
-      const k = seg.toLowerCase()
-      if (seg && !seen.has(k)) { seen.add(k); segs.push(seg) }
+      if (!seg) continue
+      const k = norm(seg)
+      if (segs.some((e) => { const n = norm(e); return n.startsWith(k) || k.startsWith(n) })) continue
+      segs.push(seg)
     }
     return segs.join(' · ') || fallback || cleaned
   }
@@ -1209,7 +1213,12 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         </div>
       )
     }
-    const headerCells = (rows[0]?.cells || []).map((cell) => compactPlaceholder(String(cell.text || ''))).filter(Boolean)
+    // Двухуровневая шапка даёт повторы («Целостность сита» над двумя
+    // подколонками) — в заголовок группы каждый текст берём один раз.
+    const headerCells = (rows[0]?.cells || [])
+      .map((cell) => compactPlaceholder(String(cell.text || '')))
+      .filter(Boolean)
+      .filter((txt, i, arr) => arr.findIndex((x) => x.toLowerCase() === txt.toLowerCase()) === i)
     const tableTitle = headerCells.length ? headerCells.join(' · ') : `${t('bmrFill.operatorData')} ${tableNo + 1}`
     const readRows: string[] = []
     const inputCards: React.ReactNode[] = []
