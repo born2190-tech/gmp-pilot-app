@@ -1043,12 +1043,23 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
       {section.config?.room && <span className="mono ml-auto shrink-0 text-[11px] text-slate-400">{section.config.room}{section.config.sop ? ` · ${section.config.sop}` : ''}</span>}
     </div>
   )
+  const notes = (section.config?.notes || []) as string[]
+  const NotesBlock = notes.length > 0 ? (
+    <div className="space-y-1 border-b border-amber-100 bg-amber-50/70 px-3 py-2">
+      {notes.map((n, i) => (
+        <div key={i} className="flex gap-1.5 text-[12px] leading-relaxed text-amber-900">
+          <span className="flex-none font-semibold text-amber-500">※</span>
+          <span>{n}</span>
+        </div>
+      ))}
+    </div>
+  ) : null
   const wrap = (body: React.ReactNode) => (
     <section
       id={`bmr-section-${section.id}`}
       className="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
     >
-      {Head}{body}
+      {Head}{NotesBlock}{body}
     </section>
   )
 

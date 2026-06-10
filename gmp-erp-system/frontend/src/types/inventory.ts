@@ -1195,6 +1195,7 @@ export interface BmrIpcPhase { key: string; title: string }
 export interface BmrSectionConfig {
   fields?: BmrFieldDef[]
   note?: string
+  notes?: string[]
   kind?: string
   stage?: string
   stage_title?: string

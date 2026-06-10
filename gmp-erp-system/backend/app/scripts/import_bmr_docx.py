@@ -196,6 +196,14 @@ def _is_fill_blank(text: str) -> bool:
     return "___" in (text or "")
 
 
+def _is_footnote(text: str) -> bool:
+    """Сноска/примечание под таблицей: '* …', '** Opadry …', 'Примечание: …'.
+    Такие абзацы несут смысл (перерасход Opadry +50%, пересчёт по анализу) и не
+    должны ни теряться, ни затирать заголовок следующей секции."""
+    s = _clean(text)
+    return s.startswith("*") or s.lower().startswith(("примеч", "note", "сноска"))
+
+
 def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
     raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
     headers = [_clean(h) for h in (raw[0] if raw else [])]
@@ -730,6 +738,8 @@ def build_sections(doc: Document) -> list[dict]:
     cur_room = None
     cur_rooms: list[str] = []
     pending_title = ""
+    last_env_heading = ""
+    note_buffer: list[str] = []
     formula_by_name: dict[str, dict] = {}
     seen_formula_sections: dict[str, int] = {}
     seen_formula_scores: dict[str, int] = {}
@@ -744,18 +754,42 @@ def build_sections(doc: Document) -> list[dict]:
             cfg["room_assignment_required"] = True
             cfg["room_source_text"] = cur_room
         sections.append({"ordinal": ordinal, "section_type": stype, "title": _section_title(title, "Контрольная таблица")[:255], "config": cfg})
+        # Висячие сноски, встреченные до этой секции, прикрепляем к ней.
+        if note_buffer:
+            notes = sections[-1]["config"].setdefault("notes", [])
+            for n in note_buffer:
+                if n not in notes:
+                    notes.append(n)
+            note_buffer.clear()
         ordinal += 1
+
+    _DUP_IGNORE = ("stage", "room", "rooms", "room_assignment_required", "room_source_text", "notes")
 
     def dup(stype, kind, extra) -> bool:
         if not sections:
             return False
         last = sections[-1]
         return last["section_type"] == stype and last["config"].get("kind") == kind and \
-            {k: v for k, v in last["config"].items() if k not in ("stage", "room")} == {"kind": kind, **extra}
+            {k: v for k, v in last["config"].items() if k not in _DUP_IGNORE} == {"kind": kind, **extra}
 
     for typ, val in _iter_blocks(doc):
         if typ == "p":
-            pending_title = val
+            if _is_footnote(val):
+                # Сноску не делаем заголовком — привязываем к уже созданной
+                # секции (она идёт под своей таблицей) либо буферизуем.
+                if sections:
+                    notes = sections[-1]["config"].setdefault("notes", [])
+                    if val not in notes:
+                        notes.append(val)
+                elif val not in note_buffer:
+                    note_buffer.append(val)
+            else:
+                pending_title = val
+                # Заголовок отчёта о среде («ОТЧЁТ ОБ УСЛОВИЯХ СРЕДЫ ДЛЯ КОМНАТЫ …»)
+                # часто перекрывается следующим под-абзацем — запоминаем отдельно.
+                low = val.lower()
+                if "сред" in low and ("комнат" in low or "област" in low or "отч" in low):
+                    last_env_heading = val
             continue
         rows = _rows(val)
         if not rows:
@@ -842,9 +876,11 @@ def build_sections(doc: Document) -> list[dict]:
         # окружающая среда
         if "параметр" in flat and ("начало" in flat or "окончание" in flat):
             extra = {"params": _env_params(rows), "fields": _sig_fields()}
+            env_title = last_env_heading or pending_title or "Отчёт об условиях окружающей среды"
             if not dup("environment", "environment", extra):
-                add("environment", pending_title or "Отчёт об условиях окружающей среды", "environment", extra)
+                add("environment", env_title, "environment", extra)
             pending_title = ""
+            last_env_heading = ""
             continue
 
         # оборудование
