@@ -509,12 +509,16 @@ def _steps(table) -> tuple[list[dict], list[dict]]:
         text = cells[1] if len(cells) > 1 else ""
         if re.match(r"^\d+(\.\d+)*$", no):
             tables = _row_nested_tables(row, f"Этап {no}", fields)
-            if len(text) <= 2 and tables and steps and steps[-1].get("no") == no:
+            # Продолжение таблицы того же шага на новой странице: текст либо
+            # пуст, либо состоит из одной бумажной строки подписи («Выполнил
+            # ДП…») — сравниваем ПОСЛЕ очистки, иначе плодится дубль-шаг.
+            stripped = _strip_signature_text(text)
+            if len(stripped) <= 2 and tables and steps and steps[-1].get("no") == no:
                 steps[-1].setdefault("tables", []).extend(tables)
                 continue
-            if len(text) <= 2 and not tables:
+            if len(stripped) <= 2 and not tables:
                 continue
-            step = {"no": no, "text": _strip_signature_text(text) or "Контрольная таблица"}
+            step = {"no": no, "text": stripped or "Контрольная таблица"}
             if tables:
                 step["tables"] = tables
             step["dp_field_index"] = len(fields)
@@ -969,8 +973,13 @@ def build_sections(doc: Document) -> list[dict]:
             pending_title = ""
             continue
 
-        # технологические этапы (шаги процесса) с подписями
-        st, st_fields = _steps(val)
+        # технологические этапы (шаги процесса) с подписями.
+        # Таблицы материалов («Использованные упаковочные материалы») тоже
+        # имеют нумерованные строки — это НЕ шаги с подписями ДП/ДОК на каждую
+        # строку, пропускаем их в универсальную process_table ниже.
+        is_material_table = ("упаковочн" in f"{pending_title} {flat}".lower()
+                             and "материал" in f"{pending_title} {flat}".lower())
+        st, st_fields = ([], []) if is_material_table else _steps(val)
         if st and ("технолог" in flat or "этап" in flat or len(st) >= 1):
             extra = _line_clearance_extra({"steps": st, "fields": st_fields}, cur_stage, pending_title, flat)
             add("checklist", pending_title or "Технологические этапы", "checklist", extra)
