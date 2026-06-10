@@ -33,7 +33,13 @@ def _short_label(s: str, limit: int = 80) -> str:
     """Метка поля — короткая. Длинные ячейки-инструкции/расчёты не годятся как
     подпись поля (полный текст всё равно остаётся в ячейке таблицы и виден при
     заполнении). Режем по границе слова и добавляем многоточие."""
-    s = _clean(s)
+    s = _clean(re.sub(r"_+", " ", s))
+    # убрать повторяющиеся сегменты («… · (г или кг) · (г или кг)»)
+    segs: list[str] = []
+    for seg in (p.strip() for p in s.split("·")):
+        if seg and (not segs or segs[-1] != seg):
+            segs.append(seg)
+    s = " · ".join(segs)
     if len(s) <= limit:
         return s
     cut = s[:limit].rsplit(" ", 1)[0] or s[:limit]
@@ -208,15 +214,20 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
     raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
     headers = [_clean(h) for h in (raw[0] if raw else [])]
     ncols = max((len(r) for r in raw), default=0)
-    # Объединённые ячейки шапки в Word python-docx отдаёт повторно по каждому
-    # столбцу слияния (напр. «Статус отказа» в 3 ячейках). Схлопываем подряд
-    # идущие одинаковые непустые заголовки в один столбец, иначе на каждую такую
-    # ячейку плодится дубль-поле.
+    # Объединённые ячейки Word python-docx отдаёт повторно по каждому столбцу
+    # слияния (напр. «Статус отказа» в 3 ячейках). Схлопываем колонку ТОЛЬКО
+    # если она совпадает с предыдущей во ВСЕХ строках (настоящее слияние).
+    # Сравнение по одной шапке ломает двухуровневые шапки: «Целостность сита»
+    # объединена над «Перед просеиванием | После просеивания» — вторая колонка
+    # данных терялась.
+    def _col(ri: int, ci: int) -> str:
+        r = raw[ri]
+        return _clean(r[ci]) if ci < len(r) else ""
+
     keep: list[int] = []
     for ci in range(ncols):
         h = headers[ci] if ci < len(headers) else ""
-        prev = headers[ci - 1] if 0 < ci <= len(headers) else ""
-        if ci > 0 and h and h == prev:
+        if ci > 0 and h and all(_col(ri, ci) == _col(ri, ci - 1) for ri in range(len(raw))):
             continue
         keep.append(ci)
 
@@ -230,7 +241,21 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
         for ci in keep:
             text = _clean(full_row[ci]) if ci < len(full_row) else ""
             cell: dict = {"text": text}
-            header = headers[ci] if ci < len(headers) else ""
+            # Заголовок колонки = ближайшая непустая ячейка ВЫШЕ по колонке:
+            # при двухуровневой шапке это подзаголовок («Перед просеиванием»),
+            # а не объединённый верх («Целостность сита»).
+            header = ""
+            for hri in range(ri - 1, -1, -1):
+                vals = [_col(hri, k) for k in keep]
+                filled = [v for v in vals if v]
+                if filled and len(set(filled)) == 1 and len(filled) > 1:
+                    continue  # строка-инструкция, объединённая на всю ширину
+                cand = _col(hri, ci)
+                if cand:
+                    header = cand
+                    break
+            if not header:
+                header = headers[ci] if ci < len(headers) else ""
             # Метку поля НЕ префиксуем длинным заголовком секции — он и так
             # показан над таблицей. В метке оставляем только строку и колонку.
             label_base = _clean(" · ".join(x for x in (prefix, row_label, header) if x))
@@ -414,6 +439,49 @@ def _process_header(rows: list[list[str]]) -> dict | None:
     return {"process": proc, "room": room, "room_no": room_no}
 
 
+def _split_time_tables(tables: list[dict]) -> list[dict]:
+    """«Время начала» — в начало этапа, «Время окончание» — в конец.
+
+    В бумажном BMR оба поля идут одной строкой в конце шага, но по процессу
+    начало фиксируется до выполнения, окончание — после заполнения данных.
+    Разносим: таблицу-пару разбиваем на две одноячеечные."""
+    def kind(cell: dict) -> str | None:
+        low = _clean(str(cell.get("text") or "")).lower()
+        if "field_index" not in cell:
+            return None
+        if "время нач" in low or "дата нач" in low:
+            return "start"
+        if "время оконч" in low or "дата оконч" in low:
+            return "end"
+        return None
+
+    head: list[dict] = []
+    middle: list[dict] = []
+    tail: list[dict] = []
+    for tbl in tables:
+        rows = tbl.get("rows") or []
+        start_cells: list[dict] = []
+        end_cells: list[dict] = []
+        other = False
+        for row in rows:
+            for cell in row.get("cells") or []:
+                k = kind(cell)
+                if k == "start":
+                    start_cells.append(cell)
+                elif k == "end":
+                    end_cells.append(cell)
+                elif cell.get("text") or "field_index" in cell:
+                    other = True
+        if (start_cells or end_cells) and not other:
+            if start_cells:
+                head.append({"rows": [{"cells": start_cells}]})
+            if end_cells:
+                tail.append({"rows": [{"cells": end_cells}]})
+        else:
+            middle.append(tbl)
+    return head + middle + tail
+
+
 def _steps(table) -> tuple[list[dict], list[dict]]:
     """Таблица '№ | ТЕХНОЛОГИЧЕСКИЕ ЭТАПЫ | Подпись' → шаги."""
     steps = []
@@ -450,6 +518,9 @@ def _steps(table) -> tuple[list[dict], list[dict]]:
             step["dok_field_index"] = len(fields)
             fields.append({"label": f"Этап {no} · Проверено ДОК", "type": "signature_qa"})
             steps.append(step)
+    for step in steps:
+        if step.get("tables"):
+            step["tables"] = _split_time_tables(step["tables"])
     return steps, fields
 
 
