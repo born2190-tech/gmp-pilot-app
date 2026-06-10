@@ -386,8 +386,85 @@ def _efficiency_calculation_table(parsed: dict) -> dict:
     }
 
 
+# Коэффициенты «количество на серию из листа распределения» (кг) — на бумаге
+# они внутри формулы-дроби (OMML-объект Word), текст которой python-docx не
+# отдаёт, поэтому для известных материалов держим их здесь.
+_REQ_CALC_COEFF = {
+    "EXC-AEROSIL": "0,714",
+    "EXC-MCC": "8,651",
+    "EXC-SOD": "1,334",
+    "EXC-MGST": "1,111",
+}
+# Стандартный выход гранул на серию (кг) — знаменатель формулы (тоже в OMML).
+_REQ_CALC_DIVISOR = "83,379"
+
+
+def _requirement_calc_table(table, prefix: str, fields: list[dict]) -> dict | None:
+    """Расчёт требуемого количества субстанций для опудривания (этапы 11.3/12.3/13.3).
+
+    Формула на бумаге: требуемое = (факт. выход^ × K*) ÷ 83,379; на выброс =
+    K* − (взято). Дробь в Word — математический объект, текст не извлекается,
+    поэтому разбираем по строкам-парам и строим структуру с 3 полями на материал.
+    """
+    raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
+    flat = " ".join(" ".join(r) for r in raw).lower()
+    if "требуемое количество" not in flat or "выбрасыван" not in flat:
+        return None
+
+    items: list[dict] = []
+    current: dict | None = None
+    for r in raw:
+        ded: list[str] = []
+        for c in r:
+            c = _clean(c)
+            if c and (not ded or ded[-1] != c):
+                ded.append(c)
+        if not ded:
+            continue
+        first = ded[0]
+        low = first.lower()
+        m = re.search(r"фактическое требуемое количество\s+(.+)$", first, re.IGNORECASE)
+        if m:
+            name = _clean(m.group(1).rstrip(":"))
+            current = {"name": name}
+            items.append(current)
+            continue
+        if "выбрасыван" in low and current is not None:
+            rest = " ".join(ded[1:])
+            mc = re.search(r"=\s*([\d]+[.,]\d+)\s*\*", rest)
+            if mc:
+                current["coeff"] = mc.group(1)
+            current = None
+
+    if not items:
+        return None
+
+    for item in items:
+        if not item.get("coeff"):
+            alias = _material_alias_key(item["name"])
+            item["coeff"] = _REQ_CALC_COEFF.get(alias, "")
+        base = item["name"]
+        item["required_fi"] = len(fields)
+        fields.append({"label": _short_label(f"{base} · требуемое количество"), "type": "number", "unit": "кг"})
+        item["taken_fi"] = len(fields)
+        fields.append({"label": _short_label(f"{base} · фактически взято"), "type": "number", "unit": "кг"})
+        item["discard_fi"] = len(fields)
+        fields.append({"label": _short_label(f"{base} · на выброс"), "type": "number", "unit": "кг"})
+
+    return {
+        "process_table_variant": "requirement_calculation",
+        "divisor": _REQ_CALC_DIVISOR,
+        "items": items,
+        "rows": [],
+    }
+
+
 def _row_nested_tables(row, prefix: str, fields: list[dict]) -> list[dict]:
-    return [_nested_table(nt, prefix, fields) for nt in _unique_nested_tables(row.cells)]
+    out: list[dict] = []
+    for nt in _unique_nested_tables(row.cells):
+        special = _requirement_calc_table(nt, prefix, fields)
+        out.append(special if special is not None else _nested_table(nt, prefix, fields))
+    return out
 
 
 def _plain_table(table) -> dict:

@@ -12,7 +12,7 @@ import {
 } from '../../lib/api'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CurrentUser } from '../../types/auth'
-import type { BmrInstanceItem, BmrEntryItem, BmrSectionItem, BmrParticipantItem, BmrRouteStageItem, BmrSignatureLogItem } from '../../types/inventory'
+import type { BmrInstanceItem, BmrEntryItem, BmrSectionItem, BmrParticipantItem, BmrRouteStageItem, BmrSignatureLogItem, BmrStepTable } from '../../types/inventory'
 
 interface Props { token: string; user: CurrentUser | null }
 
@@ -1150,11 +1150,62 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     return segs.join(' · ') || fallback || cleaned
   }
 
-  const renderOperatorTable = (rows: BmrProcessTableRow[], tableNo: number) => {
+  // Расчёт требуемого количества для опудривания (этапы 11.3/12.3/13.3):
+  // формула как на бумаге, поля в местах прочерков.
+  const renderRequirementCalc = (tbl: BmrStepTable) => (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
+      <div className="border-b border-slate-200 bg-white px-3 py-2">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
+        <div className="mt-0.5 text-[12.5px] font-semibold text-slate-800">Расчёт требуемого количества субстанций</div>
+      </div>
+      <div className="space-y-3 p-3">
+        {(tbl.items || []).map((item, idx) => (
+          <div key={idx} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="mb-2 text-[13px] font-semibold text-slate-900">{idx + 1}. {item.name}</div>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-slate-700">
+                <span>Требуемое количество = (Факт. выход<sup>^</sup> × <b>{item.coeff || '—'}</b>*) ÷ <b>{tbl.divisor || '—'}</b> =</span>
+                {inputFor(item.required_fi, 'number', 'кг')}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-slate-700">
+                <span>На выброс = <b>{item.coeff || '—'}</b>* − (</span>
+                {inputFor(item.taken_fi, 'number', 'кг')}
+                <span>) =</span>
+                {inputFor(item.discard_fi, 'number', 'кг')}
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="rounded-md border border-amber-100 bg-amber-50/70 px-3 py-2 text-[11.5px] leading-relaxed text-amber-900">
+          ^ — фактический выход гранул (общий вес) с этапа сушки · * — количество на серию из листа распределения
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderOperatorTable = (tbl: BmrStepTable, tableNo: number) => {
+    if (tbl.process_table_variant === 'requirement_calculation') return renderRequirementCalc(tbl)
+    const rows = (tbl.rows || []) as BmrProcessTableRow[]
     if (!tableHasInputs(rows)) {
       return (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           {renderProcessTable(rows)}
+        </div>
+      )
+    }
+    // Формульные и большие матричные таблицы (расчёты, «определение влаги»)
+    // карточками нечитаемы — сохраняем структуру строк/колонок как на бумаге.
+    const allTexts = rows.flatMap((row) => (row.cells || []).map((c) => String(c.text || '')))
+    const inputCount = rows.reduce((n, row) => n + (row.cells || []).filter((c) => typeof c.field_index === 'number').length, 0)
+    const formulaLike = allTexts.some((txt) => txt.includes('=')) || inputCount > 12
+    if (formulaLike) {
+      return (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
+          <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{t('bmrFill.recordValues')}</span>
+          </div>
+          <div className="bg-white">{renderProcessTable(rows)}</div>
         </div>
       )
     }
@@ -1361,7 +1412,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                     {Array.isArray(st.tables) && st.tables.length > 0 && (
                       <div className="space-y-3">
                         {st.tables.map((tbl, ti) => (
-                          <div key={ti}>{renderOperatorTable(tbl.rows || [], ti)}</div>
+                          <div key={ti}>{renderOperatorTable(tbl, ti)}</div>
                         ))}
                       </div>
                     )}

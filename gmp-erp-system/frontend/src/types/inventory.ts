@@ -1178,7 +1178,19 @@ export interface ProductionBatchesResponse {
 // --- Electronic BMR template constructor (СОП-11) --------------------------
 export interface BmrStepTableCell { text?: string; field_index?: number; type?: string; unit?: string }
 export interface BmrStepTableRow { cells: BmrStepTableCell[] }
-export interface BmrStepTable { rows: BmrStepTableRow[] }
+export interface BmrReqCalcItem {
+  name: string
+  coeff?: string
+  required_fi: number
+  taken_fi: number
+  discard_fi: number
+}
+export interface BmrStepTable {
+  rows: BmrStepTableRow[]
+  process_table_variant?: string
+  divisor?: string
+  items?: BmrReqCalcItem[]
+}
 export interface BmrChecklistStep {
   no?: string
   text: string
