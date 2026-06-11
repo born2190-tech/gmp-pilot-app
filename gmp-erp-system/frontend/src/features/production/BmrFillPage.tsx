@@ -1116,7 +1116,10 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
               const isInput = typeof cell.field_index === 'number'
               const txt = String(cell.text || '').trim()
               const prev = units[units.length - 1]
-              if (!isInput && prev && !prev.isInput && txt && String(prev.cell.text || '').trim() === txt) {
+              // Объединяем подряд идущие ячейки с одинаковым непустым текстом
+              // (слияние Word: «Общий вес нетто» ×3, «Общее количество…» ×3) —
+              // включая поля: оставляем первое, остальные схлопываем.
+              if (prev && txt && String(prev.cell.text || '').trim() === txt) {
                 prev.span += 1
                 return
               }
@@ -1134,8 +1137,13 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                   <td key={ui} colSpan={u.span} className={`border-r border-slate-100 px-2 py-2 align-top last:border-r-0 ${cellCls}`}>
                     {isInput ? (
                       grid ? (
-                        // В сетке заголовок колонки уже над полем — подпись не дублируем.
-                        cellControl(fi, cell.type, cell.unit, fieldCardLabel(fi, sectionTitle))
+                        // В сетке заголовок колонки уже над полем — дублирующую
+                        // подпись не показываем, но осмысленный текст ячейки
+                        // (формула футера «Общее количество = …») оставляем.
+                        <div className="space-y-1">
+                          {compactPlaceholder(text) ? <div className="text-[11px] leading-snug text-slate-600">{compactPlaceholder(text)}</div> : null}
+                          {cellControl(fi, cell.type, cell.unit, compactPlaceholder(text) || fieldCardLabel(fi, sectionTitle))}
+                        </div>
                       ) : (
                         <div className="space-y-1">
                           {(() => {
@@ -1293,7 +1301,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{t('bmrFill.recordValues')}</span>
           </div>
-          <div className="bg-white">{renderProcessTable(rows, { grid: gridLike && !formulaLike })}</div>
+          <div className="bg-white">{renderProcessTable(rows, { grid: gridLike })}</div>
         </div>
       )
     }
