@@ -1099,27 +1099,52 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     (row.cells || []).some((cell) => typeof cell.field_index === 'number')
   )
 
-  const renderProcessTable = (rows: BmrProcessTableRow[]) => (
+  const renderProcessTable = (rows: BmrProcessTableRow[], opts?: { grid?: boolean }) => {
+    const grid = opts?.grid
+    return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] border-collapse text-[12px]">
         <tbody>
-          {(rows || []).map((row, ri) => (
+          {(rows || []).map((row, ri) => {
+            // Объединяем подряд идущие одинаковые текстовые ячейки (слияния Word
+            // дают «Общий вес нетто» три раза) в одну с colSpan.
+            const cells = row.cells || []
+            type Cell = { text?: string; field_index?: number; type?: string; unit?: string }
+            type Unit = { cell: Cell; span: number; isInput: boolean }
+            const units: Unit[] = []
+            cells.forEach((cell) => {
+              const isInput = typeof cell.field_index === 'number'
+              const txt = String(cell.text || '').trim()
+              const prev = units[units.length - 1]
+              if (!isInput && prev && !prev.isInput && txt && String(prev.cell.text || '').trim() === txt) {
+                prev.span += 1
+                return
+              }
+              units.push({ cell, span: 1, isInput })
+            })
+            return (
             <tr key={ri} className="border-b border-slate-100 last:border-b-0">
-              {(row.cells || []).map((cell, ci) => {
+              {units.map((u, ui) => {
+                const cell = u.cell
                 const fi = typeof cell.field_index === 'number' ? cell.field_index : null
                 const isInput = fi !== null
                 const text = String(cell.text || '')
                 const cellCls = ri === 0 && !isInput ? 'bg-slate-50 font-semibold text-slate-600' : 'bg-white text-slate-700'
                 return (
-                  <td key={ci} className={`border-r border-slate-100 px-2 py-2 align-top last:border-r-0 ${cellCls}`}>
+                  <td key={ui} colSpan={u.span} className={`border-r border-slate-100 px-2 py-2 align-top last:border-r-0 ${cellCls}`}>
                     {isInput ? (
-                      <div className="space-y-1">
-                        {(() => {
-                          const label = text || fieldCardLabel(fi, '')
-                          return label ? <div className="text-[10.5px] font-medium leading-snug tracking-wide text-slate-600">{label}</div> : null
-                        })()}
-                        {cellControl(fi, cell.type, cell.unit, text || fieldCardLabel(fi, sectionTitle))}
-                      </div>
+                      grid ? (
+                        // В сетке заголовок колонки уже над полем — подпись не дублируем.
+                        cellControl(fi, cell.type, cell.unit, fieldCardLabel(fi, sectionTitle))
+                      ) : (
+                        <div className="space-y-1">
+                          {(() => {
+                            const label = text || fieldCardLabel(fi, '')
+                            return label ? <div className="text-[10.5px] font-medium leading-snug tracking-wide text-slate-600">{label}</div> : null
+                          })()}
+                          {cellControl(fi, cell.type, cell.unit, text || fieldCardLabel(fi, sectionTitle))}
+                        </div>
+                      )
                     ) : (
                       text || <span className="text-slate-300">—</span>
                     )}
@@ -1127,11 +1152,13 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                 )
               })}
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
     </div>
-  )
+    )
+  }
 
   // Полное пояснение поля: строка таблицы (что измеряем) + колонка из метки
   // шаблона («Перед просеиванием» / «Контроль»). Префикс «Этап N.N» срезаем —
@@ -1250,19 +1277,23 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         </div>
       )
     }
-    // Формульные и большие матричные таблицы (расчёты, «определение влаги»)
-    // карточками нечитаемы — сохраняем структуру строк/колонок как на бумаге.
+    // Сетки (взвешивание №тары×веса, проверка пуансонов и т.п.) и формульные/
+    // матричные таблицы карточками нечитаемы — показываем таблицей со строками
+    // и колонками, как на бумаге. Сетка = шапка ≥2 колонок + ≥2 строк ввода.
     const allTexts = rows.flatMap((row) => (row.cells || []).map((c) => String(c.text || '')))
     const inputCount = rows.reduce((n, row) => n + (row.cells || []).filter((c) => typeof c.field_index === 'number').length, 0)
+    const headerCols = (rows[0]?.cells || []).filter((c) => String(c.text || '').trim() && typeof c.field_index !== 'number').length
+    const inputRows = rows.filter((row) => (row.cells || []).some((c) => typeof c.field_index === 'number')).length
+    const gridLike = headerCols >= 2 && inputRows >= 2
     const formulaLike = allTexts.some((txt) => txt.includes('=')) || inputCount > 12
-    if (formulaLike) {
+    if (gridLike || formulaLike) {
       return (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
           <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{t('bmrFill.recordValues')}</span>
           </div>
-          <div className="bg-white">{renderProcessTable(rows)}</div>
+          <div className="bg-white">{renderProcessTable(rows, { grid: gridLike && !formulaLike })}</div>
         </div>
       )
     }
@@ -1293,8 +1324,9 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
       inputCells.forEach(({ cell, ci }) => {
         const fi = cell.field_index as number
         const cellLabel = compactPlaceholder(String(cell.text || ''))
-        const fallback = (rowTexts.length ? rowTexts.join(' · ') : cellLabel) || `${t('bmrFill.field')} ${fi + 1}`
-        const label = fieldCardLabel(fi, fallback)
+        const fallback = rowTexts.length ? rowTexts.join(' · ') : cellLabel
+        // «Поле N» — последняя страховка: только если в шаблоне метки нет.
+        const label = fieldCardLabel(fi, fallback) || `${t('bmrFill.field')} ${fi + 1}`
         inputCards.push(
           <div key={`${ri}:${ci}:${fi}`} className="flex flex-col gap-1.5 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             <div className="text-[11px] font-semibold leading-snug tracking-wide text-slate-600">{label}</div>
