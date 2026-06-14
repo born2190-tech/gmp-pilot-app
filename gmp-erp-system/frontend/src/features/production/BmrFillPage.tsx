@@ -1028,6 +1028,50 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   const kind = sectionKind(section)
   const isProcessTable = kind === 'process_table'
   const parentStageTitle = isProcessTable ? stageTitleFor(section, allSections) : ''
+
+  // ── Авто-расчёт вычисляемых полей ────────────────────────────────────────
+  // Оператор вводит только замеры; суммы/проценты/формулы считаются сами и
+  // пишутся в запись (для аудита), помечены «авто».
+  const numFi = (fi: number): number | null => numVal(draft[key(sid, fi)])
+  const fmtCalc = (n: number | null): string => (n === null ? '' : String(Number(n.toFixed(4))).replace('.', ','))
+  const computedFields = useMemo<{ fi: number; value: string }[]>(() => {
+    const out: { fi: number; value: string }[] = []
+    const cfg = section.config || {}
+    const tables: BmrStepTable[] = [
+      ...((cfg.tables || []) as BmrStepTable[]),
+      ...((cfg.steps || []).flatMap((st) => st.tables || []) as BmrStepTable[]),
+    ]
+    for (const tb of tables) {
+      if (tb.process_table_variant === 'moisture_loss') {
+        const ms = (tb.moisture || []).map((it) => numFi(it.fi))
+        const mt = ms.length && ms.every((x) => x !== null) ? ms.reduce((a, b) => a + (b || 0), 0) : null
+        if (typeof tb.moisture_total_fi === 'number') out.push({ fi: tb.moisture_total_fi, value: fmtCalc(mt) })
+        const ls = (tb.losses || []).map((it) => numFi(it.fi))
+        const lt = ls.length && ls.every((x) => x !== null) ? ls.reduce((a, b) => a + (b || 0), 0) : null
+        if (typeof tb.losses_total_fi === 'number') out.push({ fi: tb.losses_total_fi, value: fmtCalc(lt) })
+        const c = typeof tb.actual_yield_fi === 'number' ? numFi(tb.actual_yield_fi) : null
+        const d = typeof tb.expected_weight_fi === 'number' ? numFi(tb.expected_weight_fi) : null
+        const dl = mt !== null && lt !== null && c !== null && d ? ((mt + lt + c) * 100) / d : null
+        if (typeof tb.drying_limit_fi === 'number') out.push({ fi: tb.drying_limit_fi, value: fmtCalc(dl) })
+      }
+      if (tb.process_table_variant === 'requirement_calculation') {
+        for (const it of tb.items || []) {
+          const coeff = parseFloat(String(it.coeff || '').replace(',', '.'))
+          const taken = numFi(it.taken_fi)
+          const discard = !Number.isNaN(coeff) && taken !== null ? coeff - taken : null
+          out.push({ fi: it.discard_fi, value: fmtCalc(discard) })
+        }
+      }
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, section.config])
+  useEffect(() => {
+    for (const c of computedFields) {
+      if ((draft[key(sid, c.fi)] ?? '') !== c.value) onSetVal(sid, c.fi, c.value)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computedFields])
   const sectionTitle = isProcessTable && section.title === 'Контрольная таблица'
     ? 'Контрольная таблица этапа'
     : section.title
@@ -1073,6 +1117,18 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
           className="h-10 w-full min-w-[7rem] rounded-md border border-slate-300 bg-white px-2.5 text-[13px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500" />
         {unit && <span className="text-[10px] text-slate-400">{unit}</span>}
       </div>
+    )
+  }
+
+  // Вычисляемое поле — только чтение, значение считается из замеров.
+  const readonlyValue = (fi: number, unit?: string) => {
+    const v = draft[key(sid, fi)] ?? ''
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block min-w-[7rem] rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-2 text-[13px] font-semibold tabular-nums text-slate-900">{v || '—'}</span>
+        {unit && <span className="text-[10px] text-slate-400">{unit}</span>}
+        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-blue-700">авто</span>
+      </span>
     )
   }
 
@@ -1267,7 +1323,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                 <span>На выброс = <b>{item.coeff || '—'}</b>* − (</span>
                 {inputFor(item.taken_fi, 'number', 'кг')}
                 <span>) =</span>
-                {inputFor(item.discard_fi, 'number', 'кг')}
+                {readonlyValue(item.discard_fi, 'кг')}
               </div>
             </div>
           </div>
@@ -1296,7 +1352,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
           ))}
           <div className="flex flex-col gap-1">
             <div className="text-[10.5px] font-semibold uppercase tracking-wide text-blue-600">Всего · {unit}</div>
-            {cell(totalFi, unit)}
+            {typeof totalFi === 'number' ? readonlyValue(totalFi, unit) : null}
           </div>
         </div>
       </div>
@@ -1323,7 +1379,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
           <div className="rounded-lg border border-slate-200 bg-white p-3">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-slate-700">
               <span className="font-medium">Предел отчётности по сушке = (a + b + c) × 100 ÷ d =</span>
-              {cell(tbl.drying_limit_fi, '%')}
+              {typeof tbl.drying_limit_fi === 'number' ? readonlyValue(tbl.drying_limit_fi, '%') : null}
             </div>
           </div>
         </div>
