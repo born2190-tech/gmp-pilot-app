@@ -908,11 +908,26 @@ function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, si
             <input autoFocus value={signerName || ''} onChange={(e) => setSignerName!(e.target.value)} placeholder={t('weighing.signerLogin')} autoComplete="off"
               className="h-11 w-44 rounded-lg border border-slate-300 px-3 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           )}
-          <input type="password" autoFocus={!needsSigner} value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder={t('weighing.passwordPin')} autoComplete="off"
+          <input type="password" inputMode="numeric" autoFocus={!needsSigner} value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder={t('weighing.passwordPin')} autoComplete="off"
             onKeyDown={(e) => { if (e.key === 'Enter' && ready) onConfirm() }}
-            className="h-11 w-44 rounded-lg border border-slate-300 px-3 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+            className="h-11 w-44 rounded-lg border border-slate-300 px-3 text-[16px] tracking-[0.3em] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           <button disabled={busy || !ready} onClick={onConfirm} className={`inline-flex h-11 items-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 ${accentBg}`}>{busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {t('common.confirm')}</button>
           <button onClick={onCancel} className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-600"><X size={15} /></button>
+        </div>
+        {/* Экранная числовая клавиатура PIN — быстро и в перчатках. */}
+        <div className="border-t border-slate-100 px-4 py-3">
+          <div className="mx-auto grid max-w-[260px] grid-cols-3 gap-2">
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+              <button key={d} type="button" disabled={busy} onClick={() => setPwd(pwd + d)}
+                className="h-12 rounded-lg border border-slate-200 bg-white text-[18px] font-semibold text-slate-800 active:scale-[0.97] active:bg-slate-100 disabled:opacity-50">{d}</button>
+            ))}
+            <button type="button" disabled={busy} onClick={() => setPwd('')}
+              className="h-12 rounded-lg border border-slate-200 bg-slate-50 text-[13px] font-medium text-slate-500 active:bg-slate-100 disabled:opacity-50">Очистить</button>
+            <button key="0" type="button" disabled={busy} onClick={() => setPwd(pwd + '0')}
+              className="h-12 rounded-lg border border-slate-200 bg-white text-[18px] font-semibold text-slate-800 active:scale-[0.97] active:bg-slate-100 disabled:opacity-50">0</button>
+            <button type="button" disabled={busy || !pwd} onClick={() => setPwd(pwd.slice(0, -1))}
+              className="h-12 rounded-lg border border-slate-200 bg-slate-50 text-[18px] font-semibold text-slate-600 active:bg-slate-100 disabled:opacity-50">⌫</button>
+          </div>
         </div>
       </div>
     </div>
