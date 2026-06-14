@@ -1076,9 +1076,63 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     )
   }
 
-  // Ячейка таблицы: для типа signature_* — слот э-подписи (SignCell),
-  // иначе обычное поле ввода. Так подписи ДП/ДОК в таблицах подписываются,
-  // а не вводятся текстом.
+  const fieldLabelLower = (fi: number) => String(section.config?.fields?.[fi]?.label || '').toLowerCase()
+
+  // Поле даты/времени → кнопка «Отметить время» (штамп now), без ручного ввода.
+  const isTimeField = (fi: number, type?: string, hint?: string) => {
+    if (type === 'datetime' || type === 'date') return true
+    const s = `${fieldLabelLower(fi)} ${(hint || '').toLowerCase()}`
+    return /(время|дата)\s*[\wа-я-]*\s*(нач|окон)/.test(s)
+  }
+  const renderTimeField = (fi: number) => {
+    const v = draft[key(sid, fi)] ?? ''
+    const disabled = closed || !fieldUnlocked(allSections, entries, draft, sid, fi)
+    if (v) {
+      return (
+        <span className="inline-flex items-center gap-2">
+          <span className="rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-[13px] tabular-nums text-slate-800">{fmtTime(v) || v}</span>
+          {!disabled && <button type="button" onClick={() => onSetVal(sid, fi, '')} className="text-[11px] text-slate-400 hover:text-rose-600">сброс</button>}
+        </span>
+      )
+    }
+    return (
+      <button type="button" disabled={disabled} onClick={() => onSetVal(sid, fi, new Date().toISOString())}
+        className="inline-flex h-10 items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-3 text-[13px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+        <Clock size={14} /> Отметить время
+      </button>
+    )
+  }
+
+  // Поле-выбор «Проход/Недостаток», «Соответствует», «Да/Нет» → кнопки-тумблеры.
+  const passFailOptions = (fi: number, hint?: string): string[] | null => {
+    const s = `${fieldLabelLower(fi)} ${(hint || '').toLowerCase()}`
+    if (s.includes('проход') && (s.includes('недостаток') || s.includes('брак'))) return ['Проход', 'Недостаток']
+    if (s.includes('соответств')) return ['Соответствует', 'Не соответствует']
+    if (/\bгодн?[аы]?\b/.test(s) && !s.includes('срок')) return ['Годен', 'Не годен']
+    if (/\bда\s*\/\s*нет\b/.test(s)) return ['Да', 'Нет']
+    return null
+  }
+  const renderToggle = (fi: number, options: string[]) => {
+    const v = draft[key(sid, fi)] ?? ''
+    const disabled = closed || !fieldUnlocked(allSections, entries, draft, sid, fi)
+    return (
+      <span className="inline-flex overflow-hidden rounded-md border border-slate-300">
+        {options.map((opt, i) => {
+          const active = v === opt
+          return (
+            <button key={opt} type="button" disabled={disabled} onClick={() => onSetVal(sid, fi, active ? '' : opt)}
+              className={`h-10 px-3 text-[13px] font-semibold transition ${i > 0 ? 'border-l border-slate-300' : ''} ${
+                active ? (i === 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white') : 'bg-white text-slate-600 hover:bg-slate-50'
+              } disabled:opacity-50`}>
+              {opt}
+            </button>
+          )
+        })}
+      </span>
+    )
+  }
+
+  // Ячейка таблицы: подпись (SignCell), время (кнопка), выбор (тумблер) или ввод.
   const cellControl = (fi: number, type: string | undefined, unit: string | undefined, reason: string) => {
     if (type && type.startsWith('signature')) {
       const role: SignRole = type === 'signature_qa' ? 'dok' : type === 'signature_warehouse' ? 'wh' : 'dp'
@@ -1091,6 +1145,9 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
           onSign={can && !closed && unlocked ? () => onSign(fi, role, reason) : undefined} />
       )
     }
+    const pf = passFailOptions(fi, reason)
+    if (pf) return renderToggle(fi, pf)
+    if (isTimeField(fi, type, reason)) return renderTimeField(fi)
     return inputFor(fi, type || 'text', unit)
   }
 
