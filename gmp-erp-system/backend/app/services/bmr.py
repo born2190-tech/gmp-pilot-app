@@ -1328,12 +1328,51 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
     return _instance_dict(db, inst, user)
 
 
+_OPTIONAL_FIELD_MARKERS = (
+    "если есть", "если вне", "при необходимости", "опционал",
+    "примечан", "замечани", "комментар", "другие (",
+)
+
+
+def _field_optional(label: str) -> bool:
+    low = (label or "").lower()
+    return any(marker in low for marker in _OPTIONAL_FIELD_MARKERS)
+
+
+def _instance_completion_gaps(db: Session, inst: BmrInstance) -> list[str]:
+    """Незавершённые обязательные поля/подписи всего экземпляра. Подписи нужны
+    всегда; поля данных — кроме явно опциональных («если есть», «примечание»…)."""
+    completed = _completion_map(db, inst.id)
+    gaps: list[str] = []
+    for section in inst.sections:
+        if _is_hidden_bmr_section(section):
+            continue
+        for idx, fdef in enumerate(_section_fields(section)):
+            if not isinstance(fdef, dict):
+                continue
+            label = str(fdef.get("label") or "")
+            is_sig = str(fdef.get("type") or "").startswith("signature")
+            if not is_sig and _field_optional(label):
+                continue
+            if not completed.get((section.id, idx)):
+                gaps.append(f"{section.ordinal}. {label or f'поле {idx + 1}'}")
+    return gaps
+
+
 def complete_instance(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrInstanceActionRequest) -> dict:
     """Производство фиксирует, что BMR заполнен (СОП-11 п.5.2.7.14)."""
     _require_any(user, ("MANAGE_PRODUCTION",))
     inst = _get_instance(db, instance_id)
     if inst.status not in ("in_progress", "issued"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR уже завершён или проверен")
+    gaps = _instance_completion_gaps(db, inst)
+    if gaps:
+        preview = "; ".join(gaps[:6])
+        more = f" и ещё {len(gaps) - 6}" if len(gaps) > 6 else ""
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Нельзя завершить BMR: не заполнено/не подписано {len(gaps)} обязательных полей. Например: {preview}{more}",
+        )
     validate_signature(db, user, payload, "COMPLETE_BMR", "bmr_instance", str(inst.id))
     inst.status = "completed"
     inst.completed_by = user.id
