@@ -257,6 +257,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   const [signer, setSigner] = useState('')
   const [assignOpen, setAssignOpen] = useState(false)
   const [overview, setOverview] = useState(readOnly)
+  const [selectedStage, setSelectedStage] = useState<string | null>(null)
 
   const perms = user?.permissions || []
   const isSupervisor = perms.includes('MANAGE_PRODUCTION') || perms.includes('QA_DECISION')
@@ -459,10 +460,43 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
     const focusable = el.querySelector('input,textarea,select,button') as HTMLElement | null
     focusable?.focus({ preventScroll: true })
   }
-  const goNext = () => { if (nextTarget) goToField(String(nextTarget.s.id), nextTarget.fi) }
+  // ── Одна стадия за раз (для надзора, где видны все стадии) ───────────────────
+  const stageTitleOf = (code: string): string => {
+    const hdr = visibleSections.find((s) => stageCodeOf(s) === code && sectionKind(s) === 'process_header')
+    if (hdr) return String(hdr.config?.process || hdr.title || code)
+    const any = visibleSections.find((s) => stageCodeOf(s) === code)
+    return String(any?.config?.room || any?.title || code)
+  }
+  const stageGroups: { code: string; title: string; done: number; total: number }[] = []
+  const stageIdx: Record<string, number> = {}
+  for (const s of visibleSections) {
+    const code = stageCodeOf(s)
+    let idx = stageIdx[code]
+    if (idx === undefined) { idx = stageGroups.length; stageIdx[code] = idx; stageGroups.push({ code, title: stageTitleOf(code), done: 0, total: 0 }) }
+    const p = sectionProgress(s, entries, draft)
+    stageGroups[idx].done += p.done; stageGroups[idx].total += p.total
+  }
+  const multiStage = isSupervisor && !overview && stageGroups.length > 1
+  const defaultStage = (nextTarget ? stageCodeOf(nextTarget.s) : stageGroups[0]?.code) || null
+  const activeStage = multiStage
+    ? (selectedStage && stageIdx[selectedStage] !== undefined ? selectedStage : defaultStage)
+    : null
+  const renderedSections = multiStage ? visibleSections.filter((s) => stageCodeOf(s) === activeStage) : visibleSections
+
+  const goNext = () => {
+    if (!nextTarget) return
+    const targetStage = stageCodeOf(nextTarget.s)
+    if (multiStage && targetStage !== activeStage) {
+      setSelectedStage(targetStage)
+      window.setTimeout(() => goToField(String(nextTarget.s.id), nextTarget.fi), 90)
+    } else {
+      goToField(String(nextTarget.s.id), nextTarget.fi)
+    }
+  }
   goNextRef.current = goNext
 
-  const finalEndFields = processEndFields(visibleSections)
+  const allEndFields = processEndFields(visibleSections)
+  const finalEndFields = multiStage ? allEndFields.filter((f) => stageCodeOf(f.section) === activeStage) : allEndFields
   const progressTotal = visibleSections.reduce((acc, s) => {
     const p = sectionProgress(s, entries, draft)
     return { done: acc.done + p.done, total: acc.total + p.total }
@@ -523,7 +557,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
       ) : (
         <div className="mx-auto grid max-w-[1680px] grid-cols-1 gap-3 p-3 xl:grid-cols-[280px_minmax(0,1fr)]">
           <StageRail
-            sections={visibleSections}
+            sections={renderedSections}
             entries={entries}
             draft={draft}
             myRoom={myRoom}
@@ -532,6 +566,24 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
             status={inst.status}
           />
           <main className="min-w-0 space-y-3">
+            {/* Надзор: одна стадия за раз — переключатель (операторы видят только свою). */}
+            {multiStage && (
+              <div className="flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+                {stageGroups.map((g, gi) => {
+                  const active = g.code === activeStage
+                  const done = g.total > 0 && g.done >= g.total
+                  return (
+                    <button key={g.code} type="button" onClick={() => setSelectedStage(g.code)}
+                      className={`inline-flex flex-none items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition ${
+                        active ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
+                      <span className={`mono inline-flex h-5 min-w-[20px] items-center justify-center rounded text-[11px] ${active ? 'bg-white/20' : done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{String(gi + 1).padStart(2, '0')}</span>
+                      <span className="max-w-[180px] truncate">{g.title}</span>
+                      <span className={`mono text-[11px] ${active ? 'text-white/70' : 'text-slate-400'}`}>{g.done}/{g.total}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
             {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</div>}
             {lockedByOther && (
               <div className="flex flex-wrap items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-[13px] text-rose-800">
@@ -548,7 +600,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-8 text-[13px] text-amber-800">
                 {t('bmrFill.noStageForRoom', { room: myRoom || user?.workstation_id || t('bmrFill.undefined') })}
               </div>
-            ) : visibleSections.map((s) => (
+            ) : renderedSections.map((s) => (
               <SectionBlock key={s.id} section={s} allSections={visibleSections} entries={entries} draft={draft} closed={!!closed || lockedByOther}
                 canDp={canDp} canDok={canDok} canWh={canWh} onSetVal={setVal}
                 onSign={(fi, role, label) => { setSigner(''); setPwd(''); setDock({ sectionId: String(s.id), fieldIndex: fi, role, label }) }} />
