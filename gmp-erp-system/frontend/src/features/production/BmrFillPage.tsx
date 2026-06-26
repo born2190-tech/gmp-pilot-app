@@ -1084,6 +1084,33 @@ function ProcessClosureBlock({
 /* ============================ SECTION BLOCKS ============================ */
 const EMPTY_COMPUTED: { fi: number; value: string }[] = []  // стабильная ссылка — секции без расчётов не дёргают эффект
 
+// Поле ввода с ЛОКАЛЬНЫМ состоянием: набор не пишет в глобальный draft на каждый
+// символ (иначе перерисовываются все 110 секций → лаг). В глобальное состояние
+// уходит с задержкой 300мс и на blur. Внешние изменения значения подхватываются.
+function FieldInput({ anchorId, value, itype, unit, disabled, onCommit }: {
+  anchorId: string; value: string; itype: string; unit?: string; disabled: boolean; onCommit: (v: string) => void
+}) {
+  const [local, setLocal] = useState(value)
+  const last = useRef(value)
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => { if (value !== last.current) { last.current = value; setLocal(value) } }, [value])
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  const commit = (v: string) => { last.current = v; onCommit(v) }
+  const onChange = (v: string) => {
+    setLocal(v)
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => commit(v), 300)
+  }
+  const flush = () => { window.clearTimeout(timer.current); if (local !== last.current) commit(local) }
+  return (
+    <div id={anchorId} className="inline-flex items-center gap-1.5">
+      <input disabled={disabled} type={itype} value={local} onChange={(e) => onChange(e.target.value)} onBlur={flush}
+        className="h-10 w-full min-w-[7rem] rounded-md border border-slate-300 bg-white px-2.5 text-[13px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500" />
+      {unit && <span className="text-[10px] text-slate-400">{unit}</span>}
+    </div>
+  )
+}
+
 function SectionBlock({ section, allSections, entries, draft, closed, canDp, canDok, canWh, onSetVal, onSign }: {
   section: BmrSectionItem; allSections: BmrSectionItem[]; entries: EntryMap; draft: Record<string, string>; closed: boolean
   canDp: boolean; canDok: boolean; canWh: boolean; onSetVal: (sid: string, fi: number, v: string) => void
@@ -1185,11 +1212,8 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     const itype = type === 'number' ? 'number' : type === 'datetime' ? 'datetime-local' : type === 'date' ? 'date' : 'text'
     const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi)
     return (
-      <div id={anchorId(fi)} className="inline-flex items-center gap-1.5">
-        <input disabled={closed || !unlocked} type={itype} value={v} onChange={(e) => onSetVal(sid, fi, e.target.value)}
-          className="h-10 w-full min-w-[7rem] rounded-md border border-slate-300 bg-white px-2.5 text-[13px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500" />
-        {unit && <span className="text-[10px] text-slate-400">{unit}</span>}
-      </div>
+      <FieldInput anchorId={anchorId(fi)} value={v} itype={itype} unit={unit} disabled={closed || !unlocked}
+        onCommit={(val) => onSetVal(sid, fi, val)} />
     )
   }
 
