@@ -1187,7 +1187,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
       ...((cfg.tables || []) as BmrStepTable[]),
       ...((cfg.steps || []).flatMap((st) => st.tables || []) as BmrStepTable[]),
     ]
-    return tables.filter((tb) => tb.process_table_variant === 'moisture_loss' || tb.process_table_variant === 'requirement_calculation')
+    return tables.filter((tb) => tb.process_table_variant === 'moisture_loss' || tb.process_table_variant === 'requirement_calculation' || tb.process_table_variant === 'yield_calculation')
   }, [section.config])
   const computedFields = useMemo<{ fi: number; value: string }[]>(() => {
     if (!variantTables.length) return EMPTY_COMPUTED  // 99% секций — без расчётов, не дёргаем эффект на каждый ввод
@@ -1212,6 +1212,17 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
           const discard = !Number.isNaN(coeff) && taken !== null ? coeff - taken : null
           out.push({ fi: it.discard_fi, value: fmtCalc(discard) })
         }
+      }
+      if (tb.process_table_variant === 'yield_calculation') {
+        const a = typeof tb.theoretical_fi === 'number' ? numFi(tb.theoretical_fi) : null
+        const b = typeof tb.actual_fi === 'number' ? numFi(tb.actual_fi) : null
+        const c = typeof tb.sampled_fi === 'number' ? numFi(tb.sampled_fi) : null
+        const e = (typeof tb.deviation_fi === 'number' ? numFi(tb.deviation_fi) : 0) || 0
+        const f = (typeof tb.other_fi === 'number' ? numFi(tb.other_fi) : 0) || 0
+        const yp = a && b !== null && c !== null ? ((b + c) / a) * 100 : null
+        if (typeof tb.yield_pct_fi === 'number') out.push({ fi: tb.yield_pct_fi, value: fmtCalc(yp) })
+        const rec = a && b !== null && c !== null ? ((b + c + e + f) / a) * 100 : null
+        if (typeof tb.reconcile_fi === 'number') out.push({ fi: tb.reconcile_fi, value: fmtCalc(rec) })
       }
     }
     return out
@@ -1536,9 +1547,43 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     )
   }
 
+  // Лист «Расчёт выхода» (этап 14.7): 5 вводимых полей + 2 вычисляемых (%).
+  const renderYieldCalc = (tbl: BmrStepTable) => {
+    const line = (label: string, fi?: number, unit = 'кг') => (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-700">
+        <span className="min-w-[230px] font-medium">{label}</span>
+        {typeof fi === 'number' ? <span className="min-w-[7rem]">{inputFor(fi, 'number', unit)}</span> : null}
+      </div>
+    )
+    const calcLine = (label: string, fi?: number) => (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-700">
+        <span className="min-w-[230px] font-medium">{label}</span>
+        {typeof fi === 'number' ? readonlyValue(fi, '%') : null}
+      </div>
+    )
+    return (
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
+        <div className="border-b border-slate-200 bg-white px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
+          <div className="mt-0.5 text-[12.5px] font-semibold text-slate-800">Расчёт выхода</div>
+        </div>
+        <div className="space-y-2 p-3">
+          {line('Теоретический выход (A) =', tbl.theoretical_fi)}
+          {line('Фактический выход (B) =', tbl.actual_fi)}
+          {line('Отобранное количество (C) =', tbl.sampled_fi)}
+          {calcLine('% выхода = (B + C) / A × 100 =', tbl.yield_pct_fi)}
+          {line('Отклонение (если есть) (E) =', tbl.deviation_fi)}
+          {line('Другие (если есть) (F) =', tbl.other_fi)}
+          {calcLine('Согласование = (B + C + E + F) / A × 100 =', tbl.reconcile_fi)}
+        </div>
+      </div>
+    )
+  }
+
   const renderOperatorTable = (tbl: BmrStepTable, tableNo: number) => {
     if (tbl.process_table_variant === 'requirement_calculation') return renderRequirementCalc(tbl)
     if (tbl.process_table_variant === 'moisture_loss') return renderMoistureLoss(tbl)
+    if (tbl.process_table_variant === 'yield_calculation') return renderYieldCalc(tbl)
     const rows = (tbl.rows || []) as BmrProcessTableRow[]
     if (!tableHasInputs(rows)) {
       return (

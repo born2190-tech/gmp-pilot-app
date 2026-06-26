@@ -556,10 +556,54 @@ def _moisture_loss_table(table, prefix: str, fields: list[dict]) -> dict | None:
     }
 
 
+def _yield_calc_table(table, prefix: str, fields: list[dict]) -> dict | None:
+    """Лист «Расчёт выхода» (этап 14.7 и т.п.): один столбец из 7 строк —
+    Теор. выход (A), Факт. выход (B), Отобранное (C), % выхода=(B+C)/A×100,
+    Отклонение (E), Другие (F), Согласование=(B+C+E+F)/A×100. В Word строки —
+    `['', метка, '']`, поэтому генерик плодит ×3 поля; разбираем по строкам."""
+    raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
+    flat = " ".join(" ".join(r) for r in raw).lower()
+    if "теоретический выход" not in flat or "согласование" not in flat:
+        return None
+
+    def add(label: str, unit: str | None) -> int:
+        fi = len(fields)
+        fields.append({"label": _short_label(f"{prefix} · {label}"), "type": "number", "unit": unit})
+        return fi
+
+    item: dict = {"process_table_variant": "yield_calculation", "rows": []}
+    for r in raw:
+        label = next((_clean(x) for x in r if _clean(x)), "")
+        low = label.lower()
+        if not low:
+            continue
+        if "теоретическ" in low and "выход" in low:
+            item["theoretical_fi"] = add("Теоретический выход (A)", "кг")
+        elif "согласование" in low:
+            item["reconcile_fi"] = add("Согласование = (B+C+E+F)/A×100", "%")
+        elif "выход" in low and ("x100" in low or "×100" in low or "b + c" in low or "/ a" in low or "%" in low):
+            item["yield_pct_fi"] = add("% выхода = (B+C)/A×100", "%")
+        elif "фактическ" in low and "выход" in low:
+            item["actual_fi"] = add("Фактический выход (B)", "кг")
+        elif "отобранн" in low:
+            item["sampled_fi"] = add("Отобранное количество (C)", "кг")
+        elif "отклонение" in low:
+            item["deviation_fi"] = add("Отклонение (E)", "кг")
+        elif "другие" in low:
+            item["other_fi"] = add("Другие (F)", "кг")
+    if "theoretical_fi" not in item or "reconcile_fi" not in item:
+        return None
+    return item
+
+
 def _row_nested_tables(row, prefix: str, fields: list[dict]) -> list[dict]:
     out: list[dict] = []
     for nt in _unique_nested_tables(row.cells):
-        special = _requirement_calc_table(nt, prefix, fields) or _moisture_loss_table(nt, prefix, fields)
+        special = (
+            _requirement_calc_table(nt, prefix, fields)
+            or _moisture_loss_table(nt, prefix, fields)
+            or _yield_calc_table(nt, prefix, fields)
+        )
         out.append(special if special is not None else _nested_table(nt, prefix, fields))
     return out
 

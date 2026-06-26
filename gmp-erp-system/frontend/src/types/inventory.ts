@@ -1200,6 +1200,14 @@ export interface BmrStepTable {
   actual_yield_fi?: number
   expected_weight_fi?: number
   drying_limit_fi?: number
+  // yield_calculation variant
+  theoretical_fi?: number
+  actual_fi?: number
+  sampled_fi?: number
+  yield_pct_fi?: number
+  deviation_fi?: number
+  other_fi?: number
+  reconcile_fi?: number
 }
 export interface BmrTextBlank { field_index: number; type?: string; unit?: string }
 export interface BmrChecklistStep {
