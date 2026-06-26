@@ -249,6 +249,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   // Мягкая блокировка этапа: имя другого пользователя, если этап занят им.
   const [lockHolder, setLockHolder] = useState<string | null>(null)
   const takeoverRef = useRef<() => void>(() => {})
+  const goNextRef = useRef<() => void>(() => {})
   const [dock, setDock] = useState<{ sectionId: string; fieldIndex: number; role: SignRole; label: string } | null>(null)
   const [action, setAction] = useState<null | 'complete' | 'review'>(null)
   const [pwd, setPwd] = useState('')
@@ -396,6 +397,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
         meaning: signMeaning(dock.role, t), reason: dock.label,
       })
       setInst(updated); setDock(null); setPwd(''); setSigner('')
+      window.setTimeout(() => goNextRef.current(), 400)  // автопереход к следующему полю
     } catch (e) { setError(e instanceof Error ? e.message : t('bmrFill.signRejected')) }
     finally { setBusy(false) }
   }
@@ -424,6 +426,39 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
 
   const myRoom = roomFromWorkstation(user?.workstation_id)
   const visibleSections = inst.sections
+
+  // ── «Следующее поле»: первое незавершённое обязательное по порядку ──────────
+  const OPTIONAL_RE = /(если есть|если вне|при необходимости|опционал|примечан|замечани|комментар|другие \()/i
+  const fieldDone = (sidv: string, fi: number): boolean => {
+    const e = entries[key(sidv, fi)]
+    if (e?.value?.signed_by) return true
+    const dv = draft[key(sidv, fi)]
+    if (dv !== undefined && dv !== '') return true
+    const ev = e?.value?.v
+    return ev !== undefined && ev !== null && ev !== ''
+  }
+  const pendingFields = visibleSections.flatMap((s) =>
+    ((s.config?.fields || []) as { label?: string; type?: string }[])
+      .map((f, fi) => ({ s, f, fi }))
+      .filter(({ f, fi }) => {
+        const isSig = String(f.type || '').startsWith('signature')
+        if (!isSig && OPTIONAL_RE.test(String(f.label || ''))) return false
+        return !fieldDone(String(s.id), fi)
+      }),
+  )
+  const nextTarget = pendingFields[0] || null
+  const goToField = (sidv: string, fi: number) => {
+    const el = document.getElementById(`f-${sidv}-${fi}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2', 'rounded-lg')
+    window.setTimeout(() => el.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2'), 1700)
+    const focusable = el.querySelector('input,textarea,select,button') as HTMLElement | null
+    focusable?.focus({ preventScroll: true })
+  }
+  const goNext = () => { if (nextTarget) goToField(String(nextTarget.s.id), nextTarget.fi) }
+  goNextRef.current = goNext
+
   const finalEndFields = processEndFields(visibleSections)
   const progressTotal = visibleSections.reduce((acc, s) => {
     const p = sectionProgress(s, entries, draft)
@@ -532,6 +567,17 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
           <span className="ml-auto text-[11px] text-slate-400">{readOnly ? t('bmrFill.footerReadOnly') : closed ? t('bmrFill.footerClosed') : t('bmrFill.footerDraft')}</span>
         </div>
       </div>
+
+      {/* Плавающая кнопка «Следующее поле»: прыжок к единственному полю, что
+          нужно заполнить/подписать сейчас (строгий порядок). */}
+      {!closed && !lockedByOther && !dock && !action && nextTarget && (
+        <button type="button" onClick={goNext}
+          className="fixed bottom-6 right-6 z-30 inline-flex h-14 items-center gap-2.5 rounded-full bg-blue-600 px-5 text-[14px] font-semibold text-white shadow-xl ring-1 ring-blue-700/40 hover:bg-blue-700 active:scale-[0.98]">
+          <ArrowRight size={18} />
+          Следующее поле
+          <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-white/20 px-1.5 text-[12px] tabular-nums">{pendingFields.length}</span>
+        </button>
+      )}
 
       {/* sign dock (slide-up): подписант вводит СВОИ логин+PIN на каждую подпись */}
       {dock && (
@@ -935,7 +981,7 @@ function SignDock({ role, label, pwd, setPwd, busy, who, onCancel, onConfirm, si
 }
 
 /* ---- Signature cell ---- */
-function SignCell({ role, state, who, at, onSign, lockedLabel }: { role: SignRole; state: 'locked' | 'ready' | 'signed'; who?: string; at?: string; onSign?: () => void; lockedLabel?: string }) {
+function SignCell({ role, state, who, at, onSign, lockedLabel, anchorId }: { role: SignRole; state: 'locked' | 'ready' | 'signed'; who?: string; at?: string; onSign?: () => void; lockedLabel?: string; anchorId?: string }) {
   const { t } = useI18n()
   const dok = role === 'dok'
   const wh = role === 'wh'
@@ -945,13 +991,13 @@ function SignCell({ role, state, who, at, onSign, lockedLabel }: { role: SignRol
   const signedMeta = dok ? 'text-emerald-700/80' : wh ? 'text-amber-700/80' : 'text-indigo-700/80'
   const btnTone = dok ? 'bg-slate-900 hover:bg-slate-800' : wh ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'
   if (state === 'signed') return (
-    <div className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 ${signedTone}`}>
+    <div id={anchorId} className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 ${signedTone}`}>
       <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-white ${signedDot}`}><Check size={12} /></span>
       <div className="leading-tight"><div className={`text-[12px] font-semibold ${signedName}`}>{who}</div><div className={`mono text-[10px] ${signedMeta}`}>{signRoleLabel(role, t)} · {at}</div></div>
     </div>
   )
-  if (state === 'locked') return <div className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-400"><Lock size={13} /> {lockedLabel || (dok ? t('bmrFill.afterDp') : t('bmrFill.awaiting'))}</div>
-  return <button onClick={onSign} className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-semibold text-white shadow-sm active:scale-[0.98] ${btnTone}`}><Pen size={13} /> {t('bmrFill.sign')} · {signRoleLabel(role, t)}</button>
+  if (state === 'locked') return <div id={anchorId} className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-400"><Lock size={13} /> {lockedLabel || (dok ? t('bmrFill.afterDp') : t('bmrFill.awaiting'))}</div>
+  return <button id={anchorId} onClick={onSign} className={`inline-flex h-10 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-white shadow-sm active:scale-[0.98] ${btnTone}`}><Pen size={13} /> {t('bmrFill.sign')} · {signRoleLabel(role, t)}</button>
 }
 
 function numVal(s?: string): number | null {
@@ -1040,6 +1086,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
 }) {
   const { t } = useI18n()
   const sid = String(section.id)
+  const anchorId = (fi: number) => `f-${sid}-${fi}`
   const kind = sectionKind(section)
   const isProcessTable = kind === 'process_table'
   const parentStageTitle = isProcessTable ? stageTitleFor(section, allSections) : ''
@@ -1127,7 +1174,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     const itype = type === 'number' ? 'number' : type === 'datetime' ? 'datetime-local' : type === 'date' ? 'date' : 'text'
     const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi)
     return (
-      <div className="inline-flex items-center gap-1.5">
+      <div id={anchorId(fi)} className="inline-flex items-center gap-1.5">
         <input disabled={closed || !unlocked} type={itype} value={v} onChange={(e) => onSetVal(sid, fi, e.target.value)}
           className="h-10 w-full min-w-[7rem] rounded-md border border-slate-300 bg-white px-2.5 text-[13px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500" />
         {unit && <span className="text-[10px] text-slate-400">{unit}</span>}
@@ -1139,7 +1186,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   const readonlyValue = (fi: number, unit?: string) => {
     const v = draft[key(sid, fi)] ?? ''
     return (
-      <span className="inline-flex items-center gap-1.5">
+      <span id={anchorId(fi)} className="inline-flex items-center gap-1.5">
         <span className="inline-block min-w-[7rem] rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-2 text-[13px] font-semibold tabular-nums text-slate-900">{v || '—'}</span>
         {unit && <span className="text-[10px] text-slate-400">{unit}</span>}
         <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-blue-700">авто</span>
@@ -1160,14 +1207,14 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     const disabled = closed || !fieldUnlocked(allSections, entries, draft, sid, fi)
     if (v) {
       return (
-        <span className="inline-flex items-center gap-2">
+        <span id={anchorId(fi)} className="inline-flex items-center gap-2">
           <span className="rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-[13px] tabular-nums text-slate-800">{fmtTime(v) || v}</span>
           {!disabled && <button type="button" onClick={() => onSetVal(sid, fi, '')} className="text-[11px] text-slate-400 hover:text-rose-600">сброс</button>}
         </span>
       )
     }
     return (
-      <button type="button" disabled={disabled} onClick={() => onSetVal(sid, fi, new Date().toISOString())}
+      <button id={anchorId(fi)} type="button" disabled={disabled} onClick={() => onSetVal(sid, fi, new Date().toISOString())}
         className="inline-flex h-10 items-center gap-1.5 rounded-md border border-blue-300 bg-blue-50 px-3 text-[13px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50">
         <Clock size={14} /> Отметить время
       </button>
@@ -1187,7 +1234,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     const v = draft[key(sid, fi)] ?? ''
     const disabled = closed || !fieldUnlocked(allSections, entries, draft, sid, fi)
     return (
-      <span className="inline-flex overflow-hidden rounded-md border border-slate-300">
+      <span id={anchorId(fi)} className="inline-flex overflow-hidden rounded-md border border-slate-300">
         {options.map((opt, i) => {
           const active = v === opt
           return (
@@ -1211,7 +1258,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
       const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi)
       const can = role === 'dok' ? canDok : role === 'wh' ? (canWh || canDp) : canDp
       return (
-        <SignCell role={role} state={sigState(e, true, role, unlocked)}
+        <SignCell role={role} state={sigState(e, true, role, unlocked)} anchorId={anchorId(fi)}
           who={e?.value?.signed_by} at={fmtTime(e?.value?.signed_at)}
           onSign={can && !closed && unlocked ? () => onSign(fi, role, reason) : undefined} />
       )
@@ -1568,11 +1615,11 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.doneDp')}</div>
-            <SignCell role="dp" state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(10, 'dp', 'Расчет эффективности') : undefined} />
+            <SignCell role="dp" anchorId={anchorId(10)} state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(10, 'dp', 'Расчет эффективности') : undefined} />
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.checkedDok')}</div>
-            <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', dokUnlocked)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && dokUnlocked ? () => onSign(11, 'dok', 'Проверка расчета эффективности') : undefined} />
+            <SignCell role="dok" anchorId={anchorId(11)} state={sigState(dokE, dpSigned, 'dok', dokUnlocked)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && dokUnlocked ? () => onSign(11, 'dok', 'Проверка расчета эффективности') : undefined} />
           </div>
         </div>
       </div>
@@ -1666,11 +1713,11 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.doneDp')}</div>
-                        <SignCell role="dp" state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(dpFi, 'dp', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} />
+                        <SignCell role="dp" anchorId={anchorId(dpFi)} state={sigState(dpE, dpSigned, 'dp', dpUnlocked)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && dpUnlocked ? () => onSign(dpFi, 'dp', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} />
                       </div>
                       <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{t('bmrFill.checkedDok')}</div>
-                        <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', dokUnlocked)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && dokUnlocked ? () => onSign(dokFi, 'dok', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} />
+                        <SignCell role="dok" anchorId={anchorId(dokFi)} state={sigState(dokE, dpSigned, 'dok', dokUnlocked)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && dokUnlocked ? () => onSign(dokFi, 'dok', t('bmrFill.reasonStep', { n: st.no || i + 1 })) : undefined} />
                       </div>
                     </div>
                   </div>
@@ -1690,6 +1737,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                 <div className="shrink-0">
                   <SignCell
                     role="dok"
+                    anchorId={approvalIndex !== null ? anchorId(approvalIndex) : undefined}
                     state={sigState(approvalEntry, true, 'dok', approvalUnlocked)}
                     who={approvalEntry?.value?.signed_by}
                     at={fmtTime(approvalEntry?.value?.signed_at)}
@@ -1754,8 +1802,8 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
               const startDpE = entries[key(sid, b + 1)]; const endDpE = entries[key(sid, b + 4)]
               const startDpSigned = !!(startDpE?.value && startDpE.value.signed_by)
               const endDpSigned = !!(endDpE?.value && endDpE.value.signed_by)
-              const dokCell = (fi: number, dpSigned: boolean) => { const e = entries[key(sid, fi)]; const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi); return <SignCell role="dok" state={sigState(e, dpSigned, 'dok', unlocked)} who={e?.value?.signed_by} at={fmtTime(e?.value?.signed_at)} onSign={canDok && !closed && dpSigned && unlocked ? () => onSign(fi, 'dok', p.name) : undefined} /> }
-              const dpCell = (fi: number) => { const e = entries[key(sid, fi)]; const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi); return <SignCell role="dp" state={sigState(e, false, 'dp', unlocked)} who={e?.value?.signed_by} at={fmtTime(e?.value?.signed_at)} onSign={canDp && !closed && unlocked ? () => onSign(fi, 'dp', p.name) : undefined} /> }
+              const dokCell = (fi: number, dpSigned: boolean) => { const e = entries[key(sid, fi)]; const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi); return <SignCell role="dok" anchorId={anchorId(fi)} state={sigState(e, dpSigned, 'dok', unlocked)} who={e?.value?.signed_by} at={fmtTime(e?.value?.signed_at)} onSign={canDok && !closed && dpSigned && unlocked ? () => onSign(fi, 'dok', p.name) : undefined} /> }
+              const dpCell = (fi: number) => { const e = entries[key(sid, fi)]; const unlocked = fieldUnlocked(allSections, entries, draft, sid, fi); return <SignCell role="dp" anchorId={anchorId(fi)} state={sigState(e, false, 'dp', unlocked)} who={e?.value?.signed_by} at={fmtTime(e?.value?.signed_at)} onSign={canDp && !closed && unlocked ? () => onSign(fi, 'dp', p.name) : undefined} /> }
               return (
                 <tr key={i} className="border-b border-slate-100">
                   <td className="px-3 py-2.5"><div className="flex items-center gap-2 text-[13px] font-medium text-slate-800">{icon(i)}{p.name}</div>{p.limit && <div className="mono mt-0.5 text-[10.5px] text-slate-400">{t('bmrFill.limit')}: {p.limit}</div>}</td>
@@ -1890,11 +1938,11 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-slate-500">{t('bmrFill.calculatedDp')}</span>
-          <SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && uDp ? () => onSign(2, 'dp', section.title) : undefined} />
+          <SignCell role="dp" anchorId={anchorId(2)} state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && uDp ? () => onSign(2, 'dp', section.title) : undefined} />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-slate-500">{t('bmrFill.checkedDokShort')}</span>
-          <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(3, 'dok', section.title) : undefined} />
+          <SignCell role="dok" anchorId={anchorId(3)} state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(3, 'dok', section.title) : undefined} />
         </div>
       </div>
     )
@@ -1964,10 +2012,10 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
               </div>
               <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-white px-3 py-2">
                 <div className="flex items-center gap-2"><span className="text-[11px] text-slate-500">{t('bmrFill.testedDp')}</span>
-                  <SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && uDp ? () => onSign(dpFi, 'dp', t('bmrFill.reasonIpc', { phase: ph.title })) : undefined} />
+                  <SignCell role="dp" anchorId={anchorId(dpFi)} state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && uDp ? () => onSign(dpFi, 'dp', t('bmrFill.reasonIpc', { phase: ph.title })) : undefined} />
                 </div>
                 <div className="flex items-center gap-2"><span className="text-[11px] text-slate-500">{t('bmrFill.approvedDok')}</span>
-                  <SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(dokFi, 'dok', t('bmrFill.reasonIpc', { phase: ph.title })) : undefined} />
+                  <SignCell role="dok" anchorId={anchorId(dokFi)} state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(dokFi, 'dok', t('bmrFill.reasonIpc', { phase: ph.title })) : undefined} />
                 </div>
               </div>
             </div>
@@ -2004,9 +2052,9 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
             <td className="px-3 py-2">{inputFor(b + 0, 'text')}</td>
             <td className="px-3 py-2">{inputFor(b + 1, 'text')}</td>
             <td className="px-3 py-2">{inputFor(b + 2, 'number', t('bmrFill.kg'))}</td>
-            <td className="px-3 py-2"><SignCell role="wh" state={sigState(whE, false, 'wh', uWh)} who={whE?.value?.signed_by} at={fmtTime(whE?.value?.signed_at)} onSign={(canWh || canDp) && !closed && uWh ? () => onSign(b + 3, 'wh', t('bmrFill.reasonIssue', { name: it.name })) : undefined} /></td>
-            <td className="px-3 py-2"><SignCell role="dp" state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && whSigned && uDp ? () => onSign(b + 4, 'dp', t('bmrFill.reasonCheckDp', { name: it.name })) : undefined} /></td>
-            <td className="px-3 py-2"><SignCell role="dok" state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(b + 5, 'dok', t('bmrFill.reasonCheckDok', { name: it.name })) : undefined} /></td>
+            <td className="px-3 py-2"><SignCell role="wh" anchorId={anchorId(b + 3)} state={sigState(whE, false, 'wh', uWh)} who={whE?.value?.signed_by} at={fmtTime(whE?.value?.signed_at)} onSign={(canWh || canDp) && !closed && uWh ? () => onSign(b + 3, 'wh', t('bmrFill.reasonIssue', { name: it.name })) : undefined} /></td>
+            <td className="px-3 py-2"><SignCell role="dp" anchorId={anchorId(b + 4)} state={sigState(dpE, false, 'dp', uDp)} who={dpE?.value?.signed_by} at={fmtTime(dpE?.value?.signed_at)} onSign={canDp && !closed && whSigned && uDp ? () => onSign(b + 4, 'dp', t('bmrFill.reasonCheckDp', { name: it.name })) : undefined} /></td>
+            <td className="px-3 py-2"><SignCell role="dok" anchorId={anchorId(b + 5)} state={sigState(dokE, dpSigned, 'dok', uDok)} who={dokE?.value?.signed_by} at={fmtTime(dokE?.value?.signed_at)} onSign={canDok && !closed && dpSigned && uDok ? () => onSign(b + 5, 'dok', t('bmrFill.reasonCheckDok', { name: it.name })) : undefined} /></td>
           </tr>
         )
       })
