@@ -437,15 +437,18 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
     const ev = e?.value?.v
     return ev !== undefined && ev !== null && ev !== ''
   }
-  const pendingFields = visibleSections.flatMap((s) =>
-    ((s.config?.fields || []) as { label?: string; type?: string }[])
-      .map((f, fi) => ({ s, f, fi }))
-      .filter(({ f, fi }) => {
-        const isSig = String(f.type || '').startsWith('signature')
-        if (!isSig && OPTIONAL_RE.test(String(f.label || ''))) return false
-        return !fieldDone(String(s.id), fi)
-      }),
-  )
+  const pendingFields = visibleSections.flatMap((s) => {
+    const sidv = String(s.id)
+    const out: { s: BmrSectionItem; fi: number }[] = []
+    const fs = (s.config?.fields || []) as { label?: string; type?: string }[]
+    for (let fi = 0; fi < fs.length; fi++) {
+      if (fieldDone(sidv, fi)) continue  // дешёвая проверка первой — отсекает большинство
+      const f = fs[fi]
+      if (!String(f.type || '').startsWith('signature') && OPTIONAL_RE.test(String(f.label || ''))) continue
+      out.push({ s, fi })
+    }
+    return out
+  })
   const nextTarget = pendingFields[0] || null
   const goToField = (sidv: string, fi: number) => {
     const el = document.getElementById(`f-${sidv}-${fi}`)
@@ -1079,6 +1082,8 @@ function ProcessClosureBlock({
 }
 
 /* ============================ SECTION BLOCKS ============================ */
+const EMPTY_COMPUTED: { fi: number; value: string }[] = []  // стабильная ссылка — секции без расчётов не дёргают эффект
+
 function SectionBlock({ section, allSections, entries, draft, closed, canDp, canDok, canWh, onSetVal, onSign }: {
   section: BmrSectionItem; allSections: BmrSectionItem[]; entries: EntryMap; draft: Record<string, string>; closed: boolean
   canDp: boolean; canDok: boolean; canWh: boolean; onSetVal: (sid: string, fi: number, v: string) => void
@@ -1096,14 +1101,19 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
   // пишутся в запись (для аудита), помечены «авто».
   const numFi = (fi: number): number | null => numVal(draft[key(sid, fi)])
   const fmtCalc = (n: number | null): string => (n === null ? '' : String(Number(n.toFixed(4))).replace('.', ','))
-  const computedFields = useMemo<{ fi: number; value: string }[]>(() => {
-    const out: { fi: number; value: string }[] = []
+  // Список вычислимых таблиц зависит только от шаблона секции — считаем один раз.
+  const variantTables = useMemo<BmrStepTable[]>(() => {
     const cfg = section.config || {}
     const tables: BmrStepTable[] = [
       ...((cfg.tables || []) as BmrStepTable[]),
       ...((cfg.steps || []).flatMap((st) => st.tables || []) as BmrStepTable[]),
     ]
-    for (const tb of tables) {
+    return tables.filter((tb) => tb.process_table_variant === 'moisture_loss' || tb.process_table_variant === 'requirement_calculation')
+  }, [section.config])
+  const computedFields = useMemo<{ fi: number; value: string }[]>(() => {
+    if (!variantTables.length) return EMPTY_COMPUTED  // 99% секций — без расчётов, не дёргаем эффект на каждый ввод
+    const out: { fi: number; value: string }[] = []
+    for (const tb of variantTables) {
       if (tb.process_table_variant === 'moisture_loss') {
         const ms = (tb.moisture || []).map((it) => numFi(it.fi))
         const mt = ms.length && ms.every((x) => x !== null) ? ms.reduce((a, b) => a + (b || 0), 0) : null
@@ -1127,8 +1137,9 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, section.config])
+  }, [variantTables, draft])
   useEffect(() => {
+    if (!computedFields.length) return
     for (const c of computedFields) {
       if ((draft[key(sid, c.fi)] ?? '') !== c.value) onSetVal(sid, c.fi, c.value)
     }
