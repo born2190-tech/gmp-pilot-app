@@ -662,11 +662,13 @@ def _process_header(rows: list[list[str]]) -> dict | None:
 
 
 def _split_time_tables(tables: list[dict]) -> list[dict]:
-    """«Время начала» — в начало этапа, «Время окончание» — в конец.
+    """Время начала — ДО выполнения, окончания — ПОСЛЕ.
 
-    В бумажном BMR оба поля идут одной строкой в конце шага, но по процессу
-    начало фиксируется до выполнения, окончание — после заполнения данных.
-    Разносим: таблицу-пару разбиваем на две одноячеечные."""
+    По процессу: отметил время начала → выполнил/взвесил → отметил окончание.
+    В Word «Время начала | окончания» идут одной строкой (часто после данных),
+    поэтому разносим: начало ставим перед данными блока, окончание — после.
+    Поддержаны и один блок (2.5), и несколько (14.5 — три взвешивания, у
+    каждого своё время)."""
     def kind(cell: dict) -> str | None:
         low = _clean(str(cell.get("text") or "")).lower()
         if "field_index" not in cell:
@@ -677,48 +679,58 @@ def _split_time_tables(tables: list[dict]) -> list[dict]:
             return "end"
         return None
 
-    # Считаем «чисто временные» таблицы. Если их несколько (шаг с несколькими
-    # блоками взвешивания, у каждого своё время — напр. 14.5), НЕ переставляем:
-    # каждый блок времени должен остаться рядом со своим взвешиванием.
-    time_only = 0
-    for tbl in tables:
-        has_time = other = False
-        for row in tbl.get("rows") or []:
-            for cell in row.get("cells") or []:
-                if kind(cell):
-                    has_time = True
-                elif cell.get("text") or "field_index" in cell:
-                    other = True
-        if has_time and not other:
-            time_only += 1
-    if time_only != 1:
-        return tables
-
-    head: list[dict] = []
-    middle: list[dict] = []
-    tail: list[dict] = []
-    for tbl in tables:
-        rows = tbl.get("rows") or []
-        start_cells: list[dict] = []
-        end_cells: list[dict] = []
+    def split_cells(tbl: dict) -> tuple[list[dict], list[dict], bool]:
+        starts: list[dict] = []
+        ends: list[dict] = []
         other = False
-        for row in rows:
+        for row in tbl.get("rows") or []:
             for cell in row.get("cells") or []:
                 k = kind(cell)
                 if k == "start":
-                    start_cells.append(cell)
+                    starts.append(cell)
                 elif k == "end":
-                    end_cells.append(cell)
+                    ends.append(cell)
                 elif cell.get("text") or "field_index" in cell:
                     other = True
-        if (start_cells or end_cells) and not other:
-            if start_cells:
-                head.append({"rows": [{"cells": start_cells}]})
-            if end_cells:
-                tail.append({"rows": [{"cells": end_cells}]})
+        return starts, ends, other
+
+    time_only = sum(1 for t in tables if (lambda r: r[2] is False and (r[0] or r[1]))(split_cells(t)))
+    if time_only == 0:
+        return tables
+
+    if time_only == 1:
+        # Один блок времени на весь шаг: начало — в самое начало, окончание — в конец.
+        head: list[dict] = []
+        middle: list[dict] = []
+        tail: list[dict] = []
+        for tbl in tables:
+            starts, ends, other = split_cells(tbl)
+            if (starts or ends) and not other:
+                if starts:
+                    head.append({"rows": [{"cells": starts}]})
+                if ends:
+                    tail.append({"rows": [{"cells": ends}]})
+            else:
+                middle.append(tbl)
+        return head + middle + tail
+
+    # Несколько блоков (напр. 14.5): для каждого — начало перед его данными, окончание после.
+    result: list[dict] = []
+    last_data_idx: int | None = None  # позиция блока данных, к которому привязываем время
+    for tbl in tables:
+        starts, ends, other = split_cells(tbl)
+        if (starts or ends) and not other:
+            if starts:
+                pos = last_data_idx if last_data_idx is not None else len(result)
+                result.insert(pos, {"rows": [{"cells": starts}]})
+                if last_data_idx is not None:
+                    last_data_idx += 1
+            if ends:
+                result.append({"rows": [{"cells": ends}]})
         else:
-            middle.append(tbl)
-    return head + middle + tail
+            result.append(tbl)
+            last_data_idx = len(result) - 1
+    return result
 
 
 def _steps(table) -> tuple[list[dict], list[dict]]:
