@@ -269,8 +269,28 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
             continue
         keep.append(ci)
 
+    # Двухуровневая шапка: в r0 есть объединённая группа (≥2 одинаковых соседних
+    # ячейки), а в r1 под ней — разные подзаголовки (напр. «Статус отказа» над
+    # «Блок FE | Блок SS | Блок NFE»). Тогда r1 — тоже шапка, а данные с r2; иначе
+    # подзаголовки-колонки сами становятся полями, а нумерация строк уезжает.
+    header_rows = 1
+    if len(raw) > 2:
+        ci = 0
+        while ci < len(keep):
+            cj = ci
+            v0 = _col(0, keep[ci])
+            while v0 and cj + 1 < len(keep) and _col(0, keep[cj + 1]) == v0:
+                cj += 1
+            if cj > ci:
+                subs = [_col(1, keep[k]) for k in range(ci, cj + 1)]
+                if all(subs) and len(set(subs)) == len(subs):
+                    header_rows = 2
+                    break
+            ci = cj + 1
+
     out_rows = []
     for ri, full_row in enumerate(raw):
+        row_num = ri - header_rows + 1
         row = [_clean(full_row[ci]) if ci < len(full_row) else "" for ci in keep]
         nonempty = [c for c in row if c]
         merged_text = len(nonempty) > 1 and len(set(nonempty)) == 1
@@ -301,14 +321,14 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
             force_type: str | None = None
             header_sig = _signature_role(header)
             self_sig = _signature_role(text) if text else None
-            row_ctx = row_label if (row_label and row_label != text) else f"строка {ri}"
-            if ri > 0 and header_sig and (merged_text or not text):
+            row_ctx = row_label if (row_label and row_label != text) else f"строка {row_num}"
+            if ri >= header_rows and header_sig and (merged_text or not text):
                 # Колонка-подпись («Подпись», «Выполнено ДП», «Проверено ДОК») —
                 # пустые ячейки данных под ней становятся слотом э-подписи.
                 create_input = True
                 force_type = header_sig
                 label_base = _clean(" · ".join(x for x in (row_ctx, header) if x))
-            elif self_sig and len(text) <= 60 and ("подпись" in text.lower() or "испытан" in text.lower()
+            elif ri >= header_rows and self_sig and len(text) <= 60 and ("подпись" in text.lower() or "испытан" in text.lower()
                                or "утвержд" in text.lower() or "исполнит" in text.lower()
                                or "выполн" in text.lower() or re.search(r"\bд[оп]к?\b", text.lower())):
                 # Ячейка, которая сама и есть метка подписи («ИСПЫТАНО: ДП»).
@@ -319,13 +339,13 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
                 # Прочерк под ручной ввод: «_________(г или кг)».
                 create_input = True
                 clean_txt = _clean(re.sub(r"_+", " ", text))
-                label_base = _clean(" · ".join(x for x in (prefix, row_ctx if row_ctx != f"строка {ri}" else "", header, clean_txt) if x)) or clean_txt
-            elif ri > 0 and not nonempty and header:
+                label_base = _clean(" · ".join(x for x in (prefix, row_ctx if row_ctx != f"строка {row_num}" else "", header, clean_txt) if x)) or clean_txt
+            elif ri >= header_rows and not nonempty and header:
                 create_input = True
-                label_base = _clean(" · ".join(x for x in (prefix, f"строка {ri}", header) if x))
-            elif ri > 0 and not merged_text and not text and nonempty:
+                label_base = _clean(" · ".join(x for x in (prefix, f"строка {row_num}", header) if x))
+            elif ri >= header_rows and not merged_text and not text and nonempty:
                 create_input = True
-            elif ri > 0 and text and not merged_text and _label_needs_input(text):
+            elif ri >= header_rows and text and not merged_text and _label_needs_input(text):
                 create_input = True
                 label_base = _clean(" · ".join(x for x in (prefix, text) if x))
             elif len(raw) == 1 and text and _label_needs_input(text):
