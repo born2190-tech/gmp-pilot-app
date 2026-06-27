@@ -1391,6 +1391,84 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
 
   const renderProcessTable = (rows: BmrProcessTableRow[], opts?: { grid?: boolean }) => {
     const grid = opts?.grid
+
+    // Таблица-журнал: 1+ строк-шапки + однотипные пустые строки данных (только
+    // поля ввода). Напр. журнал металлоискателя 16.x (12×7). Чтобы не задваивать
+    // в каждой ячейке «строка N · колонка», рисуем шапку один раз, слева «№», в
+    // ячейках — только поля.
+    const noInputRow = (cells: NonNullable<BmrProcessTableRow['cells']>) => (cells || []).every((c) => typeof c.field_index !== 'number')
+    let headerRowCount = 0
+    for (const r of rows || []) {
+      const cs = r.cells || []
+      if (noInputRow(cs) && cs.some((c) => String(c.text || '').trim())) headerRowCount += 1
+      else break
+    }
+    const logDataRows = (rows || []).slice(headerRowCount)
+    const isLog = headerRowCount >= 1 && logDataRows.length >= 3 &&
+      logDataRows.every((r) => {
+        const cs = r.cells || []
+        return cs.length >= 3 && cs.every((c) => typeof c.field_index === 'number' && !String(c.text || '').trim())
+      })
+
+    if (isLog) {
+      const ncols = Math.max(...logDataRows.map((r) => (r.cells || []).length))
+      const hmat = (rows || []).slice(0, headerRowCount).map((r) =>
+        Array.from({ length: ncols }, (_, ci) => String((r.cells || [])[ci]?.text || '').trim()))
+      const covered = hmat.map(() => Array(ncols).fill(false))
+      const headTrs: React.ReactNode[] = []
+      for (let r = 0; r < headerRowCount; r++) {
+        const ths: React.ReactNode[] = []
+        for (let c = 0; c < ncols; c++) {
+          if (covered[r][c]) continue
+          const val = hmat[r][c]
+          let cspan = 1
+          while (c + cspan < ncols && hmat[r][c + cspan] === val && !covered[r][c + cspan]) cspan += 1
+          let rspan = 1
+          while (r + rspan < headerRowCount) {
+            let ok = true
+            for (let k = 0; k < cspan; k++) if (hmat[r + rspan][c + k] !== val) { ok = false; break }
+            if (!ok) break
+            rspan += 1
+          }
+          for (let rr = 0; rr < rspan; rr++) for (let cc = 0; cc < cspan; cc++) covered[r + rr][c + cc] = true
+          ths.push(
+            <th key={c} colSpan={cspan} rowSpan={rspan}
+              className="border border-slate-200 bg-slate-50 px-2 py-1.5 text-left align-middle text-[11px] font-semibold text-slate-600">
+              {val || ''}
+            </th>,
+          )
+        }
+        headTrs.push(
+          <tr key={r}>
+            {r === 0 && <th rowSpan={headerRowCount} className="border border-slate-200 bg-slate-100 px-2 py-1.5 text-[11px] font-semibold text-slate-500">№</th>}
+            {ths}
+          </tr>,
+        )
+      }
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] border-collapse text-[12px]">
+            <thead>{headTrs}</thead>
+            <tbody>
+              {logDataRows.map((row, ri) => (
+                <tr key={ri} className="border-b border-slate-100 last:border-b-0">
+                  <td className="border border-slate-100 bg-slate-50/40 px-2 py-1.5 text-center text-[11px] font-medium text-slate-400">{ri + 1}</td>
+                  {(row.cells || []).map((cell, ci) => {
+                    const fi = cell.field_index as number
+                    return (
+                      <td key={ci} className="border border-slate-100 px-1.5 py-1.5 align-top">
+                        {cellControl(fi, cell.type, cell.unit, fieldCardLabel(fi, sectionTitle))}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
     return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] border-collapse text-[12px]">
