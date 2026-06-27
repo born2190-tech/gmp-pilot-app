@@ -572,6 +572,30 @@ def _operator_field_label(prefix: str, row_label: str, cell_text: str, fallback:
     return label[:140] if label else fallback
 
 
+def _remap_variant_table_fields(table: dict, copy_old_field) -> dict:
+    """Перенести variant-таблицу (punch_check / batch_yield_calculation /
+    moisture_loss / yield_calculation / requirement_calculation) в новую
+    нумерацию полей. Поля у таких таблиц лежат в скалярных ключах «*_fi» и во
+    вложенных списках (punch_items, lines, moisture, losses, items) с ключами
+    «fi» / «*_fi» — ремапим их через copy_old_field, остальное сохраняем."""
+
+    def is_fi_key(k: str) -> bool:
+        return k == "fi" or k.endswith("_fi")
+
+    out = dict(table)
+    for k, v in list(out.items()):
+        if is_fi_key(k) and isinstance(v, int):
+            out[k] = copy_old_field(v)
+        elif k != "rows" and isinstance(v, list):
+            out[k] = [
+                {kk: (copy_old_field(vv) if is_fi_key(kk) and isinstance(vv, int) else vv)
+                 for kk, vv in it.items()}
+                if isinstance(it, dict) else it
+                for it in v
+            ]
+    return out
+
+
 def _normalize_operator_checklist_config(config: dict) -> dict:
     """Make imported paper-process blanks real fillable fields in checklist steps.
 
@@ -613,6 +637,13 @@ def _normalize_operator_checklist_config(config: dict) -> dict:
         prefix = f"Этап {out_step.get('no') or step_no}"
         normalized_tables: list[dict] = []
         for table in out_step.get("tables") or []:
+            # Variant-таблицы (punch_check, batch_yield_calculation, moisture_loss…)
+            # хранят поля не в ячейках, а в *_fi / fi-ссылках. Их нельзя
+            # пересобирать как обычную сетку — иначе теряется вариант и поля.
+            # Сохраняем структуру, ремапим только индексы полей.
+            if isinstance(table, dict) and table.get("process_table_variant"):
+                normalized_tables.append(_remap_variant_table_fields(table, copy_old_field))
+                continue
             rows_out: list[dict] = []
             rows = table.get("rows") if isinstance(table, dict) else []
             for ri, row in enumerate(rows or []):
