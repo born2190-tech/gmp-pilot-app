@@ -1609,12 +1609,17 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
             <div key={gi}>
               {g.label && <div className="mb-1.5 text-[11.5px] font-semibold text-slate-700">{g.label}</div>}
               <div className="flex flex-wrap gap-2">
-                {g.items.map((it) => (
-                  <div key={it.fi} className="flex w-[118px] flex-col gap-1 rounded-md border border-slate-200 bg-white p-1.5">
-                    <div className="text-center text-[11px] font-semibold text-slate-600">{it.head || '—'}</div>
-                    {cellControl(it.fi, it.type, it.unit, `${g.label} ${it.head}`.trim())}
-                  </div>
-                ))}
+                {g.items.map((it) => {
+                  // Поле «Замечание» в проверке (пуансоны) — это √ (соответствует)
+                  // или ✕ (не соответствует): один тап вместо ввода символа.
+                  const isCheck = /замеч/i.test(String(section.config?.fields?.[it.fi]?.label || ''))
+                  return (
+                    <div key={it.fi} className="flex w-[118px] flex-col gap-1 rounded-md border border-slate-200 bg-white p-1.5">
+                      <div className="text-center text-[11px] font-semibold text-slate-600">{it.head || '—'}</div>
+                      {isCheck ? renderToggle(it.fi, ['√', '✕']) : cellControl(it.fi, it.type, it.unit, `${g.label} ${it.head}`.trim())}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           ))}
