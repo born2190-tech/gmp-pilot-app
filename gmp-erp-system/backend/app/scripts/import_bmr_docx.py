@@ -677,6 +677,23 @@ def _split_time_tables(tables: list[dict]) -> list[dict]:
             return "end"
         return None
 
+    # Считаем «чисто временные» таблицы. Если их несколько (шаг с несколькими
+    # блоками взвешивания, у каждого своё время — напр. 14.5), НЕ переставляем:
+    # каждый блок времени должен остаться рядом со своим взвешиванием.
+    time_only = 0
+    for tbl in tables:
+        has_time = other = False
+        for row in tbl.get("rows") or []:
+            for cell in row.get("cells") or []:
+                if kind(cell):
+                    has_time = True
+                elif cell.get("text") or "field_index" in cell:
+                    other = True
+        if has_time and not other:
+            time_only += 1
+    if time_only != 1:
+        return tables
+
     head: list[dict] = []
     middle: list[dict] = []
     tail: list[dict] = []
