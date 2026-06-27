@@ -1187,7 +1187,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
       ...((cfg.tables || []) as BmrStepTable[]),
       ...((cfg.steps || []).flatMap((st) => st.tables || []) as BmrStepTable[]),
     ]
-    return tables.filter((tb) => tb.process_table_variant === 'moisture_loss' || tb.process_table_variant === 'requirement_calculation' || tb.process_table_variant === 'yield_calculation')
+    return tables.filter((tb) => tb.process_table_variant === 'moisture_loss' || tb.process_table_variant === 'requirement_calculation' || tb.process_table_variant === 'yield_calculation' || tb.process_table_variant === 'batch_yield_calculation')
   }, [section.config])
   const computedFields = useMemo<{ fi: number; value: string }[]>(() => {
     if (!variantTables.length) return EMPTY_COMPUTED  // 99% секций — без расчётов, не дёргаем эффект на каждый ввод
@@ -1222,6 +1222,23 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         const yp = a && b !== null && c !== null ? ((b + c) / a) * 100 : null
         if (typeof tb.yield_pct_fi === 'number') out.push({ fi: tb.yield_pct_fi, value: fmtCalc(yp) })
         const rec = a && b !== null && c !== null ? ((b + c + e + f) / a) * 100 : null
+        if (typeof tb.reconcile_fi === 'number') out.push({ fi: tb.reconcile_fi, value: fmtCalc(rec) })
+      }
+      if (tb.process_table_variant === 'batch_yield_calculation') {
+        const a = tb.theoretical_tab ?? null
+        const byLetter: Record<string, number | null> = {}
+        for (const ln of tb.lines || []) byLetter[ln.letter] = numFi(ln.tab_fi)
+        const sum = (ls: string[]): number | null => {
+          let s = 0
+          for (const L of ls) { const v = byLetter[L]; if (v === null || v === undefined) return null; s += v }
+          return s
+        }
+        const cef = sum(['C', 'E', 'F'])
+        const yp = a && cef !== null ? (cef * 100) / a : null
+        if (typeof tb.yield_pct_fi === 'number') out.push({ fi: tb.yield_pct_fi, value: fmtCalc(yp) })
+        const tot = sum(['C', 'E', 'F', 'G', 'H', 'I', 'J'])
+        const b = byLetter['B'] ?? null
+        const rec = tot !== null && b ? (tot / b) * 100 : null
         if (typeof tb.reconcile_fi === 'number') out.push({ fi: tb.reconcile_fi, value: fmtCalc(rec) })
       }
     }
@@ -1580,6 +1597,54 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     )
   }
 
+  // Расчёт выхода серии (этап 9.1, упаковка): A — константа (теор. объём в
+  // таблетках), строки B…K дают кг + таблетки, L и M считаются автоматически.
+  const renderBatchYield = (tbl: BmrStepTable) => {
+    const measLine = (ln: { letter: string; label: string; kg_fi: number; tab_fi: number }) => (
+      <div key={ln.tab_fi} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-700">
+        <span className="min-w-[260px] font-medium"><span className="text-slate-400">{ln.letter}.</span> {ln.label}</span>
+        <span className="min-w-[6.5rem]">{inputFor(ln.kg_fi, 'number', 'кг')}</span>
+        <span className="min-w-[6.5rem]">{inputFor(ln.tab_fi, 'number', 'шт')}</span>
+      </div>
+    )
+    const calcLine = (label: string, fi?: number) => (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-700">
+        <span className="min-w-[260px] font-medium">{label}</span>
+        {typeof fi === 'number' ? readonlyValue(fi, '%') : null}
+      </div>
+    )
+    return (
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
+        <div className="border-b border-slate-200 bg-white px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
+          <div className="mt-0.5 text-[12.5px] font-semibold text-slate-800">Расчёт выхода серии</div>
+        </div>
+        <div className="space-y-2 p-3">
+          <div className="flex flex-wrap items-center gap-x-2 text-[13px] text-slate-700">
+            <span className="min-w-[260px] font-medium"><span className="text-slate-400">A.</span> Теоретический объём серии</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block rounded-md border border-slate-200 bg-white px-2.5 py-2 text-[13px] font-semibold tabular-nums text-slate-900">{typeof tbl.theoretical_tab === 'number' ? tbl.theoretical_tab.toLocaleString('ru-RU') : '—'}</span>
+              <span className="text-[10px] text-slate-400">таблеток</span>
+            </span>
+          </div>
+          <div className="flex gap-2 pl-[260px] text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <span className="min-w-[6.5rem]">кг</span>
+            <span className="min-w-[6.5rem]">таблеток</span>
+          </div>
+          {(tbl.lines || []).map(measLine)}
+          {typeof tbl.result_tab_fi === 'number' && (
+            <div className="flex flex-wrap items-center gap-x-2 text-[13px] text-slate-700">
+              <span className="min-w-[260px] font-medium">Расчётное количество</span>
+              <span className="min-w-[6.5rem]">{inputFor(tbl.result_tab_fi, 'number', 'шт')}</span>
+            </div>
+          )}
+          {calcLine('L. % от теоретического выхода = (C+E+F) × 100 / A =', tbl.yield_pct_fi)}
+          {calcLine('M. Сверка = (C+E+F+G+H+I+J) / B × 100 =', tbl.reconcile_fi)}
+        </div>
+      </div>
+    )
+  }
+
   // Очень широкая сетка (напр. проверка 30 пуансонов в колонки) — вместо
   // горизонтального скролла переносим компактными ячейками «№ + поле».
   const renderWideGrid = (rows: BmrProcessTableRow[]) => {
@@ -1650,6 +1715,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     if (tbl.process_table_variant === 'requirement_calculation') return renderRequirementCalc(tbl)
     if (tbl.process_table_variant === 'moisture_loss') return renderMoistureLoss(tbl)
     if (tbl.process_table_variant === 'yield_calculation') return renderYieldCalc(tbl)
+    if (tbl.process_table_variant === 'batch_yield_calculation') return renderBatchYield(tbl)
     if (tbl.process_table_variant === 'punch_check') return renderPunchCheck(tbl)
     const rows = (tbl.rows || []) as BmrProcessTableRow[]
     if (!tableHasInputs(rows)) {

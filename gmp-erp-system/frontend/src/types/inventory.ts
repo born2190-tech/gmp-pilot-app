@@ -1211,6 +1211,10 @@ export interface BmrStepTable {
   // punch_check variant
   ptype?: string
   punch_items?: { num: string; fi: number }[]
+  // batch_yield_calculation variant (этап 9.1): кг + таблетки на строку
+  theoretical_tab?: number
+  lines?: { letter: string; label: string; kg_fi: number; tab_fi: number }[]
+  result_tab_fi?: number
 }
 export interface BmrTextBlank { field_index: number; type?: string; unit?: string }
 export interface BmrChecklistStep {

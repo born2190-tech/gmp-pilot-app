@@ -622,12 +622,93 @@ def _punch_check_table(table, prefix: str, fields: list[dict]) -> dict | None:
     return {"process_table_variant": "punch_check", "ptype": ptype, "punch_items": items, "rows": []}
 
 
+def _batch_yield_table(table, prefix: str, fields: list[dict]) -> dict | None:
+    """Лист «Расчёт выхода серии» на упаковке (этап 9.1): свободная вёрстка
+    Word с двумя колонками значений на строку (кг и таблетки) и формулами
+    L = ([C+E+F]×100/A) и M = ([C+E+F+G+H+I+J]/B×100). Генерик-парсер
+    размазывает объединённые ячейки в десятки дублей; разбираем по строкам:
+    константа A (теор. объём в таблетках), измеряемые строки B,C,E…K
+    (кг + таблетки), производный итог и два расчётных процента."""
+    raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
+    flat = " ".join(" ".join(r) for r in raw).lower()
+    if "теоретическ" not in flat or "объ" not in flat:
+        return None
+    if "сверка" not in flat and "% от теоретическ" not in flat:
+        return None
+
+    def add(label: str, unit: str | None) -> int:
+        fi = len(fields)
+        fields.append({"label": _short_label(f"{prefix} · {label}"), "type": "number", "unit": unit})
+        return fi
+
+    def clean_label(s: str) -> str:
+        s = re.sub(r"_+", " ", s or "")
+        s = re.sub(r"\(\s*(кг|г)\s*\)", "", s, flags=re.I)
+        s = re.sub(r"\(\s*таблет\w*\s*\)", "", s, flags=re.I)
+        s = re.sub(r"^\s*[A-ZА-Я]\s*[.)]\s*", "", _clean(s))  # ведущая буква «K.», «L .»
+        # схлопнуть подряд повторённое слово («…оболочкой оболочкой» из merge)
+        s = re.sub(r"\b(\w+)(\s+\1\b)+", r"\1", _clean(s), flags=re.I)
+        return _clean(s)
+
+    letters = ["B", "C", "E", "F", "G", "H", "I", "J", "K"]
+    li = 0
+    lines: list[dict] = []
+    theoretical_tab: int | None = None
+    result_tab_fi: int | None = None
+    yield_pct_fi: int | None = None
+    reconcile_fi: int | None = None
+
+    for r in raw:
+        low = " ".join(r).lower()
+        if not low.strip():
+            continue
+        col0 = _clean(r[0]) if r else ""
+        if "теоретическ" in low and "объ" in low:
+            digits = re.findall(r"\d[\d\s ]*\d|\d", " ".join(r))
+            if digits:
+                theoretical_tab = int(re.sub(r"\D", "", digits[-1]) or 0) or None
+            continue
+        if "% от теоретическ" in low:
+            yield_pct_fi = add("% от теоретического выхода ([C+E+F]×100/A)", "%")
+            continue
+        if "сверка" in low:
+            reconcile_fi = add("Сверка ([C+E+F+G+H+I+J]/B×100)", "%")
+            continue
+        if not col0:  # производный итог: строка без подписи, только «= … (таблеток)»
+            result_tab_fi = add("Расчётное количество (таблеток)", "шт")
+            continue
+        if li < len(letters):  # измеряемая строка: кг + таблетки
+            letter = letters[li]
+            li += 1
+            name = clean_label(col0) or letter
+            lines.append({
+                "letter": letter,
+                "label": name,
+                "kg_fi": add(f"{letter}. {name} (кг)", "кг"),
+                "tab_fi": add(f"{letter}. {name} (таблеток)", "шт"),
+            })
+
+    if not lines or yield_pct_fi is None or reconcile_fi is None:
+        return None
+
+    return {
+        "process_table_variant": "batch_yield_calculation",
+        "rows": [],
+        "theoretical_tab": theoretical_tab,
+        "lines": lines,
+        "result_tab_fi": result_tab_fi,
+        "yield_pct_fi": yield_pct_fi,
+        "reconcile_fi": reconcile_fi,
+    }
+
+
 def _row_nested_tables(row, prefix: str, fields: list[dict]) -> list[dict]:
     out: list[dict] = []
     for nt in _unique_nested_tables(row.cells):
         special = (
             _requirement_calc_table(nt, prefix, fields)
             or _moisture_loss_table(nt, prefix, fields)
+            or _batch_yield_table(nt, prefix, fields)
             or _yield_calc_table(nt, prefix, fields)
             or _punch_check_table(nt, prefix, fields)
         )
