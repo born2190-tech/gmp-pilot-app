@@ -596,6 +596,32 @@ def _yield_calc_table(table, prefix: str, fields: list[dict]) -> dict | None:
     return item
 
 
+def _punch_check_table(table, prefix: str, fields: list[dict]) -> dict | None:
+    """Детальная проверка пуансонов (этап 15.1): строки-номера «Верхний/Нижний
+    пуансон №: 1..N» + строки «Замечание» (√ соответствует / ✕ нет). Генерик
+    плодит призрачные поля из хвостовых пустых ячеек — делаем по одному полю на
+    каждый реальный номер пуансона."""
+    raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
+    flat = " ".join(" ".join(r) for r in raw).lower()
+    if "пуансон" not in flat or "замеч" not in flat:
+        return None
+    ptype = "Верхний пуансон" if "верхний" in flat else ("Нижний пуансон" if "нижний" in flat else "Пуансон")
+    items: list[dict] = []
+    seen: set[str] = set()
+    for row in raw:
+        for x in row:
+            num = _clean(x)
+            if re.fullmatch(r"\d+", num) and num not in seen:
+                seen.add(num)
+                fi = len(fields)
+                fields.append({"label": _short_label(f"{prefix} · {ptype} № {num}"), "type": "text"})
+                items.append({"num": num, "fi": fi})
+    if not items:
+        return None
+    items.sort(key=lambda it: int(it["num"]))
+    return {"process_table_variant": "punch_check", "ptype": ptype, "punch_items": items, "rows": []}
+
+
 def _row_nested_tables(row, prefix: str, fields: list[dict]) -> list[dict]:
     out: list[dict] = []
     for nt in _unique_nested_tables(row.cells):
@@ -603,6 +629,7 @@ def _row_nested_tables(row, prefix: str, fields: list[dict]) -> list[dict]:
             _requirement_calc_table(nt, prefix, fields)
             or _moisture_loss_table(nt, prefix, fields)
             or _yield_calc_table(nt, prefix, fields)
+            or _punch_check_table(nt, prefix, fields)
         )
         out.append(special if special is not None else _nested_table(nt, prefix, fields))
     return out

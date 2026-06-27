@@ -1208,6 +1208,9 @@ export interface BmrStepTable {
   deviation_fi?: number
   other_fi?: number
   reconcile_fi?: number
+  // punch_check variant
+  ptype?: string
+  punch_items?: { num: string; fi: number }[]
 }
 export interface BmrTextBlank { field_index: number; type?: string; unit?: string }
 export interface BmrChecklistStep {

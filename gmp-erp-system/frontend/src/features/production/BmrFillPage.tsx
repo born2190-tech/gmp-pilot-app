@@ -1628,10 +1628,29 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     )
   }
 
+  // Детальная проверка пуансонов (15.1): по одному √/✕ на каждый номер, плиткой.
+  const renderPunchCheck = (tbl: BmrStepTable) => (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
+      <div className="border-b border-slate-200 bg-white px-3 py-2">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
+        <div className="mt-0.5 text-[12.5px] font-semibold text-slate-800">{tbl.ptype || 'Проверка пуансонов'} — √ соответствует / ✕ нет</div>
+      </div>
+      <div className="flex flex-wrap gap-2 p-3">
+        {(tbl.punch_items || []).map((it) => (
+          <div key={it.fi} className="flex w-[118px] flex-col gap-1 rounded-md border border-slate-200 bg-white p-1.5">
+            <div className="text-center text-[11px] font-semibold text-slate-600">№ {it.num}</div>
+            {renderToggle(it.fi, ['√', '✕'])}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
   const renderOperatorTable = (tbl: BmrStepTable, tableNo: number) => {
     if (tbl.process_table_variant === 'requirement_calculation') return renderRequirementCalc(tbl)
     if (tbl.process_table_variant === 'moisture_loss') return renderMoistureLoss(tbl)
     if (tbl.process_table_variant === 'yield_calculation') return renderYieldCalc(tbl)
+    if (tbl.process_table_variant === 'punch_check') return renderPunchCheck(tbl)
     const rows = (tbl.rows || []) as BmrProcessTableRow[]
     if (!tableHasInputs(rows)) {
       return (
