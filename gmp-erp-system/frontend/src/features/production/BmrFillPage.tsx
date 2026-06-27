@@ -1580,6 +1580,49 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     )
   }
 
+  // Очень широкая сетка (напр. проверка 30 пуансонов в колонки) — вместо
+  // горизонтального скролла переносим компактными ячейками «№ + поле».
+  const renderWideGrid = (rows: BmrProcessTableRow[]) => {
+    const headerAbove = (ri: number, ci: number) => {
+      for (let r = ri - 1; r >= 0; r--) {
+        const c = rows[r]?.cells?.[ci]
+        if (c && typeof c.field_index !== 'number' && String(c.text || '').trim()) return compactPlaceholder(String(c.text))
+      }
+      return ''
+    }
+    const groups: { label: string; items: { fi: number; type?: string; unit?: string; head: string }[] }[] = []
+    rows.forEach((row, ri) => {
+      const cells = row.cells || []
+      const inputs = cells.map((c, ci) => ({ c, ci })).filter((x) => typeof x.c.field_index === 'number')
+      if (!inputs.length) return
+      const rowLabel = cells.filter((c) => typeof c.field_index !== 'number' && String(c.text || '').trim()).map((c) => compactPlaceholder(String(c.text)))[0] || ''
+      groups.push({ label: rowLabel, items: inputs.map(({ c, ci }) => ({ fi: c.field_index as number, type: c.type, unit: c.unit, head: headerAbove(ri, ci) })) })
+    })
+    return (
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50/60">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-500">{t('bmrFill.operatorData')}</div>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">{t('bmrFill.recordValues')}</span>
+        </div>
+        <div className="space-y-3 p-3">
+          {groups.map((g, gi) => (
+            <div key={gi}>
+              {g.label && <div className="mb-1.5 text-[11.5px] font-semibold text-slate-700">{g.label}</div>}
+              <div className="flex flex-wrap gap-2">
+                {g.items.map((it) => (
+                  <div key={it.fi} className="flex w-[118px] flex-col gap-1 rounded-md border border-slate-200 bg-white p-1.5">
+                    <div className="text-center text-[11px] font-semibold text-slate-600">{it.head || '—'}</div>
+                    {cellControl(it.fi, it.type, it.unit, `${g.label} ${it.head}`.trim())}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   const renderOperatorTable = (tbl: BmrStepTable, tableNo: number) => {
     if (tbl.process_table_variant === 'requirement_calculation') return renderRequirementCalc(tbl)
     if (tbl.process_table_variant === 'moisture_loss') return renderMoistureLoss(tbl)
@@ -1592,6 +1635,9 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
         </div>
       )
     }
+    // Очень широкая сетка (>6 полей в строке) — переносим компактными ячейками.
+    const maxRowInputs = rows.reduce((m, row) => Math.max(m, (row.cells || []).filter((c) => typeof c.field_index === 'number').length), 0)
+    if (maxRowInputs > 6) return renderWideGrid(rows)
     // Сетки (взвешивание №тары×веса, проверка пуансонов и т.п.) и формульные/
     // матричные таблицы карточками нечитаемы — показываем таблицей со строками
     // и колонками, как на бумаге. Сетка = шапка ≥2 колонок + ≥2 строк ввода.
