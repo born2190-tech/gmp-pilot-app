@@ -288,13 +288,33 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
                     break
             ci = cj + 1
 
+    def _sig_label(c: str) -> str | None:
+        cl = (c or "").lower()
+        if _signature_role(c) and len(c) <= 60 and ("подпись" in cl or "испытан" in cl
+                or "утвержд" in cl or "исполнит" in cl or "выполн" in cl):
+            return _signature_role(c)
+        return None
+
     out_rows = []
+    prev_row_sig = False
     for ri, full_row in enumerate(raw):
         row_num = ri - header_rows + 1
         row = [_clean(full_row[ci]) if ci < len(full_row) else "" for ci in keep]
         nonempty = [c for c in row if c]
         merged_text = len(nonempty) > 1 and len(set(nonempty)) == 1
         row_label = next((c for c in row if c), "")
+        # Строка блока подписи (ИСПЫТАНО: ДП / УТВЕРЖДЕНО: ДОК + ДАТА + ВРЕМЯ):
+        # все смысловые ячейки — это подпись/дата/время. Разбираем особо: одна
+        # подпись на роль + Дата + Время, без дублей и пустых «левых» полей
+        # (иначе генерик плодит ×2 подписи и числовые поля из пустых ячеек).
+        def _is_sig_or_dt(c: str) -> bool:
+            cl = c.lower()
+            return bool(_sig_label(c)) or "дата" in cl or "время" in cl
+        sig_roles = [_sig_label(c) for c in nonempty if _sig_label(c)]
+        row_sig = bool(sig_roles) and all(_is_sig_or_dt(c) for c in nonempty)
+        row_role = sig_roles[0] if sig_roles else None
+        row_role_name = "Исполнитель ДП" if row_role == "signature_operator" else "Проверено ДОК" if row_role == "signature_qa" else ""
+        created_slots: set[str] = set()
         out_cells = []
         for ci in keep:
             text = _clean(full_row[ci]) if ci < len(full_row) else ""
@@ -322,7 +342,38 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
             header_sig = _signature_role(header)
             self_sig = _signature_role(text) if text else None
             row_ctx = row_label if (row_label and row_label != text) else f"строка {row_num}"
-            if ri >= header_rows and header_sig and (merged_text or not text):
+            tl = text.lower()
+            if row_sig:
+                # блок подписи: одна подпись + Дата + Время на роль, без дублей
+                if _sig_label(text) and "sig" not in created_slots:
+                    create_input = True
+                    force_type = _sig_label(text)
+                    label_base = _clean(" · ".join(x for x in (prefix, text) if x))
+                    created_slots.add("sig")
+                elif "дата" in tl and "date" not in created_slots:
+                    create_input = True
+                    force_type = "text"
+                    label_base = _clean(" · ".join(x for x in (prefix, row_role_name, "Дата") if x))
+                    created_slots.add("date")
+                elif "время" in tl and "time" not in created_slots:
+                    create_input = True
+                    force_type = "text"
+                    label_base = _clean(" · ".join(x for x in (prefix, row_role_name, "Время") if x))
+                    created_slots.add("time")
+                # прочие/пустые ячейки строки подписи — без поля
+            elif prev_row_sig and not nonempty:
+                pass  # пустая строка-«продолжение» под блоком подписи — без полей
+            elif ri >= header_rows and re.match(r"\s*средн(ий|ее)\b", tl):
+                # «Средний = ___» — заполняемое поле среднего (одно на строку),
+                # дубли «Средний =» в соседних колонках убираем.
+                if "avg" not in created_slots:
+                    create_input = True
+                    force_type = "number"
+                    label_base = _clean(" · ".join(x for x in (row_label, "Средний") if x))
+                    created_slots.add("avg")
+                else:
+                    cell["text"] = ""
+            elif ri >= header_rows and header_sig and (merged_text or not text):
                 # Колонка-подпись («Подпись», «Выполнено ДП», «Проверено ДОК») —
                 # пустые ячейки данных под ней становятся слотом э-подписи.
                 create_input = True
@@ -367,6 +418,7 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
                     cell["unit"] = funit
             out_cells.append(cell)
         out_rows.append({"cells": out_cells})
+        prev_row_sig = row_sig
     return {"rows": out_rows}
 
 
