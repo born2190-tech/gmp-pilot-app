@@ -870,8 +870,15 @@ def _split_time_tables(tables: list[dict]) -> list[dict]:
                     starts.append(cell)
                 elif k == "end":
                     ends.append(cell)
-                elif cell.get("text") or "field_index" in cell:
-                    other = True
+                elif "field_index" in cell:
+                    other = True  # настоящий ввод (не время) — блок не «чисто временной»
+                elif cell.get("text"):
+                    # голая метка «Дата:» / «Время:» (без поля) не должна мешать
+                    # разносу начала/окончания по блокам — иначе оба времени
+                    # остаются вместе и «заполняются сразу».
+                    lbl = _clean(str(cell.get("text"))).lower().strip(" :")
+                    if lbl not in ("дата", "время", "дата и время", "дата/время"):
+                        other = True
         return starts, ends, other
 
     time_only = sum(1 for t in tables if (lambda r: r[2] is False and (r[0] or r[1]))(split_cells(t)))
