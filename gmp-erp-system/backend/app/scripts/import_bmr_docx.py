@@ -841,6 +841,59 @@ def _process_header(rows: list[list[str]]) -> dict | None:
     return {"process": proc, "room": room, "room_no": room_no}
 
 
+def _expand_column_time(tbl: dict) -> list[dict] | None:
+    """Колоночный стиль времени: шапка «Время начала | Время окончания | данные»
+    с пустыми ячейками-полями под ними (напр. «Отбор проб»: начала|окончания|
+    количество). Разворачиваем в отдельные блоки, чтобы _split_time_tables смог
+    их разнести: [Время начала] · [данные (количество)] · [Время окончания].
+    Возвращает None, если это не колоночный стиль или строк данных несколько."""
+    rows = tbl.get("rows") or []
+    col_start = col_end = None
+    col_hdr: dict[int, str] = {}
+    for row in rows:
+        for ci, cell in enumerate(row.get("cells") or []):
+            if "field_index" in cell:
+                continue
+            low = _clean(str(cell.get("text") or "")).lower()
+            if "время нач" in low or "дата нач" in low:
+                col_start = ci; col_hdr[ci] = _clean(str(cell.get("text")))
+            elif "время окон" in low or "дата окон" in low:
+                col_end = ci; col_hdr[ci] = _clean(str(cell.get("text")))
+    if col_start is None and col_end is None:
+        return None
+
+    def fields_in_col(ci: int | None) -> list[dict]:
+        if ci is None:
+            return []
+        out = []
+        for row in rows:
+            cells = row.get("cells") or []
+            if ci < len(cells) and "field_index" in cells[ci]:
+                out.append(cells[ci])
+        return out
+
+    starts = fields_in_col(col_start)
+    ends = fields_in_col(col_end)
+    if not starts and not ends:
+        return None
+    if len(starts) > 1 or len(ends) > 1:
+        return None  # несколько строк данных — не трогаем (риск потери)
+
+    time_cols = {c for c in (col_start, col_end) if c is not None}
+    blocks: list[dict] = []
+    if starts:
+        sc = dict(starts[0]); sc["text"] = col_hdr.get(col_start, "Время начала")
+        blocks.append({"rows": [{"cells": [sc]}]})
+    mid_rows = [{"cells": [c for ci, c in enumerate(row.get("cells") or []) if ci not in time_cols]}
+                for row in rows]
+    if any("field_index" in c for r in mid_rows for c in r["cells"]):
+        blocks.append({"rows": mid_rows})
+    if ends:
+        ec = dict(ends[0]); ec["text"] = col_hdr.get(col_end, "Время окончания")
+        blocks.append({"rows": [{"cells": [ec]}]})
+    return blocks if len(blocks) > 1 else None
+
+
 def _split_time_tables(tables: list[dict]) -> list[dict]:
     """Время начала — ДО выполнения, окончания — ПОСЛЕ.
 
@@ -849,6 +902,13 @@ def _split_time_tables(tables: list[dict]) -> list[dict]:
     поэтому разносим: начало ставим перед данными блока, окончание — после.
     Поддержаны и один блок (2.5), и несколько (14.5 — три взвешивания, у
     каждого своё время)."""
+    # Сначала разворачиваем колоночный стиль времени в отдельные блоки.
+    expanded: list[dict] = []
+    for tbl in tables:
+        cols = _expand_column_time(tbl)
+        expanded.extend(cols if cols else [tbl])
+    tables = expanded
+
     def kind(cell: dict) -> str | None:
         low = _clean(str(cell.get("text") or "")).lower()
         if "field_index" not in cell:
