@@ -2048,7 +2048,9 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
                               {part}
                               {pi < arr.length - 1 && pi < st.text_blanks!.length && (
                                 <span className="mx-1 inline-flex align-middle">
-                                  {inputFor(st.text_blanks![pi].field_index, st.text_blanks![pi].type || 'text', st.text_blanks![pi].unit)}
+                                  {/* единица измерения уже стоит в тексте после прочерка
+                                      («___ г,») — не дублируем её бейджем у поля */}
+                                  {inputFor(st.text_blanks![pi].field_index, st.text_blanks![pi].type || 'text')}
                                 </span>
                               )}
                             </React.Fragment>
