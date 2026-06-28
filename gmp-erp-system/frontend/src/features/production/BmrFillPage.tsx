@@ -1389,6 +1389,15 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     (row.cells || []).some((cell) => typeof cell.field_index === 'number')
   )
 
+  // Таблица «сеточная» (≥2 текстовых заголовка в шапке + ≥2 строк с полями):
+  // в таких колонка уже подписана сверху / строка слева, поэтому в ячейках не
+  // нужно дублировать длинную подпись поля.
+  const isGridLikeTable = (rows: BmrProcessTableRow[]) => {
+    const headerCols = (rows[0]?.cells || []).filter((c) => String(c.text || '').trim() && typeof c.field_index !== 'number').length
+    const inputRows = (rows || []).filter((row) => (row.cells || []).some((c) => typeof c.field_index === 'number')).length
+    return headerCols >= 2 && inputRows >= 2
+  }
+
   const renderProcessTable = (rows: BmrProcessTableRow[], opts?: { grid?: boolean }) => {
     const grid = opts?.grid
 
@@ -2108,10 +2117,10 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     }
     return wrap(
       <div className="space-y-3 p-3">
-        {renderProcessTable(rows)}
+        {renderProcessTable(rows, { grid: isGridLikeTable(rows) })}
         {tables.map((tbl, ti) => (
           <div key={ti} className="overflow-x-auto rounded-lg border border-slate-200">
-            {renderProcessTable(tbl.rows || [])}
+            {renderProcessTable(tbl.rows || [], { grid: isGridLikeTable(tbl.rows || []) })}
           </div>
         ))}
       </div>
