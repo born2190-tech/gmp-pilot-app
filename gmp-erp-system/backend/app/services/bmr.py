@@ -675,6 +675,17 @@ def _normalize_operator_checklist_config(config: dict) -> dict:
         if normalized_tables:
             out_step["tables"] = normalized_tables
 
+        # Прочерки в тексте шага («Start date & time____») — отдельные поля; их
+        # индексы тоже надо переносить в новую нумерацию, иначе бланк указывает
+        # на чужое поле (напр. на ДП-подпись) и ввод сливается с подписью.
+        text_blanks = out_step.get("text_blanks")
+        if isinstance(text_blanks, list):
+            out_step["text_blanks"] = [
+                {**b, "field_index": copy_old_field(b["field_index"])}
+                if isinstance(b, dict) and isinstance(b.get("field_index"), int) else b
+                for b in text_blanks
+            ]
+
         dp_old = out_step.get("dp_field_index")
         dok_old = out_step.get("dok_field_index")
         if isinstance(dp_old, int):
