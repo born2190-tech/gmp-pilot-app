@@ -288,6 +288,24 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
                     break
             ci = cj + 1
 
+    # Матрица «заголовки колонок × подписи строк»: r0 — разные заголовки колонок
+    # (напр. Процесс | Загрузка | … | Разгрузка), а col0 в строках данных — это
+    # подписи строк (Время нач. 1, Сделано, Прим.), а НЕ поля. Иначе подписи строк
+    # («Время нач. 1») сами становятся полями-временем в колонке-подписи.
+    label_col0 = False
+    if len(keep) >= 3:
+        hdr_row = header_rows - 1
+        distinct_headers = len({_col(hdr_row, ci) for ci in keep if _col(hdr_row, ci)})
+        if distinct_headers >= 3:
+            rowlabel_rows = 0
+            for ri2 in range(header_rows, len(raw)):
+                c0 = _col(ri2, keep[0])
+                inner_empty = sum(1 for ci in keep[1:] if not _col(ri2, ci))
+                if c0 and inner_empty >= 2:
+                    rowlabel_rows += 1
+            if rowlabel_rows >= 2:
+                label_col0 = True
+
     def _sig_label(c: str) -> str | None:
         cl = (c or "").lower()
         if _signature_role(c) and len(c) <= 60 and ("подпись" in cl or "испытан" in cl
@@ -343,7 +361,9 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
             self_sig = _signature_role(text) if text else None
             row_ctx = row_label if (row_label and row_label != text) else f"строка {row_num}"
             tl = text.lower()
-            if row_sig:
+            if label_col0 and ci == keep[0]:
+                pass  # колонка-подписи матрицы — это метка строки, не поле
+            elif row_sig:
                 # блок подписи: одна подпись + Дата + Время на роль, без дублей
                 if _sig_label(text) and "sig" not in created_slots:
                     create_input = True
