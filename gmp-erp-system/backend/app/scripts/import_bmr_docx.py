@@ -248,8 +248,46 @@ def _is_footnote(text: str) -> bool:
     return s.startswith("*") or s.lower().startswith(("примеч", "note", "сноска"))
 
 
+def _merge_header_rows(raw: list[list[str]]) -> list[list[str]]:
+    """Свернуть строки-шапки, растиражированные по вертикали (vMerge: одна
+    логическая шапка повторяется в нескольких строках, напр. блистер: «Дата и
+    время | Склеивание | Качество склеивания | Размер блистера» в 3 строках +
+    уточнение «серия/Срок годности»). Вливаем их в одну, беря самое конкретное
+    (нижнее) значение по колонке. Останавливаемся на строке критериев/данных.
+    Консервативно: сворачиваем, только если ≥3 колонок — вертикальные дубли,
+    иначе обычные двухуровневые шапки (Статус отказа над Блок FE/SS/NFE) не
+    трогаем."""
+    if len(raw) < 3:
+        return raw
+    ncols = max((len(r) for r in raw), default=0)
+    def cell(r, ci):
+        return _clean(r[ci]) if ci < len(r) else ""
+    merged = [cell(raw[0], ci) for ci in range(ncols)]
+    used = 1
+    for ri in range(1, len(raw)):
+        row = [cell(raw[ri], ci) for ci in range(ncols)]
+        if not any(row):
+            break  # пустая строка — это данные
+        if re.fullmatch(r"\d+", row[0] or ""):
+            break  # строка данных (нумерованная)
+        same = sum(1 for ci in range(ncols) if not merged[ci] or not row[ci] or merged[ci] == row[ci])
+        diff = ncols - same
+        dup_cols = sum(1 for ci in range(ncols) if merged[ci] and row[ci] and merged[ci] == row[ci])
+        if same > diff and dup_cols >= 3:
+            for ci in range(ncols):
+                if row[ci]:
+                    merged[ci] = row[ci]  # нижнее = более конкретное
+            used += 1
+        else:
+            break
+    if used <= 1:
+        return raw
+    return [merged] + raw[used:]
+
+
 def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
     raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
+    raw = _merge_header_rows(raw)
     headers = [_clean(h) for h in (raw[0] if raw else [])]
     ncols = max((len(r) for r in raw), default=0)
     # Объединённые ячейки Word python-docx отдаёт повторно по каждому столбцу
