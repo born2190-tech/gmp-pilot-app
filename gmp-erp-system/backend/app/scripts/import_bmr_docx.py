@@ -1551,6 +1551,18 @@ def build_sections(doc: Document) -> list[dict]:
             pending_title = ""
             continue
 
+        # Лист согласования/утверждения мастер-ЗПС (РАССМОТРЕНО/УТВЕРЖДЕНО ДП/
+        # ДОК/УЛ + Ф.И.О. + Должность + Подпись/дата) — это справочный список
+        # согласующих шаблон, НЕ чек-лист очистки и оператором серии не
+        # заполняется. Иначе ветка line_clearance ниже делает из него пустые шаги
+        # и теряет имена. Показываем как read-only reference_table.
+        if (("рассмотрено" in flat or "утверждено" in flat)
+                and ("ф.и.о" in flat or "фио" in flat) and "должность" in flat):
+            add("reference_table", "Лист согласования и утверждения ЗПС",
+                "reference_table", _plain_table(val))
+            pending_title = ""
+            continue
+
         # line clearance in paper BMR is a checklist with DP execution and DOK
         # verification per row. Do not import it as a free-form process table.
         if cur_stage.startswith("line_clearance") and ("выполнено дп" in flat or "подпись" in flat):
