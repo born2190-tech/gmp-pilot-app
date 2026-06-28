@@ -1333,8 +1333,12 @@ def build_sections(doc: Document) -> list[dict]:
             pending_title = ""
             continue
 
-        # окружающая среда
-        if "параметр" in flat and ("начало" in flat or "окончание" in flat):
+        # окружающая среда: настоящий отчёт о среде имеет В ШАПКЕ и «Начало», и
+        # «Окончание», и колонку «Наблюдение» (Температура/Влажность × старт/конец
+        # × Наблюдение/ДП/ДОК). Раньше детект ловил любое «начало»/«окончание» и
+        # утаскивал сюда внутрипроцессный контроль «В процессе (Начало)» — таблицу
+        # таблеток с 16 параметрами. Требуем все три признака.
+        if "параметр" in flat and "начало" in flat and "окончание" in flat and "наблюдение" in flat:
             extra = {"params": _env_params(rows), "fields": _sig_fields()}
             env_title = last_env_heading or pending_title or "Отчёт об условиях окружающей среды"
             if not dup("environment", "environment", extra):
