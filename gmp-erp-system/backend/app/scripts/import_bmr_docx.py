@@ -186,6 +186,9 @@ def _extract_text_blanks(text: str, fields: list[dict], context: str) -> list[di
 
 def _field_type(label: str) -> str:
     low = label.lower()
+    # «Дата и время» (и просто «дата»/«время») — поле отметки времени, не текст.
+    if ("дата" in low and "время" in low) or low.strip(" :·") in ("дата", "время", "дата и время"):
+        return "datetime"
     if any(k in low for k in ("вес", "количество", "выход", "скорость", "температур", "влажност", "давлен", "кг", " г", "%")):
         return "number"
     return "text"
