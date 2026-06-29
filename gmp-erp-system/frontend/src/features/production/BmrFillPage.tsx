@@ -1107,14 +1107,20 @@ function ProcessClosureBlock({
         </span>
       </div>
       <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
-        {fields.map(({ section, fieldIndex, field }) => {
+        {fields.map(({ section, fieldIndex, field }, i) => {
           const sid = String(section.id)
           const itemUnlocked = fieldUnlocked(allSections, entries, draft, sid, fieldIndex)
           const value = draft[key(sid, fieldIndex)] ?? ''
           const inputType = field.type === 'datetime' ? 'datetime-local' : field.type === 'date' ? 'date' : 'text'
+          // Если у стадии несколько одинаковых «Дата-время окончания» (напр.
+          // блистеровка идёт двумя блоками) — нумеруем, чтобы не выглядели дублем.
+          const baseLabel = field.label || t('bmrFill.endDatetime')
+          const sameLabel = fields.filter((f) => (f.field.label || '') === (field.label || ''))
+          const ord = fields.slice(0, i + 1).filter((f) => (f.field.label || '') === (field.label || '')).length
+          const displayLabel = sameLabel.length > 1 ? `${baseLabel} (блок ${ord})` : baseLabel
           return (
             <div key={`${sid}:${fieldIndex}`} className="rounded-lg border border-slate-200 bg-white p-3">
-              <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{field.label || t('bmrFill.endDatetime')}</div>
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">{displayLabel}</div>
               <input
                 disabled={closed || !itemUnlocked}
                 type={inputType}
