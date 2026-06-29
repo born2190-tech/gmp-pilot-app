@@ -1375,6 +1375,7 @@ def build_sections(doc: Document) -> list[dict]:
     sections: list[dict] = []
     ordinal = 0
     cur_stage = "identity"
+    last_header_stage: str | None = None  # стадия последнего добавленного process_header
     cur_room = None
     cur_rooms: list[str] = []
     pending_title = ""
@@ -1456,11 +1457,20 @@ def build_sections(doc: Document) -> list[dict]:
                 cur_stage = "weighing"
             else:
                 cur_stage = f"{proc_slug}_{room_slug}" if room_slug else proc_slug
+            # Подряд идущий идентичный заголовок той же стадии (повтор шапки на
+            # странице, напр. «Процесс: БЛИСТЕРОВКА» ×2 через контрольную таблицу)
+            # — не плодим вторую секцию-шапку (иначе дубль дат/ЛС/серии и второе
+            # «окончание»). Грануляция не страдает: там ГРАНУЛЯЦИЯ/СУШКА чередуются,
+            # между одинаковыми заголовками стоит другой → last_header_stage иной.
+            if cur_stage == last_header_stage:
+                pending_title = ""
+                continue
             header_extra = {"room_no": ph["room_no"], "rooms": room_labels, "process": proc, "stage_title": proc, "fields": _process_fields()}
             if not room_labels:
                 header_extra["room_assignment_required"] = True
                 header_extra["room_source_text"] = ph["room"] or ph["room_no"] or ""
             add("stage", f"Процесс: {proc} · {ph['room']} {ph['room_no']}".strip(), "process_header", header_extra)
+            last_header_stage = cur_stage
             pending_title = ""
             continue
 
