@@ -370,7 +370,10 @@ def _nested_table(table, prefix: str, fields: list[dict]) -> dict:
             cl = c.lower()
             return bool(_sig_label(c)) or "дата" in cl or "время" in cl
         sig_roles = [_sig_label(c) for c in nonempty if _sig_label(c)]
-        row_sig = bool(sig_roles) and all(_is_sig_or_dt(c) for c in nonempty)
+        # только в строках ДАННЫХ (не в шапке): иначе шапка с «Составлено
+        # (подпись)» + датами принимается за строку-подпись, а поля уезжают из
+        # строки данных в шапку.
+        row_sig = bool(sig_roles) and all(_is_sig_or_dt(c) for c in nonempty) and ri >= header_rows
         row_role = sig_roles[0] if sig_roles else None
         row_role_name = "Исполнитель ДП" if row_role == "signature_operator" else "Проверено ДОК" if row_role == "signature_qa" else ""
         created_slots: set[str] = set()
@@ -1562,6 +1565,19 @@ def build_sections(doc: Document) -> list[dict]:
                 "reference_table", _plain_table(val))
             pending_title = ""
             continue
+
+        # Запись о завершении очистки линии: «Дата начала | Дата окончания |
+        # Составлено (подпись и дата)» с одной пустой строкой — это НЕ чек-лист, а
+        # строка сдачи. Ветка line_clearance ниже делала из неё пустой шаг «Дата
+        # окончания» (теряя «Дата начала» и «Составлено»). Разбираем как обычную
+        # компактную таблицу: даты (datetime) + подпись «Составлено».
+        if (cur_stage.startswith("line_clearance") and "составлено" in flat
+                and "дата окончания" in flat and len(rows) <= 3):
+            parsed = _generic_process_table(val, "")
+            if parsed.get("rows"):
+                add("process_table", "Очистка линии — дата и составление", "process_table", parsed)
+                pending_title = ""
+                continue
 
         # line clearance in paper BMR is a checklist with DP execution and DOK
         # verification per row. Do not import it as a free-form process table.
