@@ -862,6 +862,49 @@ def _plain_table(table) -> dict:
     }
 
 
+def _approval_block(table) -> dict:
+    """Лист согласования/утверждения (РАССМОТРЕНО ДП/ДОК, УТВЕРЖДЕНО УЛ + Ф.И.О. +
+    Должность + «Подпись и дата ____»). Имена/должности — справочный текст,
+    а прочерк «Подпись и дата» → слот e-подписи с ролью из заголовка блока
+    (ДП → оператор, ДОК/УЛ → ДОК/QA)."""
+    raw = [[_cell_text(c) for c in r.cells] for r in table.rows]
+    fields: list[dict] = []
+    rows_out: list[dict] = []
+    cur_role = "signature_qa"
+    cur_role_label = "Согласование"
+    cur_name = ""
+    for r in raw:
+        cleaned = [_clean(x) for x in r]
+        flat = " ".join(cleaned).lower()
+        first = next((c for c in cleaned if c), "")
+        if "рассмотрено" in flat or "утверждено" in flat:
+            cur_role = _signature_role(flat) or "signature_qa"
+            cur_role_label = first
+            cur_name = ""
+        elif first.lower().startswith(("ф.и.о", "фио")):
+            vals = [c for c in cleaned if c and c != ":"]
+            cur_name = vals[1] if len(vals) > 1 else ""
+        cells_out: list[dict] = []
+        row_sig_done = False
+        for x in r:
+            cell: dict = {"text": _clean(x)}
+            if _is_fill_blank(x) and not row_sig_done:
+                fi = len(fields)
+                fields.append({
+                    "label": _short_label(" · ".join(p for p in (cur_role_label, cur_name) if p) or "Подпись"),
+                    "type": cur_role,
+                })
+                cell["field_index"] = fi
+                cell["type"] = cur_role
+                cell["text"] = ""
+                row_sig_done = True
+            elif _is_fill_blank(x):
+                cell["text"] = ""  # дубль объединённого прочерка — без второго поля
+            cells_out.append(cell)
+        rows_out.append({"cells": cells_out})
+    return {"rows": rows_out, "fields": fields}
+
+
 def _room_labels(room_no: str | None) -> list[str]:
     labels: list[str] = []
     for num in re.findall(r"\d{2,3}", room_no or ""):
@@ -1571,8 +1614,8 @@ def build_sections(doc: Document) -> list[dict]:
         # и теряет имена. Показываем как read-only reference_table.
         if (("рассмотрено" in flat or "утверждено" in flat)
                 and ("ф.и.о" in flat or "фио" in flat) and "должность" in flat):
-            add("reference_table", "Лист согласования и утверждения ЗПС",
-                "reference_table", _plain_table(val))
+            add("process_table", "Лист согласования и утверждения ЗПС",
+                "process_table", _approval_block(val))
             pending_title = ""
             continue
 
