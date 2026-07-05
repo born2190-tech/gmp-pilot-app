@@ -1195,9 +1195,34 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     ]
     return tables.filter((tb) => tb.process_table_variant === 'moisture_loss' || tb.process_table_variant === 'requirement_calculation' || tb.process_table_variant === 'yield_calculation' || tb.process_table_variant === 'batch_yield_calculation')
   }, [section.config])
+  const isEfficiencyCalc = section.config?.process_table_variant === 'efficiency_calculation'
   const computedFields = useMemo<{ fi: number; value: string }[]>(() => {
-    if (!variantTables.length) return EMPTY_COMPUTED  // 99% секций — без расчётов, не дёргаем эффект на каждый ввод
+    if (!variantTables.length && !isEfficiencyCalc) return EMPTY_COMPUTED  // 99% секций — без расчётов, не дёргаем эффект на каждый ввод
     const out: { fi: number; value: string }[] = []
+    if (isEfficiencyCalc) {
+      // Бумажная формула: X = стандарт × 100/(содержание на безводное) × 100/(100 − %воды);
+      // C1 = станд.МКЦ − ((A − станд.A) + (B − станд.B)). A/B/C1 — авто.
+      const cfgAny = (section.config || {}) as Record<string, unknown>
+      const std = (k: string, fb: number) => {
+        const v = parseFloat(String(cfgAny[k] ?? '').replace(',', '.'))
+        return Number.isNaN(v) ? fb : v
+      }
+      const stdA = std('standard_metformin_kg', 67.425)
+      const stdB = std('standard_sitagliptin_kg', 4.928)
+      const stdC = std('standard_mcc_kg', 8.651)
+      const actual = (contentFi: number, waterFi: number, stdKg: number): number | null => {
+        const content = numFi(contentFi)
+        const water = numFi(waterFi)
+        if (!content || water === null || water >= 100) return null
+        return stdKg * (100 / content) * (100 / (100 - water))
+      }
+      const a = actual(1, 2, stdA)
+      const b = actual(5, 6, stdB)
+      out.push({ fi: 3, value: fmtCalc(a) })
+      out.push({ fi: 7, value: fmtCalc(b) })
+      const c1 = a !== null && b !== null ? stdC - ((a - stdA) + (b - stdB)) : null
+      out.push({ fi: 8, value: fmtCalc(c1) })
+    }
     for (const tb of variantTables) {
       if (tb.process_table_variant === 'moisture_loss') {
         const ms = (tb.moisture || []).map((it) => numFi(it.fi))
@@ -1250,7 +1275,7 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [variantTables, draft])
+  }, [variantTables, isEfficiencyCalc, draft])
   useEffect(() => {
     if (!computedFields.length) return
     for (const c of computedFields) {
@@ -1941,7 +1966,10 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
               <div className="sm:col-span-2">{fieldBox(0, 'Партия / серия', 'text')}</div>
               {fieldBox(1, 'Количественное содержание', 'number', '%')}
               {fieldBox(2, 'Количество воды', 'number', '%')}
-              <div className="sm:col-span-2">{fieldBox(3, 'Фактическое количество (A)', 'number', 'кг')}</div>
+              <div className="sm:col-span-2">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Фактическое количество (A) = 67,425 × 100/содерж. × 100/(100−вода)</div>
+                {readonlyValue(3, 'кг')}
+              </div>
             </div>
           </div>
 
@@ -1957,7 +1985,10 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
               <div className="sm:col-span-2">{fieldBox(4, 'Партия / серия', 'text')}</div>
               {fieldBox(5, 'Количественное содержание', 'number', '%')}
               {fieldBox(6, 'Количество воды', 'number', '%')}
-              <div className="sm:col-span-2">{fieldBox(7, 'Фактическое количество (B)', 'number', 'кг')}</div>
+              <div className="sm:col-span-2">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Фактическое количество (B) = 4,928 × 100/содерж. × 100/(100−вода)</div>
+                {readonlyValue(7, 'кг')}
+              </div>
             </div>
           </div>
         </div>
@@ -1968,7 +1999,10 @@ function SectionBlock({ section, allSections, entries, draft, closed, canDp, can
             C1 = 8,651 кг - ((A - 67,425 кг) + (B - 4,928 кг))
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr]">
-            {fieldBox(8, 'Количество взятой МКЦ (C1)', 'number', 'кг')}
+            <div>
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Количество взятой МКЦ (C1)</div>
+              {readonlyValue(8, 'кг')}
+            </div>
             {fieldBox(9, 'Примечания', 'text')}
           </div>
         </div>
