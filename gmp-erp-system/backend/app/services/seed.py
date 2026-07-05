@@ -54,11 +54,72 @@ ROLE_PERMISSION_CODES: dict[str, list[str]] = {
 
 DEPARTMENTS: list[tuple[str, str]] = [
     ("WAREHOUSE", "Warehouse"),
-    ("QC", "Quality Control"),
-    ("QA", "Quality Assurance"),
+    ("QC", "Quality Control / ДКК"),
+    ("QA", "Quality Assurance / ДОК"),
     ("PRODUCTION", "Production"),
     ("TECHNOLOGY", "Technology"),
+    ("ENGINEERING", "Engineering / ИД"),
     ("ADMIN", "Administration"),
+]
+
+
+# Актуальный список участников BMR/ЗПС. Стартовые данные для пилота:
+# пароль = BmrNN!2026, PIN подписи = 10NN, где NN — номер в журнале.
+# В промышленном контуре эти секреты должны выдаваться персонально и меняться
+# при первом входе, но для локального пилота это даёт готовые учётки без ручного
+# заведения 50+ сотрудников.
+EMPLOYEE_MASTER: list[dict[str, str]] = [
+    {"no": "1", "username": "ashish_kumar", "full_name": "Ashish Kumar", "position": "Director of Manufacturing project and Engineering", "department": "ADMIN", "role": "HEAD_PRODUCTION", "initials": "A.S.K"},
+    {"no": "2", "username": "babar_hussain", "full_name": "Babar Hussain", "position": "Deputy Director Technical operations", "department": "PRODUCTION", "role": "HEAD_PRODUCTION", "initials": "H.B.M"},
+    {"no": "3", "username": "muhammad_arsalan", "full_name": "Muhammad Arsalan", "position": "Operator", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "M.A"},
+    {"no": "4", "username": "muhammad_zubair", "full_name": "Muhammad Zubair Afzal", "position": "Maintenance Engineer", "department": "ENGINEERING", "role": "PRODUCTION_OPERATOR", "initials": "M.Z.A"},
+    {"no": "5", "username": "filatov_pavel", "full_name": "Филатов Павел", "position": "Начальник ДОК, УЛ", "department": "QA", "role": "HEAD_QA", "initials": "Ф.П.А."},
+    {"no": "6", "username": "khalmetova_liliya", "full_name": "Хальметова Лилия", "position": "Начальник ДКК", "department": "QC", "role": "HEAD_QC", "initials": "Х.Л.Р."},
+    {"no": "7", "username": "khodjimukhamedov_nodir", "full_name": "Ходжимухамедов Нодир", "position": "Специалист по документообороту", "department": "QA", "role": "QA_MANAGER", "initials": "Х.Н.Б."},
+    {"no": "8", "username": "seitova_vaide", "full_name": "Сеитова Вайде", "position": "Начальник цеха", "department": "PRODUCTION", "role": "WORKSHOP_HEAD", "initials": "С.В.С."},
+    {"no": "9", "username": "shamsiev_mansur", "full_name": "Шамсиев Мансур", "position": "Технолог", "department": "TECHNOLOGY", "role": "TECHNOLOGIST", "initials": "Ш.М.Р."},
+    {"no": "10", "username": "tokhodzhaeva_sapargul", "full_name": "Токходжаева Сапаргуль", "position": "Химик ведущий", "department": "QC", "role": "QC_ANALYST", "initials": "Т.С.А."},
+    {"no": "11", "username": "babakulova_iroda", "full_name": "Бабакулова Ирода", "position": "Химик аналитик", "department": "QC", "role": "QC_ANALYST", "initials": "Б.И.А."},
+    {"no": "12", "username": "sunnatova_dildora", "full_name": "Суннатова Дилдора", "position": "Микробиолог", "department": "QC", "role": "QC_ANALYST", "initials": "С.Д.А."},
+    {"no": "13", "username": "sharipov_shokhrukh", "full_name": "Шарипов Шохрух", "position": "Химик аналитик", "department": "QC", "role": "QC_ANALYST", "initials": "Ш.Ш.И."},
+    {"no": "14", "username": "ibrokhimov_shakhzod", "full_name": "Иброхимов Шахзод", "position": "Химик аналитик", "department": "QC", "role": "QC_ANALYST", "initials": "И.Ш.Х."},
+    {"no": "15", "username": "alimov_uktam", "full_name": "Алимов Уктам", "position": "Специалист по досье", "department": "QA", "role": "QA_MANAGER", "initials": "А.У.О."},
+    {"no": "16", "username": "shukurova_nargiza", "full_name": "Шукурова Наргиза", "position": "Контролёр", "department": "QA", "role": "QA_MANAGER", "initials": "Ш.Н.М."},
+    {"no": "17", "username": "sulaymonova_rano", "full_name": "Сулаймонова Рано", "position": "Контролёр", "department": "QA", "role": "QA_MANAGER", "initials": "С.Р.Р"},
+    {"no": "18", "username": "muslimova_silvina", "full_name": "Муслимова Силвина", "position": "Контролёр", "department": "QA", "role": "QA_MANAGER", "initials": "М.С.Д."},
+    {"no": "19", "username": "ramazonova_violetta", "full_name": "Рамазонова Виолетта", "position": "Контролёр", "department": "QA", "role": "QA_MANAGER", "initials": "Р.В.Г."},
+    {"no": "20", "username": "sheraliyev_murod", "full_name": "Шералиев Мурод", "position": "Заведующий складом", "department": "WAREHOUSE", "role": "WAREHOUSE_MANAGER", "initials": "Ш.М.Ш."},
+    {"no": "21", "username": "karabekov_ergash", "full_name": "Карабеков Эргаш", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "К.Э.С."},
+    {"no": "22", "username": "urinboev_otabek", "full_name": "Уринбоев Отабек", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "У.О.А."},
+    {"no": "23", "username": "khotamov_mukhriddin", "full_name": "Хотамов Мухриддин", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Х.М.Т."},
+    {"no": "24", "username": "abraev_gayrat", "full_name": "Абраев Ғайрат", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "А.Ғ.Р."},
+    {"no": "25", "username": "ummatov_otabek", "full_name": "Умматов Отабек", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "У.О."},
+    {"no": "26", "username": "kholmonov_sanzhar", "full_name": "Холмонов Санжар", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Х.С.И."},
+    {"no": "27", "username": "nazarov_sardor", "full_name": "Назаров Сардор", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Н.С.А."},
+    {"no": "28", "username": "kholmatov_bekzod", "full_name": "Холматов Бекзод", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Х.Б"},
+    {"no": "29", "username": "rakhmonberdiev_muso", "full_name": "Рахмонбердиев Мусо", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Р.М.К."},
+    {"no": "30", "username": "sharipova_dilshoda", "full_name": "Шарипова Дилшода", "position": "Оператор", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Ш.Д.А."},
+    {"no": "31", "username": "kavlyametov_aziz", "full_name": "Кавляметов Азиз", "position": "Электрик-оператор", "department": "ENGINEERING", "role": "PRODUCTION_OPERATOR", "initials": "К.А.И."},
+    {"no": "32", "username": "yakupov_artyom", "full_name": "Якупов Артём", "position": "Механик-оператор", "department": "ENGINEERING", "role": "PRODUCTION_OPERATOR", "initials": "Я.А.В."},
+    {"no": "33", "username": "ernazarov_ikhtier", "full_name": "Ерназаров Ихтиер", "position": "Механик", "department": "ENGINEERING", "role": "PRODUCTION_OPERATOR", "initials": "Е.И.Б."},
+    {"no": "34", "username": "sultonov_murodali", "full_name": "Султонов Муродали", "position": "Котельщик-оператор", "department": "ENGINEERING", "role": "PRODUCTION_OPERATOR", "initials": "С.М.Х."},
+    {"no": "35", "username": "pulatova_makbal", "full_name": "Пулатова Макбал", "position": "Бригадир участка упаковки", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "П.М.Е."},
+    {"no": "36", "username": "urdusheva_fotima", "full_name": "Урдушева Фотима", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "У.Ф.Х."},
+    {"no": "37", "username": "khasanova_ugiloy", "full_name": "Хасанова Угилой", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Х.О.И."},
+    {"no": "38", "username": "khaidarova_dilnavoz", "full_name": "Хайдарова Дилнавоз", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Х.Д.Х."},
+    {"no": "39", "username": "narzikulova_mukhlisa", "full_name": "Нарзикулова Мухлиса", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Н.М.Р."},
+    {"no": "40", "username": "makhammatova_komila", "full_name": "Махамматова Комила", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "М.К.Н."},
+    {"no": "41", "username": "murtozokulova_dilfuza", "full_name": "Муртозокулова Дилфуза", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "М.Д.Ш."},
+    {"no": "42", "username": "yakubova_shakhlo", "full_name": "Якубова Шахло", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Я.Ш.Т."},
+    {"no": "43", "username": "turkmenova_dilora", "full_name": "Туркменова Дилора", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Т.Д.Н."},
+    {"no": "44", "username": "karimova_farangiz", "full_name": "Каримова Фарангиз", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "К.Ф.А."},
+    {"no": "45", "username": "azamkulova_shakhnoza", "full_name": "Азамкулова Шахноза", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "А.Ш.Б."},
+    {"no": "46", "username": "khodjabekova_mohigul", "full_name": "Ходжабекова Мохигул", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Х.М.Ш."},
+    {"no": "47", "username": "eralova_gavhar", "full_name": "Эралова Гавхар", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "Э.Г.Н."},
+    {"no": "48", "username": "kushmurodova_d", "full_name": "Кушмуродова Д.", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "К.Д."},
+    {"no": "49", "username": "kodirova_sh", "full_name": "Кодирова Ш.", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "К.Ш."},
+    {"no": "50", "username": "melikulova_sabokhat", "full_name": "Меликулова Сабохат", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "М.С."},
+    {"no": "51", "username": "mamanova_yanglish", "full_name": "Маманова Янглиш", "position": "Упаковщица", "department": "PRODUCTION", "role": "PRODUCTION_OPERATOR", "initials": "М.Я."},
 ]
 
 
@@ -155,10 +216,16 @@ def get_or_create_user(
     role: Role,
     department: Department,
     warehouse_scope: str | None = None,
+    employee_no: str | None = None,
+    position_title: str | None = None,
+    signature_initials: str | None = None,
 ) -> User:
     row = db.query(User).filter(User.username == username).first()
     if row:
         row.full_name = full_name
+        row.employee_no = employee_no
+        row.position_title = position_title
+        row.signature_initials = signature_initials
         row.role = role
         row.department = department
         row.warehouse_scope = warehouse_scope
@@ -167,6 +234,9 @@ def get_or_create_user(
     row = User(
         username=username,
         full_name=full_name,
+        employee_no=employee_no,
+        position_title=position_title,
+        signature_initials=signature_initials,
         password_hash=hash_password(password),
         role=role,
         department=department,
@@ -175,6 +245,24 @@ def get_or_create_user(
     )
     db.add(row)
     return row
+
+
+def seed_employee_master(db: Session, roles: dict[str, Role], departments: dict[str, Department]) -> None:
+    for item in EMPLOYEE_MASTER:
+        no = int(item["no"])
+        user = get_or_create_user(
+            db,
+            item["username"],
+            item["full_name"],
+            f"Bmr{no:02d}!2026",
+            roles[item["role"]],
+            departments[item["department"]],
+            None,
+            item["no"],
+            item["position"],
+            item["initials"],
+        )
+        user.signing_pin_hash = hash_password(f"{1000 + no}")
 
 
 def seed_foundation_data(db: Session) -> None:
@@ -263,6 +351,8 @@ def seed_foundation_data(db: Session) -> None:
         roles["SYS_ADMIN"],
         departments["ADMIN"],
     )
+
+    seed_employee_master(db, roles, departments)
 
     # Личные PIN-ы для построчных e-подписей BMR (пилот). Пароль — резерв.
     for username, pin in (("oper_ivanov", "1111"), ("oper_sidorov", "2222"), ("head_qa", "3333"), ("shift_master", "4444")):

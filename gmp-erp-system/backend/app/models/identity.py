@@ -43,6 +43,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    employee_no: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    position_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    signature_initials: Mapped[str | None] = mapped_column(String(32), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     # Личный PIN для построчных e-подписей на планшете (хэш). Пароль — резерв для
     # критичных действий (завершение/закрытие BMR).

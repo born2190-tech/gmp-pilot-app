@@ -932,17 +932,19 @@ def _signature_log_of(db: Session, instance: BmrInstance) -> list[dict]:
     sections_by_id = {s.id: s for s in instance.sections}
     stage_title = {s["stage"]: s["title"] for s in _stages_of(instance)}
     entries = (
-        db.query(BmrEntry, User.full_name, User.username, User.role, User.department)
-        .outerjoin(User, User.id == BmrEntry.filled_by)
+        db.query(BmrEntry)
         .filter(BmrEntry.instance_id == instance.id)
         .order_by(BmrEntry.filled_at.asc(), BmrEntry.id.asc())
         .all()
     )
+    signer_ids = {entry.filled_by for entry in entries if entry.filled_by}
+    signers = {u.id: u for u in db.query(User).filter(User.id.in_(signer_ids)).all()} if signer_ids else {}
     out: list[dict] = []
-    for entry, full_name, username, role, department in entries:
+    for entry in entries:
         value = entry.value or {}
         if not value.get("signed_by"):
             continue
+        signer = signers.get(entry.filled_by) if entry.filled_by else None
         section = sections_by_id.get(entry.section_id)
         if section and _is_hidden_bmr_section(section):
             continue
@@ -950,10 +952,10 @@ def _signature_log_of(db: Session, instance: BmrInstance) -> list[dict]:
         sign_role = str(value.get("role") or "")
         duty = {"qa": "ДОК", "dok": "ДОК", "dp": "ДП", "wh": "Склад"}.get(sign_role, sign_role or "Подпись")
         out.append({
-            "full_name": full_name or value.get("signed_by"),
-            "username": username,
-            "role": role.name if role else None,
-            "department": department,
+            "full_name": signer.full_name if signer else value.get("signed_by"),
+            "username": signer.username if signer else None,
+            "role": signer.role.name if signer and signer.role else None,
+            "department": signer.department.code if signer and signer.department else None,
             "duty": duty,
             "meaning": sign_role,
             "stage": stage,
@@ -1166,6 +1168,25 @@ def _ensure_instance_scope(instance: BmrInstance, user: CurrentUser) -> None:
     )
 
 
+def _assigned_operator_ids(instance: BmrInstance, section: BmrInstanceSection) -> set[str]:
+    assigned = (instance.assignments or {}).get(_section_stage(section)) or []
+    return {str(uid) for uid in assigned if str(uid).strip()}
+
+
+def _ensure_assigned_operator(instance: BmrInstance, section: BmrInstanceSection, user_id: UUID) -> None:
+    assigned = _assigned_operator_ids(instance, section)
+    if not assigned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Этап заблокирован: начальник цеха или технолог ещё не назначил операторов для заполнения BMR",
+        )
+    if str(user_id) not in assigned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Этот оператор не назначен на данный этап начальником цеха/технологом",
+        )
+
+
 def _field_label_for_sequence(section: BmrInstanceSection, field_index: int) -> str:
     fields = _section_fields(section)
     label = fields[field_index].get("label") if 0 <= field_index < len(fields) else None
@@ -1264,6 +1285,7 @@ def save_entries(db: Session, user: CurrentUser, instance_id: UUID, payload: Bmr
         if not section:
             continue
         _ensure_section_access(section, user)
+        _ensure_assigned_operator(inst, section, user.id)
         _ensure_weighing_gate(db, inst, section)
         fields = _section_fields(section)
         if item.field_index < 0 or item.field_index >= len(fields):
@@ -1334,13 +1356,7 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
     # Назначение по этапам: если начальник цеха назначил операторов на этот этап,
     # ячейку ДП может подписать только назначенный оператор (контролёров не ограничиваем).
     if role == "operator":
-        stage = _section_stage(section)
-        assigned = (inst.assignments or {}).get(stage) or []
-        if assigned and str(signer.id) not in {str(a) for a in assigned}:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Этот оператор не назначен на данный этап начальником цеха",
-            )
+        _ensure_assigned_operator(inst, section, signer.id)
     entry = (
         db.query(BmrEntry)
         .filter(BmrEntry.section_id == payload.section_id, BmrEntry.field_index == payload.field_index)
@@ -1473,14 +1489,18 @@ def get_instance_for_batch(db: Session, user: CurrentUser, batch_id: UUID) -> di
 
 def list_assignable_operators(db: Session, user: CurrentUser) -> list[dict]:
     """Кандидаты-операторы (ДП) для назначения на этапы: пользователи, чья роль
-    имеет право EXECUTE_BMR. Доступно надзору (MANAGE_PRODUCTION/QA)."""
-    _require_any(user, ("MANAGE_PRODUCTION", "QA_DECISION"))
+    имеет право EXECUTE_BMR. Доступно начальнику цеха/производству и технологам."""
+    _require_any(user, ("MANAGE_PRODUCTION", "MANAGE_BMR_TEMPLATES"))
     out: list[dict] = []
     for u in db.query(User).filter(User.is_active.is_(True)).order_by(User.full_name).all():
         codes = {p.code for p in u.role.permissions} if u.role else set()
         if "EXECUTE_BMR" in codes:
             out.append({
                 "id": str(u.id), "username": u.username, "full_name": u.full_name,
+                "employee_no": u.employee_no,
+                "position_title": u.position_title,
+                "department": u.department.code if u.department else None,
+                "signature_initials": u.signature_initials,
                 "role": u.role.name if u.role else None,
                 "is_operator": "MANAGE_PRODUCTION" not in codes,
             })
@@ -1488,17 +1508,28 @@ def list_assignable_operators(db: Session, user: CurrentUser) -> list[dict]:
 
 
 def set_assignments(db: Session, user: CurrentUser, instance_id: UUID, mapping: dict[str, list[str]]) -> dict:
-    """Начальник цеха назначает операторов по этапам ДО заполнения цехом."""
-    _require_any(user, ("MANAGE_PRODUCTION",))
+    """Начальник цеха или технолог назначает операторов по этапам ДО заполнения цехом."""
+    _require_any(user, ("MANAGE_PRODUCTION", "MANAGE_BMR_TEMPLATES"))
     inst = _get_instance(db, instance_id)
     if inst.status in ("completed", "reviewed"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BMR закрыт — назначения заморожены")
     valid_stages = {s["stage"] for s in _stages_of(inst)}
+    eligible_ids: set[str] = set()
+    for u in db.query(User).filter(User.is_active.is_(True)).all():
+        codes = {p.code for p in u.role.permissions} if u.role else set()
+        if "EXECUTE_BMR" in codes:
+            eligible_ids.add(str(u.id))
     cleaned: dict[str, list[str]] = {}
     for stage, user_ids in (mapping or {}).items():
         if stage not in valid_stages:
             continue
-        cleaned[stage] = [str(uid) for uid in (user_ids or [])]
+        seen: set[str] = set()
+        cleaned[stage] = []
+        for uid in (user_ids or []):
+            uid_s = str(uid)
+            if uid_s in eligible_ids and uid_s not in seen:
+                cleaned[stage].append(uid_s)
+                seen.add(uid_s)
     inst.assignments = cleaned
     write_audit(
         db, user, object_type="bmr_instance", object_id=str(inst.id),

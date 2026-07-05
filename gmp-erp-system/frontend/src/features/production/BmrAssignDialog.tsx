@@ -59,15 +59,25 @@ export function BmrAssignDialog({ token, instance, onClose, onSaved }: {
                   {st.room && <span className="mono text-[11px] text-slate-400">{st.room}</span>}
                   <span className="ml-auto text-[11px] text-slate-400">{t('bmrAssign.assignedCount', { n: (map[st.stage] || []).length })}</span>
                 </div>
-                <div className="flex flex-wrap gap-2 p-3">
+                <div className="grid grid-cols-1 gap-2 p-3 md:grid-cols-2">
                   {operators.map((op) => {
                     const on = (map[st.stage] || []).includes(op.id)
                     return (
                       <button key={op.id} disabled={closed} onClick={() => toggle(st.stage, op.id)}
-                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[12.5px] font-medium disabled:opacity-50 ${on ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-                        {on ? <Check size={14} /> : <span className="h-3.5 w-3.5 rounded-full border border-slate-300" />}
-                        {op.full_name}
-                        {!op.is_operator && <span className="rounded bg-slate-100 px-1 text-[9px] text-slate-500">{t('bmrAssign.master')}</span>}
+                        className={`flex min-h-[64px] items-start gap-2 rounded-lg border px-3 py-2 text-left disabled:opacity-50 ${on ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
+                        <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-current">{on && <Check size={12} />}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-[12.5px] font-semibold text-slate-900">
+                            {op.employee_no ? `${op.employee_no}. ` : ''}{op.full_name}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[11px] text-slate-500">{op.position_title || op.role || '—'}</span>
+                          <span className="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-500">
+                            {op.department && <span className="rounded bg-slate-100 px-1.5 py-0.5">{op.department}</span>}
+                            {op.signature_initials && <span className="rounded bg-slate-100 px-1.5 py-0.5">{op.signature_initials}</span>}
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5">{op.username}</span>
+                            {!op.is_operator && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">{t('bmrAssign.master')}</span>}
+                          </span>
+                        </span>
                       </button>
                     )
                   })}

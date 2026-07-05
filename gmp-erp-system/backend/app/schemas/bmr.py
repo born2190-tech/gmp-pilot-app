@@ -128,6 +128,10 @@ class BmrOperatorItem(BaseModel):
     id: str
     username: str
     full_name: str
+    employee_no: str | None = None
+    position_title: str | None = None
+    department: str | None = None
+    signature_initials: str | None = None
     role: str | None = None
     is_operator: bool = True
 

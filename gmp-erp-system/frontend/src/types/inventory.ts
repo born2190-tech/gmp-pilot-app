@@ -1448,7 +1448,17 @@ export interface BmrSignatureLogItem {
   signed_at: string | null
   workstation_id: string | null
 }
-export interface BmrOperatorItem { id: string; username: string; full_name: string; role: string | null; is_operator: boolean }
+export interface BmrOperatorItem {
+  id: string
+  username: string
+  full_name: string
+  employee_no: string | null
+  position_title: string | null
+  department: string | null
+  signature_initials: string | null
+  role: string | null
+  is_operator: boolean
+}
 export interface BmrOperatorsResponse { operators: BmrOperatorItem[] }
 
 export interface BmrBatchInstanceResponse {
