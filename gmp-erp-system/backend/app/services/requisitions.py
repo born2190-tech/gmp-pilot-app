@@ -1,6 +1,7 @@
 """Production Requisition service — FEFO allocation + issue logic."""
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -468,6 +469,89 @@ def _spill_distribution_to_bmr(db: Session, req: ProductionRequisition, alloc_li
     db.flush()
 
 
+def _spill_efficiency_to_bmr(db: Session, req: ProductionRequisition, alloc_lines: list, user: CurrentUser) -> None:
+    """При FEFO-выдаче предзаполняет «Расчёт эффективности» BMR данными выданных
+    лотов API: № серии (supplier_lot) + количественное содержание и % воды из
+    аналитического листа (QCReportParameter). Поля остаются редактируемыми,
+    заполненное/подписанное не перезатирается. A/B/C1 фронт считает сам."""
+    if not req.production_batch_id:
+        return
+    from app.models.inventory import BmrEntry, BmrInstance
+    from app.models.quality import QCReport, QCReportParameter
+    from app.services.bmr import _is_efficiency_calculation_config
+
+    instance = db.query(BmrInstance).filter(BmrInstance.production_batch_id == req.production_batch_id).first()
+    if not instance:
+        return
+    section = next(
+        (s for s in instance.sections if _is_efficiency_calculation_config(s.config or {}, s.title)),
+        None,
+    )
+    if not section:
+        return
+
+    now = now_utc()
+
+    def _set(field_index: int, v: str) -> None:
+        entry = (
+            db.query(BmrEntry)
+            .filter(BmrEntry.instance_id == instance.id, BmrEntry.section_id == section.id, BmrEntry.field_index == field_index)
+            .first()
+        )
+        if entry and entry.value and (entry.value.get("signed_by") or entry.value.get("v") not in (None, "")):
+            return  # уже заполнено/подписано — не перезатираем
+        if entry is None:
+            entry = BmrEntry(instance_id=instance.id, section_id=section.id, field_index=field_index)
+            db.add(entry)
+        entry.value = {"v": v, "source": "requisition", "requisition_no": req.requisition_no}
+        entry.filled_by = user.id
+        entry.filled_at = now
+
+    def _num_from(text: str | None) -> str | None:
+        m = re.search(r"\d+(?:[.,]\d+)?", text or "")
+        return m.group(0).replace(",", ".") if m else None
+
+    # Поля секции (фикс. раскладка _efficiency_calculation_fields):
+    # метформин: 0 партия, 1 содержание, 2 вода; ситаглиптин: 4, 5, 6.
+    api_base = {"метформин": 0, "ситаглиптин": 4}
+
+    for alloc in alloc_lines:
+        line = db.get(RequisitionLine, alloc.requisition_line_id)
+        material = db.get(Material, line.material_id) if line else None
+        if not material:
+            continue
+        name_low = f"{material.name or ''} {material.code or ''}".lower()
+        base = next((b for k, b in api_base.items() if k in name_low), None)
+        if base is None:
+            continue
+        lot = db.get(Lot, alloc.lot_id)
+        supplier_lot = (lot.supplier_lot or lot.internal_lot) if lot else None
+        if supplier_lot:
+            _set(base + 0, supplier_lot)
+        qc = (
+            db.query(QCReport)
+            .filter(QCReport.lot_id == alloc.lot_id)
+            .order_by(QCReport.submitted_at.desc().nullslast(), QCReport.created_at.desc())
+            .first()
+            if lot else None
+        )
+        if not qc:
+            continue
+        params = db.query(QCReportParameter).filter(QCReportParameter.report_id == qc.id).all()
+        water_val = content_val = None
+        for p in params:
+            pn = (p.parameter_name or "").lower()
+            if water_val is None and ("вода" in pn or "влаг" in pn or "water" in pn or "высушив" in pn):
+                water_val = _num_from(p.result_value)
+            elif content_val is None and ("количественное" in pn or "assay" in pn or "содержание" in pn):
+                content_val = _num_from(p.result_value)
+        if content_val:
+            _set(base + 1, content_val)
+        if water_val:
+            _set(base + 2, water_val)
+    db.flush()
+
+
 def create_requisition(db: Session, user: CurrentUser, payload: RequisitionCreate) -> ProductionRequisition:
     _require_any_permission(user, ("VIEW_PRODUCTION", "MANAGE_PRODUCTION"))
 
@@ -738,6 +822,7 @@ def issue_requisition(db: Session, user: CurrentUser, requisition_id: uuid.UUID,
     db.flush()
     _recalculate_requisition_status(db, req)
     _spill_distribution_to_bmr(db, req, alloc_lines, user)
+    _spill_efficiency_to_bmr(db, req, alloc_lines, user)
 
     write_audit(
         db, user,
