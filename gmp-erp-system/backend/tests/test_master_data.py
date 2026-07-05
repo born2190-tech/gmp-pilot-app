@@ -5,8 +5,8 @@ from app.main import create_app
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession, Department, Permission, Role, User, role_permissions
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
-from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.models.quality import QCNotification, QCNotificationLine, QCReport, QCReportParameter
+from app.models.master_data import Location, Manufacturer, Material, MaterialAlias, Supplier, Warehouse
+from app.models.quality import MaterialSpecification, QCNotification, QCNotificationLine, QCReport, QCReportParameter, SpecificationParameter
 from app.services.seed import seed_foundation_data
 
 
@@ -37,6 +37,9 @@ def reset_seeded_data() -> None:
         db.query(Warehouse).delete()
         db.query(Supplier).delete()
         db.query(Manufacturer).delete()
+        db.query(SpecificationParameter).delete()
+        db.query(MaterialSpecification).delete()
+        db.query(MaterialAlias).delete()
         db.query(Material).delete()
         db.commit()
     finally:
@@ -73,7 +76,7 @@ def test_seed_creates_warehouse_department_roles_and_material_types() -> None:
 
         assert {"SUBSTANCE_WAREHOUSE", "PACKAGING_WAREHOUSE", "FG_WAREHOUSE"} <= warehouse_types
         assert {"HEAD_QA", "HEAD_QC", "HEAD_PRODUCTION", "WORKSHOP_HEAD", "CHIEF_TECHNOLOGIST"} <= role_codes
-        assert material_types == set()
+        assert "raw_material" in material_types
     finally:
         db.close()
 

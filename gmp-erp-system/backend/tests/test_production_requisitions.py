@@ -25,7 +25,7 @@ from app.models.inventory import (
     RequisitionLine,
 )
 from app.models.master_data import Location, Manufacturer, Material, MaterialAlias, Warehouse
-from app.models.quality import QCNotification, QCNotificationLine, QCReport, QCReportParameter
+from app.models.quality import MaterialSpecification, QCNotification, QCNotificationLine, QCReport, QCReportParameter, SpecificationParameter
 from app.services.seed import seed_foundation_data
 
 
@@ -53,6 +53,8 @@ def reset_requisition_data() -> None:
         db.query(Lot).delete()
         db.query(ReceiptLine).delete()
         db.query(ReceiptDocument).delete()
+        db.query(SpecificationParameter).delete()
+        db.query(MaterialSpecification).delete()
         db.query(MaterialAlias).delete()
         db.query(AuthSession).delete()
         db.query(Material).delete()

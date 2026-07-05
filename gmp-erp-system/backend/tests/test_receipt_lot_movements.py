@@ -7,8 +7,8 @@ from app.main import create_app
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession
 from app.models.inventory import FGShipmentDocument, FGShipmentLine, InventoryCountDocument, InventoryCountLine, InventoryMovement, Lot, ReceiptDocument, ReceiptLine
-from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
-from app.models.quality import QCNotification, QCNotificationLine, QCReport, QCReportParameter
+from app.models.master_data import Location, Manufacturer, Material, MaterialAlias, Supplier, Warehouse
+from app.models.quality import MaterialSpecification, QCNotification, QCNotificationLine, QCReport, QCReportParameter, SpecificationParameter
 from app.services.seed import seed_foundation_data
 
 
@@ -30,6 +30,9 @@ def reset_inventory_data() -> None:
         db.query(ReceiptLine).delete()
         db.query(ReceiptDocument).delete()
         db.query(AuthSession).delete()
+        db.query(SpecificationParameter).delete()
+        db.query(MaterialSpecification).delete()
+        db.query(MaterialAlias).delete()
         db.query(Material).delete()
         db.query(Supplier).delete()
         db.query(Manufacturer).delete()

@@ -208,6 +208,29 @@ def get_or_create_material(db: Session, code: str, name: str, item_type: str, de
     return row
 
 
+RAW_MATERIAL_SEED: list[tuple[str, str, str, str]] = [
+    ("API-MET", "Метформин гидрохлорид", "raw_material", "kg"),
+    ("API-SITA", "Ситаглиптин фосфат моногидрат", "raw_material", "kg"),
+    ("EXC-POV", "Повидон К-30", "raw_material", "kg"),
+    ("EXC-SLS", "Натрий лаурил сульфат", "raw_material", "kg"),
+    ("EXC-AEROSIL", "Коллоидный диоксид кремния (Aerosil 200M)", "raw_material", "kg"),
+    ("EXC-MCC", "Целлюлоза микрокристаллическая (PH-102)", "raw_material", "kg"),
+    ("EXC-SOD", "Натрия кроскармеллоза", "raw_material", "kg"),
+    ("EXC-MGST", "Стеарат магния", "raw_material", "kg"),
+    ("EXC-LACTOSE", "Лактоза моногидрат (Flowlac 90)", "raw_material", "kg"),
+    ("EXC-CROSPOV", "Кросповидон (Kollidon CL)", "raw_material", "kg"),
+    ("EXC-OPA-BLUE", "Opadry II Blue 85G205027-CN", "raw_material", "kg"),
+    ("UTIL-WATER", "Очищенная вода", "raw_material", "kg"),
+]
+
+
+def seed_materials(db: Session) -> None:
+    """Идемпотентно заводит базовые материалы, на которые ссылаются НД/BMR."""
+    for code, name, item_type, unit in RAW_MATERIAL_SEED:
+        get_or_create_material(db, code, name, item_type, unit)
+    db.flush()
+
+
 def get_or_create_user(
     db: Session,
     username: str,
@@ -361,6 +384,7 @@ def seed_foundation_data(db: Session) -> None:
             row.signing_pin_hash = hash_password(pin)
 
     db.flush()
+    seed_materials(db)
     seed_specifications(db)
     seed_inventory_accounts(db)
     seed_reagents(db)
@@ -477,6 +501,123 @@ _MICRO_PSEUDOMONAS = ("microbiological", "Pseudomonas aeruginosa", "Отсутс
 # (category, parameter_name, specification, method_reference, unit)
 SPEC_SEED: list[dict] = [
     {
+        "nd_code": "НД-SPC/СУБ/039/23", "material_code": "API-MET", "material_name": "Метформин гидрохлорид",
+        "match_keywords": "метформин гидрохлорид metformin hydrochloride hcl",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Белый кристаллический порошок", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Легко растворим в воде; мало растворим в спирте; практически не растворим в ацетоне; практически не растворим в метиленхлориде", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "Реакция на хлориды; ИК-спектр соответствует спектру РСО", "ГФ РУз, ЕР-11 2.3.1, 2.2.24", "—"),
+            ("physicochemical", "Родственные примеси", "Общее количество примесей: не более 0,5 %", "ГФ РУз, ЕР-11 2.2.29", "%"),
+            ("physicochemical", "Потери при высушивании", "Не более 0,5 %", "ГФ РУз, ЕР-11 2.2.32", "%"),
+            ("physicochemical", "Сульфатная зола", "Не более 0,1 %", "ГФ РУз, ЕР-11 2.4.14", "%"),
+            ("physicochemical", "Количественное содержание", "98,5 — 101,0 %", "ГФ РУз, ЕР-11 2.2.29", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI,
+        ],
+    },
+    {
+        "nd_code": "НД-SPC/СУБ/008/23", "material_code": "EXC-SLS", "material_name": "Натрия лаурил сульфат",
+        "match_keywords": "натрия натрий лаурил сульфат sodium lauryl sulfate kolliphor sls",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Белый или бледно-жёлтый порошок, кристаллический порошок или полусферические гранулы", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Легко растворим в воде с опалесценцией; частично растворим в спирте", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "С водой образуется пена; в слое метиленхлорида образуется интенсивное синее окрашивание; реакция на натрий; с хлоридом бария образуется белый кристаллический осадок", "ГФ РУз, ЕР-11", "—"),
+            ("physicochemical", "Щёлочность", "Окраска должна измениться при добавлении не более 0,5 мл 0,1 М HCl", "ГФ РУз, ЕР-11", "мл"),
+            ("physicochemical", "Количественное определение", "Не менее 85 %", "ГФ РУз, ЕР-11", "%"),
+            ("physicochemical", "Нэтерифицированные спирты", "Не более 4 %", "ГФ РУз, ЕР-11", "%"),
+            ("physicochemical", "Натрия хлорид и натрия сульфат", "Не более 8 % суммы", "ГФ РУз, ЕР-11", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI,
+        ],
+    },
+    {
+        "nd_code": "SPC/СУБ/007/23", "material_code": "EXC-SOD", "material_name": "Кроскармеллоза натрия",
+        "match_keywords": "кроскармеллоза натрия croscarmellose sodium primellose",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Порошок белый или серовато-белый, гигроскопичный", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Практически не растворим в спирте; практически не растворим в толуоле; практически не растворим в ацетоне", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "ИК-спектр соответствует спектру РСО; с метиленовым синим образуется волокнистая масса; раствор даёт реакцию натрия", "ГФ РУз, ЕР-11", "—"),
+            ("physicochemical", "pH", "От 5,0 до 7,0", "ГФ РУз, ЕР-11 2.2.3", "—"),
+            ("physicochemical", "Объём осаждения", "От 10 мл до 30 мл", "ГФ РУз, ЕР-11", "мл"),
+            ("physicochemical", "Водорастворимые вещества", "Не более 10 %", "ГФ РУз, ЕР-11", "%"),
+            ("physicochemical", "Потеря в массе при высушивании", "Не более 10,0 %", "ГФ РУз, ЕР-11 2.2.32", "%"),
+            ("physicochemical", "Сульфатная зола", "От 14 % до 28 %", "ГФ РУз, ЕР-11 2.4.14", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI, _MICRO_ECOLI,
+        ],
+    },
+    {
+        "nd_code": "НД-SPC/Суб/003/23", "material_code": "EXC-MGST", "material_name": "Стеарат магния",
+        "match_keywords": "стеарат магния magnesium stearate ligamed",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Очень мелкий, лёгкий, белый или почти белый порошок, жирный на ощупь", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Практически не растворим в воде и спирте", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "Реакция на магний; жирные кислоты соответствуют требованиям НД", "ГФ РУз, ЕР-11", "—"),
+            ("physicochemical", "Кислотность или щёлочность", "Соответствует требованиям НД", "ГФ РУз, ЕР-11", "—"),
+            ("physicochemical", "Потеря в массе при высушивании", "Не более 6,0 %", "ГФ РУз, ЕР-11 2.2.32", "%"),
+            ("physicochemical", "Хлориды", "Не более 0,1 %", "ГФ РУз, ЕР-11", "%"),
+            ("physicochemical", "Сульфаты", "Не более 1,0 %", "ГФ РУз, ЕР-11", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI,
+        ],
+    },
+    {
+        "nd_code": "SPC/СУБ/006/23", "material_code": "EXC-LACTOSE", "material_name": "Лактоза моногидрат",
+        "match_keywords": "лактоза моногидрат lactose monohydrate flowlac",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Белый или почти белый кристаллический порошок", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Легко, но медленно растворим в воде; практически не растворим в спирте", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "ИК-спектр испытуемого образца соответствует спектру РСО", "ГФ РУз, ЕР-11 2.2.24", "—"),
+            ("physicochemical", "Кислотность или щёлочность", "Не более 0,4 мл 0,1 М NaOH", "ГФ РУз, ЕР-11", "мл"),
+            ("physicochemical", "Оптическая плотность", "При 400 нм не более 0,04; при 210-220 нм не более 0,25; при 270-300 нм не более 0,07", "ГФ РУз, ЕР-11", "—"),
+            ("physicochemical", "Вода", "От 4,5 % до 5,5 %", "ГФ РУз, ЕР-11 2.5.12", "%"),
+            ("physicochemical", "Сульфатная зола", "Не более 0,1 %", "ГФ РУз, ЕР-11 2.4.14", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI,
+        ],
+    },
+    {
+        "nd_code": "НД-SPC/СУБ/030/23", "material_code": "EXC-CROSPOV", "material_name": "Кросповидон",
+        "match_keywords": "кросповидон crospovidone kollidon cl",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Белый или желтовато-белый порошок либо хлопья, гигроскопичен", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Практически не растворим в метиленхлориде, воде и спирте", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "ИК-спектр соответствует спектру РСО; с йодом/крахмалом даёт синее окрашивание; суспензия остаётся мутной не менее 15 минут", "ГФ РУз, ЕР-11", "—"),
+            ("physicochemical", "pH", "От 5,0 до 8,0", "ГФ РУз, ЕР-11 2.2.3", "—"),
+            ("physicochemical", "Растворимые в воде вещества", "Не более 1,5 %", "ГФ РУз, ЕР-11", "%"),
+            ("physicochemical", "Сульфатная зола", "Не более 0,1 %", "ГФ РУз, ЕР-11 2.4.14", "%"),
+            ("physicochemical", "Потеря массы при высушивании", "Не более 5,0 %", "ГФ РУз, ЕР-11 2.2.32", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI, _MICRO_ECOLI,
+        ],
+    },
+    {
+        "nd_code": "НД-SPC/СУБ/012/23", "material_code": "EXC-AEROSIL", "material_name": "Аэросил безводный",
+        "match_keywords": "аэросил безводный aerosil colloidal silicon dioxide кремния диоксид",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Лёгкий, тонкий, аморфный порошок белого цвета с размером частиц около 15 нм", "Визуально", "—"),
+            ("physicochemical", "Растворимость", "Практически не растворим в воде; растворяется в горячих растворах гидроксидов щелочных металлов; практически не растворим в минеральных кислотах", "ГФ РУз, ЕР-11 5.11", "—"),
+            ("physicochemical", "Подлинность", "Даёт реакцию на силикаты: образуется белое кольцо", "ГФ РУз, ЕР-11", "—"),
+            ("physicochemical", "pH", "От 3,5 до 5,5", "ГФ РУз, ЕР-11 2.2.3", "—"),
+            ("physicochemical", "Хлориды", "Не более 250 ppm (0,0250 %)", "ГФ РУз, ЕР-11", "ppm"),
+            ("physicochemical", "Потеря в массе при прокаливании", "Не более 5,0 %", "ГФ РУз, ЕР-11", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI, _MICRO_ECOLI, _MICRO_SALMONELLA, _MICRO_SAUREUS, _MICRO_PSEUDOMONAS,
+        ],
+    },
+    {
+        "nd_code": "НД-SPC/СУБ/010/23", "material_code": "EXC-OPA-BLUE", "material_name": "Opadry II Complete Film Coating System 85G205027-CN Blue",
+        "match_keywords": "opadry blue 85g205027 cn complete film coating system оболочка",
+        "micro_method_ref": _MICRO_REF,
+        "params": [
+            ("physicochemical", "Описание", "Порошок по цвету соответствует входящим в него ингредиентам", "Визуально", "—"),
+            ("physicochemical", "Подлинность", "Инфракрасный спектр образца должен иметь полное совпадение полос поглощения с полосами поглощения прилагаемого спектра РСО", "ИК-спектроскопия", "—"),
+            ("physicochemical", "Однородность", "Должен быть однородным", "Визуально", "—"),
+            ("physicochemical", "Общая зола", "31,27 — 39,27 %", "ГФ РУз, ЕР-11 2.4.16", "%"),
+            _MICRO_AEROBES, _MICRO_FUNGI,
+        ],
+    },
+    {
         "nd_code": "НД-SPC/СУБ/023/23", "material_name": "Гликлазид",
         "match_keywords": "гликлазид gliclazid",
         "micro_method_ref": _MICRO_REF,
@@ -492,7 +633,7 @@ SPEC_SEED: list[dict] = [
         ],
     },
     {
-        "nd_code": "НД-SPC/СУБ/009/23", "material_name": "Микрокристаллическая целлюлоза",
+        "nd_code": "НД-SPC/СУБ/009/23", "material_code": "EXC-MCC", "material_name": "Микрокристаллическая целлюлоза",
         "match_keywords": "микрокристалл целлюлоз mcc рн-102",
         "micro_method_ref": _MICRO_REF,
         "params": [
@@ -572,26 +713,58 @@ SPEC_SEED: list[dict] = [
 ]
 
 
+def _find_material_for_spec_seed(db: Session, entry: dict) -> Material | None:
+    material_code = entry.get("material_code")
+    if material_code:
+        material = db.query(Material).filter(Material.code == material_code).first()
+        if material:
+            return material
+    material = (
+        db.query(Material)
+        .filter(Material.name.ilike(f"%{entry['material_name']}%"))
+        .first()
+    )
+    if material is None:
+        for kw in entry["match_keywords"].split():
+            material = db.query(Material).filter(Material.name.ilike(f"%{kw}%")).first()
+            if material:
+                break
+    return material
+
+
 def seed_specifications(db: Session) -> None:
     """Идемпотентно сидирует справочник спецификаций (НД).
 
-    Если спецификация с таким nd_code уже есть — пропускаем (чтобы не
-    затирать правки, сделанные через админ-экран).
+    Если спецификация уже есть — не перетираем параметры ДКК, но допривязываем
+    НД к правильному material_code и обновляем поисковые ключи.
     """
     for entry in SPEC_SEED:
+        material = _find_material_for_spec_seed(db, entry)
         exists = db.query(MaterialSpecification).filter(MaterialSpecification.nd_code == entry["nd_code"]).first()
         if exists:
+            if material is not None:
+                exists.material_id = material.id
+            exists.match_keywords = entry["match_keywords"]
+            exists.material_name = entry["material_name"]
+            exists.sop_form = exists.sop_form or "533"
+            exists.micro_required = True
+            exists.micro_method_ref = exists.micro_method_ref or entry["micro_method_ref"]
+            if not exists.parameters:
+                ordinal = 0
+                for category, name, spec_text, method, unit in entry["params"]:
+                    ordinal += 1
+                    db.add(
+                        SpecificationParameter(
+                            specification_id=exists.id,
+                            category=category,
+                            ordinal=ordinal,
+                            parameter_name=name,
+                            specification=spec_text,
+                            method_reference=method or None,
+                            unit=unit or None,
+                        )
+                    )
             continue
-        material = (
-            db.query(Material)
-            .filter(Material.name.ilike(f"%{entry['material_name']}%"))
-            .first()
-        )
-        if material is None:
-            for kw in entry["match_keywords"].split():
-                material = db.query(Material).filter(Material.name.ilike(f"%{kw}%")).first()
-                if material:
-                    break
         spec = MaterialSpecification(
             nd_code=entry["nd_code"],
             material_name=entry["material_name"],
@@ -618,3 +791,4 @@ def seed_specifications(db: Session) -> None:
                     unit=unit or None,
                 )
             )
+    db.flush()
