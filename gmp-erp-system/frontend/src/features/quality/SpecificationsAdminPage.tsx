@@ -480,8 +480,8 @@ export function SpecificationsAdminPage({ token, user }: Props) {
   const showEditor = mode === 'create' || mode === 'edit' || detail != null
 
   return (
-    <div className="pt-1">
-      <div className="flex flex-wrap items-end justify-between gap-4 pb-3">
+    <div className="flex min-h-[calc(100vh-88px)] flex-col pt-1">
+      <div className="shrink-0 flex flex-wrap items-end justify-between gap-4 pb-3">
         <div className="min-w-0">
           <MetaLabel>{t.eyebrow}</MetaLabel>
           <h1 className="mt-1 text-[26px] font-semibold leading-tight tracking-tight text-slate-900">{t.h1}</h1>
@@ -489,8 +489,8 @@ export function SpecificationsAdminPage({ token, user }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-4 xl:col-span-3">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="min-h-0 lg:col-span-4 xl:col-span-3">
           <Registry
             list={list} t={t} canManage={canManage}
             selectedId={selectedId} onSelect={(id) => void onSelect(id)} onNew={startCreate}
@@ -502,7 +502,7 @@ export function SpecificationsAdminPage({ token, user }: Props) {
             isEmptyRegistry={isEmptyRegistry}
           />
         </div>
-        <div className="lg:col-span-8 xl:col-span-9">
+        <div className="min-h-0 lg:col-span-8 xl:col-span-9">
           {showEditor ? (
             <Editor
               spec={detail} draft={draft} mode={mode} t={t} canManage={canManage} errors={errors} busy={busy}
@@ -806,7 +806,7 @@ function Registry({ list, t, canManage, selectedId, onSelect, onNew, onImport, q
   const resetAll = () => { setQuery(''); setStatusFilter('all'); setFormFilter('all'); setMicroFilter('all') }
 
   return (
-    <Card className="flex h-[calc(100vh-200px)] min-h-[560px] flex-col overflow-hidden">
+    <Card className="flex min-h-[560px] flex-col overflow-hidden lg:h-full lg:min-h-0">
       <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700"><BookMarked size={15} /></span>
         <div className="min-w-0 flex-1">
