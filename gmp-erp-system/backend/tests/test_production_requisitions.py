@@ -8,12 +8,15 @@ from app.main import create_app
 from app.models.audit import AuditEvent, SignatureEvent
 from app.models.identity import AuthSession
 from app.models.inventory import (
+    BmrSection,
+    BmrTemplate,
     FGShipmentDocument,
     FGShipmentLine,
     InventoryCountDocument,
     InventoryCountLine,
     InventoryMovement,
     Lot,
+    Product,
     ProductionBatch,
     ProductionRequisition,
     ReceiptDocument,
@@ -44,6 +47,9 @@ def reset_requisition_data() -> None:
         db.query(RequisitionLine).delete()
         db.query(ProductionRequisition).delete()
         db.query(ProductionBatch).delete()
+        db.query(BmrSection).delete()
+        db.query(BmrTemplate).delete()
+        db.query(Product).delete()
         db.query(Lot).delete()
         db.query(ReceiptLine).delete()
         db.query(ReceiptDocument).delete()
@@ -153,6 +159,204 @@ def test_production_requisition_creation_auto_allocates_released_lots_by_fefo() 
     allocations = payload["lines"][0]["allocation_lines"]
     assert [row["lot_id"] for row in allocations] == [ref["earlier_lot_id"], ref["later_lot_id"]]
     assert [row["allocated_quantity"] for row in allocations] == [80, 20]
+
+
+def create_bmr_with_substance_and_packaging() -> str:
+    db = SessionLocal()
+    try:
+        user = db.query(AuthSession).first()
+        created_by = user.user_id if user else None
+        if created_by is None:
+            from app.models.identity import User
+            created_by = db.query(User).filter(User.username == "shift_master").one().id
+
+        raw = Material(code="API-PREFILL-001", name="Тестовая субстанция", item_type="raw_material", default_unit="kg")
+        product = Product(
+            code="991",
+            market_code="UZ",
+            market_name="Узбекистан",
+            name="Тестовый препарат",
+            dosage_form="таблетки",
+            default_shelf_life_months=24,
+            is_active=True,
+        )
+        db.add_all([raw, product])
+        db.flush()
+
+        batch = ProductionBatch(
+            batch_no="991N2607001",
+            status="bmr_issued",
+            product_id=product.id,
+            product_code=product.code,
+            serial_no=1,
+            product_name=product.name,
+            dosage_form=product.dosage_form,
+            batch_size=8500,
+            batch_size_unit="упак",
+            production_date=date(2026, 7, 5),
+            expiry_date=date(2028, 7, 31),
+            shelf_life_months=24,
+            bmr_no="BMR-991N2607001",
+            created_by=created_by,
+        )
+        template = BmrTemplate(
+            product_id=product.id,
+            title="BMR test",
+            version=1,
+            status="approved",
+            created_by=created_by,
+        )
+        db.add_all([batch, template])
+        db.flush()
+        db.add_all([
+            BmrSection(
+                template_id=template.id,
+                ordinal=1,
+                section_type="production_formula",
+                title="Производственная формула",
+                config={
+                    "kind": "production_formula",
+                    "rows": [
+                        {
+                            "material_code": raw.code,
+                            "name": raw.name,
+                            "per_series": "12,500",
+                        }
+                    ],
+                },
+            ),
+            BmrSection(
+                template_id=template.id,
+                ordinal=2,
+                section_type="process_table",
+                title="Использованные упаковочные материалы",
+                config={
+                    "kind": "process_table",
+                    "rows": [
+                        {"cells": [
+                            {"text": "№"},
+                            {"text": "Наименование материала"},
+                            {"text": "Номер серии, партии или счета"},
+                            {"text": "№ заключение или отчёта"},
+                            {"text": "Стандартное количество на серию 8500 упаковок"},
+                            {"text": "Фактическое количество на серию"},
+                        ]},
+                        {"cells": [
+                            {"text": "1"},
+                            {"text": "Алюминиевая фольга, толщина 0,15мм, ширина 195 мм"},
+                            {"text": "", "type": "text", "field_index": 0},
+                            {"text": "", "type": "text", "field_index": 1},
+                            {"text": "113,124"},
+                            {"text": "", "type": "number", "field_index": 2},
+                        ]},
+                        {"cells": [
+                            {"text": "1"},
+                            {"text": "", "type": "text", "field_index": 3},
+                            {"text": "", "type": "text", "field_index": 4},
+                            {"text": "", "type": "text", "field_index": 5},
+                            {"text": "113,124"},
+                            {"text": "", "type": "number", "field_index": 6},
+                        ]},
+                        {"cells": [
+                            {"text": "2"},
+                            {"text": "Пенал «НовуСита-М» 850мг/50мг"},
+                            {"text": "", "type": "text", "field_index": 7},
+                            {"text": "", "type": "text", "field_index": 8},
+                            {"text": "8500"},
+                            {"text": "", "type": "number", "field_index": 9},
+                        ]},
+                    ],
+                },
+            ),
+        ])
+        db.commit()
+        return str(batch.id)
+    finally:
+        db.close()
+
+
+def test_bmr_prefill_creates_one_requisition_split_by_substance_and_packaging_warehouses(monkeypatch) -> None:
+    batch_id = create_bmr_with_substance_and_packaging()
+    client = TestClient(create_app())
+    prod_token = login(client, "shift_master", "prod123", "WS-PROD-01")
+
+    prefill = client.get(
+        f"/api/requisitions/prefill/{batch_id}",
+        headers={"Authorization": f"Bearer {prod_token}"},
+    )
+    assert prefill.status_code == 200, prefill.text
+    prefill_payload = prefill.json()
+    assert [line["material_name"] for line in prefill_payload["lines"]] == [
+        "Тестовая субстанция",
+        "Алюминиевая фольга, толщина 0,15мм, ширина 195 мм",
+        "Пенал «НовуСита-М» 850мг/50мг",
+    ]
+
+    created = client.post(
+        "/api/requisitions",
+        headers={"Authorization": f"Bearer {prod_token}"},
+        json={
+            "product_name": prefill_payload["product_name"],
+            "product_series": prefill_payload["product_series"],
+            "production_date": prefill_payload["production_date"],
+            "production_order_no": prefill_payload["production_order_no"],
+            "production_batch_id": prefill_payload["production_batch_id"],
+            "lines": [
+                {
+                    "material_id": line["material_id"],
+                    "requested_quantity": line["requested_quantity"],
+                    "unit": line["unit"],
+                }
+                for line in prefill_payload["lines"]
+            ],
+        },
+    )
+    assert created.status_code == 200, created.text
+    requisition = created.json()
+    assert len(requisition["lines"]) == 3
+    assert {line["warehouse_type"] for line in requisition["lines"]} == {
+        "SUBSTANCE_WAREHOUSE",
+        "PACKAGING_WAREHOUSE",
+    }
+
+    sub_token = login(client, "warehouse_substance", "whs123", "WS-SUB-01")
+    pkg_token = login(client, "warehouse_packaging", "whp123", "WS-PACK-01")
+
+    sub_view = client.get(
+        f"/api/requisitions/{requisition['id']}",
+        headers={"Authorization": f"Bearer {sub_token}"},
+    )
+    assert sub_view.status_code == 200, sub_view.text
+    assert sub_view.json()["is_partial_view"] is True
+    assert [line["warehouse_type"] for line in sub_view.json()["lines"]] == ["SUBSTANCE_WAREHOUSE"]
+
+    pkg_view = client.get(
+        f"/api/requisitions/{requisition['id']}",
+        headers={"Authorization": f"Bearer {pkg_token}"},
+    )
+    assert pkg_view.status_code == 200, pkg_view.text
+    assert pkg_view.json()["is_partial_view"] is True
+    assert [line["warehouse_type"] for line in pkg_view.json()["lines"]] == [
+        "PACKAGING_WAREHOUSE",
+        "PACKAGING_WAREHOUSE",
+    ]
+
+    from app.api.routes import requisitions as requisition_routes
+
+    captured = {}
+
+    def fake_render_pdf(req, materials_by_id, qr_payload=None, scope=None, batch=None, requested_by_name=None):
+        captured["scope"] = scope
+        captured["line_count"] = len(req.lines)
+        return b"%PDF-1.4\n%%EOF"
+
+    monkeypatch.setattr(requisition_routes, "render_internal_transfer_pdf", fake_render_pdf)
+    pdf = client.get(
+        f"/api/requisitions/{requisition['id']}/pdf",
+        headers={"Authorization": f"Bearer {pkg_token}"},
+    )
+    assert pdf.status_code == 200, pdf.text
+    assert captured == {"scope": None, "line_count": 3}
 
 
 def test_production_batch_requires_bmr_before_start() -> None:

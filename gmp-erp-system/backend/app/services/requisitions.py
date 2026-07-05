@@ -1,6 +1,7 @@
 """Production Requisition service — FEFO allocation + issue logic."""
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from datetime import datetime, timezone
@@ -233,6 +234,116 @@ def _resolve_material_from_bmr_row(db: Session, row: dict) -> Material | None:
     return None
 
 
+def _packaging_material_code(name: str) -> str:
+    key = _norm_material_key(name)
+    if "фольг" in key or "foil" in key:
+        prefix = "PKG-FOIL"
+    elif "инструкц" in key or "leaflet" in key:
+        prefix = "PKG-LEAFLET"
+    elif "этикет" in key or "label" in key:
+        prefix = "PKG-LABEL"
+    elif "гофр" in key or "короб" in key or "box" in key:
+        prefix = "PKG-BOX"
+    elif "пенал" in key or "carton" in key:
+        prefix = "PKG-CARTON"
+    else:
+        prefix = "PKG-MAT"
+    suffix = hashlib.sha1(key.encode("utf-8")).hexdigest()[:8].upper()
+    return f"{prefix}-{suffix}"
+
+
+def _packaging_type_for_name(name: str) -> tuple[str, str | None, str]:
+    key = _norm_material_key(name)
+    if "инструкц" in key or "leaflet" in key:
+        return "label", "leaflet", "pcs"
+    if "этикет" in key or "label" in key:
+        return "label", "label", "pcs"
+    if "гофр" in key or "короб" in key or "box" in key:
+        return "container", "corrugated_box", "pcs"
+    if "пенал" in key or "carton" in key:
+        return "container", "carton", "pcs"
+    if "фольг" in key or "foil" in key:
+        return "packaging", None, "kg"
+    return "packaging", None, "pcs"
+
+
+def _get_or_create_packaging_material(db: Session, name: str) -> tuple[Material, bool]:
+    name_key = _norm_material_key(name)
+    for material in db.query(Material).all():
+        if _norm_material_key(material.name) == name_key:
+            return material, False
+
+    code = _packaging_material_code(name)
+    material = db.query(Material).filter(Material.code == code).first()
+    if material:
+        return material, False
+
+    item_type, packaging_type, unit = _packaging_type_for_name(name)
+    material = Material(
+        code=code,
+        name=name.strip(),
+        item_type=item_type,
+        packaging_type=packaging_type,
+        default_unit=unit,
+        account_group="PACKAGING",
+    )
+    db.add(material)
+    db.flush()
+    return material, True
+
+
+def _cell_text(cell) -> str:
+    if isinstance(cell, dict):
+        return str(cell.get("text") or "").strip()
+    return str(cell or "").strip()
+
+
+def _is_packaging_materials_section(section, config: dict) -> bool:
+    title = _norm_material_key(getattr(section, "title", ""))
+    if "использованн" in title and "упаковочн" in title and "материал" in title:
+        return True
+    if config.get("kind") != "process_table":
+        return False
+    rows = config.get("rows") or []
+    if not rows:
+        return False
+    header_text = _norm_material_key(" ".join(_cell_text(cell) for cell in (rows[0].get("cells") or [])))
+    return (
+        "наименование материал" in header_text
+        and "стандартное количество" in header_text
+        and ("серия" in header_text or "партии" in header_text)
+    )
+
+
+def _packaging_lines_from_bmr_section(db: Session, section, config: dict) -> list[dict]:
+    rows = config.get("rows") or []
+    result: list[dict] = []
+    seen: set[tuple[str, float, str]] = set()
+    for row in rows:
+        cells = row.get("cells") if isinstance(row, dict) else None
+        if not cells or len(cells) < 5:
+            continue
+        texts = [_cell_text(cell) for cell in cells]
+        material_name = texts[1] if len(texts) > 1 else ""
+        if not material_name or "наименование материал" in _norm_material_key(material_name):
+            continue
+        qty = _parse_qty(texts[4] if len(texts) > 4 else "")
+        if qty <= 0:
+            continue
+        material, created = _get_or_create_packaging_material(db, material_name)
+        dedupe_key = (_norm_material_key(material.name), qty, material.default_unit or "")
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        result.append({
+            "material": material,
+            "quantity": qty,
+            "unit": material.default_unit or "pcs",
+            "created_material": created,
+        })
+    return result
+
+
 def prefill_requisition(db: Session, user: CurrentUser, batch_id: uuid.UUID) -> dict:
     """Автозаполнение требования по серии: реквизиты из production_batch + плановые
     количества из производственной формулы утверждённого BMR-шаблона.
@@ -253,20 +364,30 @@ def prefill_requisition(db: Session, user: CurrentUser, batch_id: uuid.UUID) -> 
     )
     agg: dict[str, dict] = {}
     order: list[str] = []
+    created_packaging_materials = False
     if template:
         for section in template.sections:
             config = section.config or {}
-            if config.get("kind") != "production_formula":
-                continue
-            for row in config.get("rows", []):
-                if not row.get("name"):
-                    continue
-                material = _resolve_material_from_bmr_row(db, row)
-                if not material or material.code == "UTIL-WATER":
-                    continue
-                qty = _parse_qty(row.get("per_series"))
-                if qty <= 0:
-                    continue
+            line_specs: list[tuple[Material, float, str]] = []
+            if config.get("kind") == "production_formula":
+                for row in config.get("rows", []):
+                    if not row.get("name"):
+                        continue
+                    material = _resolve_material_from_bmr_row(db, row)
+                    if not material or material.code == "UTIL-WATER":
+                        continue
+                    qty = _parse_qty(row.get("per_series"))
+                    if qty <= 0:
+                        continue
+                    line_specs.append((material, qty, material.default_unit or "kg"))
+            elif _is_packaging_materials_section(section, config):
+                for packaging_line in _packaging_lines_from_bmr_section(db, section, config):
+                    material = packaging_line["material"]
+                    line_specs.append((material, packaging_line["quantity"], packaging_line["unit"]))
+                    if packaging_line.get("created_material"):
+                        created_packaging_materials = True
+
+            for material, qty, unit in line_specs:
                 key = str(material.id)
                 if key not in agg:
                     agg[key] = {
@@ -274,10 +395,12 @@ def prefill_requisition(db: Session, user: CurrentUser, batch_id: uuid.UUID) -> 
                         "material_name": material.name,
                         "material_code": material.code,
                         "requested_quantity": 0.0,
-                        "unit": material.default_unit or "kg",
+                        "unit": unit,
                     }
                     order.append(key)
                 agg[key]["requested_quantity"] = round(agg[key]["requested_quantity"] + qty, 6)
+    if created_packaging_materials:
+        db.commit()
     return {
         "product_name": batch.product_name,
         "product_series": batch.batch_no,

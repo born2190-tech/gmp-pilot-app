@@ -146,7 +146,9 @@ def download_pdf(
     state_hash = hashlib.sha256(f"{req.requisition_no}|{req.status}|{len(req.lines)}".encode("utf-8")).hexdigest()
     qr_payload = make_document_qr_payload("requisition", req.id, state_hash)
     pdf_bytes = render_internal_transfer_pdf(
-        req, materials_by_id, qr_payload=qr_payload, scope=view_scope_for(user),
+        # По СОП это один документ: даже если складской экран показывает только
+        # свою часть требования, печатная форма содержит обе части.
+        req, materials_by_id, qr_payload=qr_payload, scope=None,
         batch=batch, requested_by_name=requested_by_name,
     )
 
