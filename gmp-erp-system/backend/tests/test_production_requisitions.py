@@ -24,7 +24,7 @@ from app.models.inventory import (
     RequisitionAllocationLine,
     RequisitionLine,
 )
-from app.models.master_data import Location, Manufacturer, Material, Warehouse
+from app.models.master_data import Location, Manufacturer, Material, MaterialAlias, Warehouse
 from app.models.quality import QCNotification, QCNotificationLine, QCReport, QCReportParameter
 from app.services.seed import seed_foundation_data
 
@@ -53,6 +53,7 @@ def reset_requisition_data() -> None:
         db.query(Lot).delete()
         db.query(ReceiptLine).delete()
         db.query(ReceiptDocument).delete()
+        db.query(MaterialAlias).delete()
         db.query(AuthSession).delete()
         db.query(Material).delete()
         db.query(Manufacturer).delete()
@@ -357,6 +358,70 @@ def test_bmr_prefill_creates_one_requisition_split_by_substance_and_packaging_wa
     )
     assert pdf.status_code == 200, pdf.text
     assert captured == {"scope": None, "line_count": 3}
+
+
+def test_bmr_prefill_resolves_alias_name_to_existing_material_id() -> None:
+    db = SessionLocal()
+    try:
+        from app.models.identity import User
+
+        user = db.query(User).filter(User.username == "shift_master").one()
+        material = Material(code="API-MET", name="Метформин гидрохлорид", item_type="raw_material", default_unit="kg")
+        product = Product(
+            code="993",
+            market_code="UZ",
+            market_name="Узбекистан",
+            name="Alias test tablet",
+            dosage_form="таблетки",
+            default_shelf_life_months=24,
+            is_active=True,
+        )
+        db.add_all([material, product])
+        db.flush()
+        batch = ProductionBatch(
+            batch_no="993N2607001",
+            status="bmr_issued",
+            product_id=product.id,
+            product_code=product.code,
+            serial_no=1,
+            product_name=product.name,
+            dosage_form=product.dosage_form,
+            batch_size=1000,
+            batch_size_unit="упак",
+            production_date=date(2026, 7, 5),
+            expiry_date=date(2028, 7, 31),
+            shelf_life_months=24,
+            bmr_no="BMR-993N2607001",
+            created_by=user.id,
+        )
+        template = BmrTemplate(product_id=product.id, title="Alias BMR", version=1, status="approved", created_by=user.id)
+        db.add_all([batch, template])
+        db.flush()
+        db.add(BmrSection(
+            template_id=template.id,
+            ordinal=1,
+            section_type="production_formula",
+            title="Производственная формула",
+            config={"kind": "production_formula", "rows": [{"name": "Metformin HCl", "per_series": "10"}]},
+        ))
+        db.commit()
+        batch_id = str(batch.id)
+        material_id = str(material.id)
+    finally:
+        db.close()
+
+    client = TestClient(create_app())
+    token = login(client, "shift_master", "prod123", "WS-PROD-01")
+    prefill = client.get(
+        f"/api/requisitions/prefill/{batch_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert prefill.status_code == 200, prefill.text
+    lines = prefill.json()["lines"]
+    assert len(lines) == 1
+    assert lines[0]["material_id"] == material_id
+    assert lines[0]["material_code"] == "API-MET"
 
 
 def test_production_batch_requires_bmr_before_start() -> None:

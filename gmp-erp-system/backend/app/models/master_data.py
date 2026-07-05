@@ -87,6 +87,23 @@ class Material(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     sample_unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
+class MaterialAlias(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Controlled synonym for one material.
+
+    FEFO must always work by material_id. Aliases only help map external/BMR
+    names to a single controlled material before FEFO runs.
+    """
+
+    __tablename__ = "material_aliases"
+
+    material_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("materials.id"), nullable=False)
+    alias: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_alias: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    material: Mapped[Material] = relationship()
+
+
 class Employee(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "employees"
 

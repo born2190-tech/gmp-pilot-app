@@ -15,7 +15,7 @@ from app.models.inventory import (
     ReceiptDocument,
     ReceiptLine,
 )
-from app.models.master_data import Employee, InventoryAccount, Location, Manufacturer, Material, Supplier, Warehouse
+from app.models.master_data import Employee, InventoryAccount, Location, Manufacturer, Material, MaterialAlias, Supplier, Warehouse
 from app.models.quality import (
     MaterialSpecification,
     OOSInvestigation,
@@ -47,6 +47,7 @@ __all__ = [
     "Lot",
     "Manufacturer",
     "Material",
+    "MaterialAlias",
     "MaterialSpecification",
     "OOSInvestigation",
     "Permission",

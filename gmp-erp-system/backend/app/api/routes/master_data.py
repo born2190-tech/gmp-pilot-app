@@ -23,6 +23,7 @@ from app.schemas.master_data import (
     WarehousesResponse,
 )
 from app.services.audit import write_audit
+from app.services.material_matching import ensure_material_alias, find_material_by_code_or_alias
 from app.services.permissions import require_permission
 
 router = APIRouter(prefix="/api/master-data", tags=["master-data"])
@@ -166,6 +167,12 @@ def create_material(
     default_unit = payload.default_unit.strip()
     if db.query(Material).filter(Material.code == code).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Material code already exists")
+    duplicate_by_alias = find_material_by_code_or_alias(db, name=name)
+    if duplicate_by_alias:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Material name/alias already belongs to {duplicate_by_alias.code}",
+        )
 
     # Тип упаковки: явный из формы, иначе авто-эвристика для упаковочных видов.
     from app.services.material_types import is_packaging_item_type
@@ -176,6 +183,8 @@ def create_material(
     material = Material(code=code, name=name, item_type=item_type, packaging_type=packaging_type, default_unit=default_unit)
     db.add(material)
     db.flush()
+    ensure_material_alias(db, material, material.code, "master_data")
+    ensure_material_alias(db, material, material.name, "master_data")
     write_audit(
         db,
         current_user,

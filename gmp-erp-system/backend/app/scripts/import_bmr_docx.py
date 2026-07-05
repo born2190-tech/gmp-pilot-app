@@ -91,7 +91,6 @@ def _material_alias_key(name: str | None) -> str:
         (("pharmasel",), "EXC-MCC"),
         (("стеарат", "магни"), "EXC-MGST"),
         (("opadry", "blue"), "EXC-OPA-BLUE"),
-        (("opadry",), "COAT-OPADRY"),
         (("очищенная", "вода"), "UTIL-WATER"),
     ]
     for needles, code in aliases:
@@ -1377,11 +1376,16 @@ def _dedupe_labels(fields: list[dict]) -> None:
 
 
 def _enrich_material_codes(db, sections: list[dict]) -> None:
+    from app.services.material_matching import find_material_by_code_or_alias
+
     materials = db.query(Material).all()
     by_code = {m.code: m for m in materials}
     by_name = {_norm_key(m.name): m for m in materials}
 
     def resolve(name: str) -> str:
+        material = find_material_by_code_or_alias(db, name=name)
+        if material:
+            return material.code
         alias = _material_alias_key(name)
         if alias and alias in by_code:
             return alias

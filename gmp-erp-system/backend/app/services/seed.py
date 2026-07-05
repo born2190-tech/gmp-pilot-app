@@ -279,6 +279,9 @@ def seed_foundation_data(db: Session) -> None:
 
     from app.services.seed_bmr import seed_bmr_etalon
     seed_bmr_etalon(db)
+    from app.services.material_matching import ensure_default_material_aliases
+    ensure_default_material_aliases(db)
+    db.commit()
 
 
 def seed_products(db: Session) -> None:

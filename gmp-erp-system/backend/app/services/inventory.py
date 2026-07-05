@@ -65,9 +65,16 @@ def get_or_create_material(db: Session, user: CurrentUser, payload: MaterialCrea
     row = db.query(Material).filter(Material.code == code).first()
     if row:
         return row
+    from app.services.material_matching import ensure_material_alias, find_material_by_code_or_alias
+
+    row = find_material_by_code_or_alias(db, code=code, name=payload.name)
+    if row:
+        return row
     row = Material(code=code, name=payload.name.strip(), item_type=payload.item_type.strip(), default_unit=payload.default_unit.strip())
     db.add(row)
     db.flush()
+    ensure_material_alias(db, row, row.code, "receipt_inline")
+    ensure_material_alias(db, row, row.name, "receipt_inline")
     write_audit(
         db,
         user,

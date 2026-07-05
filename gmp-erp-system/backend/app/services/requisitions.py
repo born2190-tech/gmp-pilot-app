@@ -27,6 +27,7 @@ from app.schemas.inventory import (
     RequisitionCreate,
 )
 from app.services.audit import write_audit
+from app.services.material_matching import find_material_by_code_or_alias, normalize_material_key
 from app.services.permissions import require_permission
 from app.services.signature import validate_signature
 
@@ -180,12 +181,7 @@ def _parse_qty(raw) -> float:
 
 
 def _norm_material_key(raw: str | None) -> str:
-    import re
-
-    text = (raw or "").lower().replace("ё", "е")
-    text = re.sub(r"\*+", " ", text)
-    text = re.sub(r"[^a-zа-я0-9]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
+    return normalize_material_key(raw)
 
 
 def _material_alias_code(name: str | None) -> str:
@@ -202,7 +198,6 @@ def _material_alias_code(name: str | None) -> str:
         (("pharmasel",), "EXC-MCC"),
         (("стеарат", "магни"), "EXC-MGST"),
         (("opadry", "blue"), "EXC-OPA-BLUE"),
-        (("opadry",), "COAT-OPADRY"),
         (("очищенная", "вода"), "UTIL-WATER"),
     ]
     for needles, code in aliases:
@@ -212,11 +207,16 @@ def _material_alias_code(name: str | None) -> str:
 
 
 def _resolve_material_from_bmr_row(db: Session, row: dict) -> Material | None:
-    code = row.get("material_code") or _material_alias_code(row.get("name"))
+    material = find_material_by_code_or_alias(
+        db,
+        code=row.get("material_code"),
+        name=row.get("name"),
+    )
+    if material:
+        return material
+    code = _material_alias_code(row.get("name"))
     if code:
-        material = db.query(Material).filter(Material.code == code).first()
-        if material:
-            return material
+        return db.query(Material).filter(Material.code == code).first()
     name_key = _norm_material_key(row.get("name"))
     if not name_key:
         return None
