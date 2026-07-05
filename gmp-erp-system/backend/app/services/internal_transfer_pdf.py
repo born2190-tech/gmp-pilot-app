@@ -1,15 +1,15 @@
-"""PDF renderer for «Заявка на внутреннее перемещение» — Приложение Ф-3 к П-4.
+"""PDF renderer for «ЗАЯВКА/ТРЕБОВАНИЕ» цеха (форма по П-4).
 
-Bilingual RU/EN layout taken verbatim from the latest revision of П-4 Ф-3:
-title block (novugen + "FE LLC NOVUGEN PHARMA"), product/batch header,
-two tables (Сырьё и вспомогательные / Упаковочные материалы) and the
-three signatures (Foreman / Technologist / Quality Assurance).
+Layout 1:1 с бумажным образцом (напр. «Требование №287С», Кинолокс 011N015):
+заголовок «ЗАЯВКА/ТРЕБОВАНИЕ №… от «DD» month YYYY г.», строки подписей
+(Заявитель: Начальник цеха / Согласовано: Технолог / Одобрено: Plant Manager /
+Заявку-Требование принял), таблица реквизитов (Цель, Наименование препарата,
+Серия, Дата производства, Срок годности, Объём серии), таблица операции
+(Вид операции / Отправитель / Получатель) и таблица материалов
+(№ | Наименование (включая спецификации) | Серия | Ед. изм. | Кол-во).
 
-Fields the system does not capture (Pack size, Carton size, Норма
-расхода на 1 таблетку, Фактическое количество) are intentionally left
-blank — the form is printed and filled by hand at the operator
-workstation, then scanned back into the ERP per ALCOA+.
-"""
+Серия материала подставляется из выданных/аллоцированных лотов (FEFO);
+до выдачи колонка пустая — её заполняет склад."""
 from __future__ import annotations
 
 import io
@@ -82,7 +82,22 @@ def _fmt_qty(value: float) -> str:
         return ""
     if value == int(value):
         return str(int(value))
-    return f"{value:.3f}".rstrip("0").rstrip(".")
+    # Русская форма — десятичная запятая, как в бумажном требовании.
+    return f"{value:.3f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
+_UNIT_RU = {"kg": "кг", "g": "г", "l": "л", "ml": "мл", "pcs": "шт."}
+
+
+def _unit_ru(unit: str | None) -> str:
+    u = (unit or "").strip()
+    return _UNIT_RU.get(u.lower(), u)
+
+
+_RU_MONTHS_GEN = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
 
 
 def render_internal_transfer_pdf(
@@ -90,11 +105,13 @@ def render_internal_transfer_pdf(
     materials_by_id: dict,
     qr_payload: str | None = None,
     scope: str | None = None,
+    batch=None,
+    requested_by_name: str | None = None,
 ) -> bytes:
     """``scope`` ограничивает печать частью требования для конкретного склада:
-    ``PACKAGING_WAREHOUSE`` — только секция упаковочных материалов,
-    ``SUBSTANCE_WAREHOUSE`` — только секция сырья. ``None`` — весь документ
-    (для производства)."""
+    ``PACKAGING_WAREHOUSE`` — только строки упаковочных материалов,
+    ``SUBSTANCE_WAREHOUSE`` — только сырьё. ``None`` — весь документ.
+    ``batch`` — ProductionBatch серии (срок годности, объём серии)."""
     show_raw = scope in (None, "SUBSTANCE_WAREHOUSE")
     show_pkg = scope in (None, "PACKAGING_WAREHOUSE")
     body_font, bold_font = _register_fonts()
@@ -107,7 +124,7 @@ def render_internal_transfer_pdf(
         rightMargin=14 * mm,
         topMargin=12 * mm,
         bottomMargin=14 * mm,
-        title=f"Заявка на перемещение {req.requisition_no}",
+        title=f"Заявка/Требование {req.requisition_no}",
     )
 
     body = ParagraphStyle("body", fontName=body_font, fontSize=9, leading=11)
@@ -146,10 +163,10 @@ def render_internal_transfer_pdf(
 
     from app.services.document_qr import make_qr_image
     qr_image = make_qr_image(qr_payload, size_mm=17.0) if qr_payload else None
-    appendix_cell: object = Paragraph("Приложение Ф-3 к П-4<br/>Edition №5", sop_meta)
+    appendix_cell: object = Paragraph("Форма по П-4", sop_meta)
     if qr_image is not None:
         appendix_cell = [
-            Paragraph("Приложение Ф-3 к П-4 · Edition №5", sop_meta),
+            Paragraph("Форма по П-4", sop_meta),
             qr_image,
             Paragraph("КР-код накладной", footer),
         ]
@@ -178,10 +195,14 @@ def render_internal_transfer_pdf(
     elements.append(header)
     elements.append(Spacer(1, 3 * mm))
 
+    # --- заголовок формы -------------------------------------------------------
+    req_dt = req.submitted_at or req.created_at
+    month_gen = _RU_MONTHS_GEN[req_dt.month - 1]
+    elements.append(Paragraph(f"ЗАЯВКА/ТРЕБОВАНИЕ №{req.requisition_no}", title_style))
     elements.append(
         Paragraph(
-            "Заявка на внутреннее перемещение / Internal Transfer Request (П-4 Ф-3)",
-            title_style,
+            f"от «{req_dt.day:02d}» {month_gen} {req_dt.year} г.",
+            ParagraphStyle("subdate", fontName=body_font, fontSize=10, leading=13, alignment=1),
         )
     )
     if scope:
@@ -198,125 +219,53 @@ def render_internal_transfer_pdf(
         )
     elements.append(Spacer(1, 4 * mm))
 
-    # --- product / batch meta -------------------------------------------------
-    prod_date = req.production_date.strftime("%d.%m.%Y") if req.production_date else "____________"
-    req_date = (req.submitted_at or req.created_at).strftime("%d.%m.%Y")
+    # --- строки подписей (как в бумажной форме) --------------------------------
+    def _sig_line(prefix: str, name: str | None, hint: str) -> list:
+        filled = name or "____________________________"
+        return [
+            Paragraph(f"<b>{prefix}</b> {filled}", body),
+            Paragraph(f"<i>({hint})</i>", ParagraphStyle("hint", fontName=body_font, fontSize=7.5, leading=9, alignment=1, textColor=colors.HexColor("#64748b"))),
+        ]
 
-    meta_rows = [
-        [
-            Paragraph(f"<b>Заявка №:</b> {req.requisition_no}", body),
-            Paragraph(f"<b>Дата / Date:</b> {req_date}", body),
-        ],
-        [
-            Paragraph(f"<b>Product name / Наименование продукции:</b> {req.product_name or ''}", body),
-            Paragraph(f"<b>Production order:</b> {req.production_order_no or '________________'}", body),
-        ],
-        [
-            Paragraph(f"<b>Batch number / Серия:</b> {req.product_series or '________________'}", body),
-            Paragraph(f"<b>Production date:</b> {prod_date}", body),
-        ],
-        [
-            Paragraph("<b>Batch Size (Packs):</b> __________________", body),
-            Paragraph("<b>Pack size:</b> ____________", body),
-        ],
-        [
-            Paragraph("<b>Batch Size (No. of Tablets):</b> __________", body),
-            Paragraph("<b>Carton size:</b> __________", body),
-        ],
-        [
-            Paragraph("<b>Batch Size (Kgs):</b> ____________________", body),
-            Paragraph("<b>Statuс / Статус:</b> " + str(req.status), body),
-        ],
+    sig_rows = [
+        _sig_line("Заявитель: Начальник цеха", requested_by_name, "Ф.И.О., подпись"),
+        _sig_line("Согласовано: Технолог", None, "Ф.И.О., подпись"),
+        _sig_line("Одобрено: Plant Manager", None, "Ф.И.О., подпись"),
+        _sig_line("Заявку/Требование принял:", None, "Дата, должность, Ф.И.О и подпись"),
     ]
-    meta = Table(meta_rows, colWidths=[95 * mm, 87 * mm])
-    meta.setStyle(
+    sig_head = Table(sig_rows, colWidths=[120 * mm, 62 * mm])
+    sig_head.setStyle(
         TableStyle(
             [
-                ("BOX", (0, 0), (-1, -1), 0.4, colors.black),
-                ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]
         )
     )
-    elements.append(meta)
+    elements.append(sig_head)
     elements.append(Spacer(1, 4 * mm))
 
-    # --- split lines into raw / packaging -------------------------------------
-    raw_lines = []
-    pkg_lines = []
-    for line in req.lines:
-        material = materials_by_id.get(line.material_id)
-        from app.services.material_types import is_packaging_item_type
-        is_pkg = is_packaging_item_type(material.item_type if material else "")
-        bucket = pkg_lines if is_pkg else raw_lines
-        bucket.append((line, material))
+    # --- таблица реквизитов -----------------------------------------------------
+    def _mm_yyyy(d) -> str:
+        return d.strftime("%m/%Y") if d else "________"
 
-    def _section_header(text: str) -> Table:
-        t = Table([[Paragraph(text, section)]], colWidths=[182 * mm], rowHeights=[7 * mm])
-        t.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#0f172a")),
-                    ("BOX", (0, 0), (-1, -1), 0.4, colors.black),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ]
-            )
-        )
-        return t
+    expiry = getattr(batch, "expiry_date", None)
+    batch_size = getattr(batch, "batch_size", None)
+    batch_size_unit = getattr(batch, "batch_size_unit", None) or "шт."
+    volume = f"{_fmt_qty(batch_size)} {batch_size_unit}" if batch_size else "____________"
 
-    def _materials_table(entries, is_packaging: bool) -> Table:
-        header_row = [
-            Paragraph("№", cell_b),
-            Paragraph("Наименование<br/>Name", cell_b),
-            Paragraph("Ед.<br/>Unit", cell_b),
-            Paragraph(
-                "Норма расхода<br/>на 1000 блистеров"
-                if is_packaging
-                else "Норма расхода<br/>на 1 таблетку<br/>Rate per 1 tablet",
-                cell_b,
-            ),
-            Paragraph("Ед.<br/>Unit", cell_b),
-            Paragraph("Норма расхода<br/>на серию<br/>Rate per batch", cell_b),
-            Paragraph("Фактическое<br/>количество<br/>Actual qty", cell_b),
-        ]
-        rows = [header_row]
-        for index, (line, material) in enumerate(entries, start=1):
-            name = material.name if material else "—"
-            unit = line.unit or (material.default_unit if material else "")
-            rows.append(
-                [
-                    Paragraph(str(index), cell),
-                    Paragraph(name, cell),
-                    Paragraph(unit, cell),
-                    Paragraph("", cell),  # to be filled by Technologist
-                    Paragraph(unit, cell),
-                    Paragraph(_fmt_qty(line.requested_quantity), cell),
-                    Paragraph("", cell),  # to be filled at point of issue
-                ]
-            )
-        # Pad with empty rows so it looks like the printed form
-        empty_padding = max(0, 3 - len(entries))
-        for _ in range(empty_padding):
-            rows.append([Paragraph("", cell)] * 7)
-
-        t = Table(
-            rows,
-            colWidths=[10 * mm, 55 * mm, 14 * mm, 32 * mm, 14 * mm, 27 * mm, 30 * mm],
-            repeatRows=1,
-        )
+    def _kv_table(pairs: list[tuple[str, str]]) -> Table:
+        rows = [[Paragraph(f"<b>{k}</b>", body), Paragraph(v, body)] for k, v in pairs]
+        t = Table(rows, colWidths=[52 * mm, 130 * mm])
         t.setStyle(
             TableStyle(
                 [
                     ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
                     ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.black),
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 3),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                     ("TOPPADDING", (0, 0), (-1, -1), 3),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
                 ]
@@ -324,62 +273,109 @@ def render_internal_transfer_pdf(
         )
         return t
 
-    # Raw materials section
-    if show_raw:
-        elements.append(_section_header("Сырьё и вспомогательные вещества / Raw materials"))
-        elements.append(_materials_table(raw_lines, is_packaging=False))
-        elements.append(Spacer(1, 2 * mm))
-        elements.append(
-            Paragraph(
-                "* Qty as per 100% potency, increase / decrease in qty to be adjusted with Lactose "
-                "monohydrate as per actual potency.<br/>"
-                "** 10% additional qty taken in order to compensate losses during coating.",
-                ParagraphStyle("note", fontName=body_font, fontSize=7.5, leading=9, textColor=colors.HexColor("#475569")),
-            )
-        )
-        elements.append(Spacer(1, 4 * mm))
-
-    # Packaging section
-    if show_pkg:
-        elements.append(_section_header("Упаковочные материалы / Packaging materials"))
-        elements.append(_materials_table(pkg_lines, is_packaging=True))
-        elements.append(Spacer(1, 6 * mm))
-
-    # --- signatures -----------------------------------------------------------
-    sig_data = [
-        [
-            Paragraph("<b>Requested by Foreman</b><br/>Заявил мастер", body),
-            Paragraph("<b>Reviewed by Technologist</b><br/>Проверил технолог", body),
-            Paragraph("<b>Approved by Quality Assurance</b><br/>Утвердил ОКК", body),
-        ],
-        [
-            Paragraph("ФИО / Name: ________________<br/>Signature: ________________<br/>Date: ____________", body),
-            Paragraph("ФИО / Name: ________________<br/>Signature: ________________<br/>Date: ____________", body),
-            Paragraph("ФИО / Name: ________________<br/>Signature: ________________<br/>Date: ____________", body),
-        ],
-    ]
-    sig = Table(sig_data, colWidths=[60 * mm, 60 * mm, 62 * mm], rowHeights=[10 * mm, 22 * mm])
-    sig.setStyle(
-        TableStyle(
+    elements.append(
+        _kv_table(
             [
-                ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
-                ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.black),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f8fafc")),
+                ("Цель", "Получение сырья, вспомогательных и упаковочных материалов для производства препарата"),
+                ("Наименования препарата", req.product_name or "____________"),
+                ("Серия", req.product_series or "----"),
+                ("Дата производства", _mm_yyyy(req.production_date)),
+                ("Срок годности", _mm_yyyy(expiry)),
+                ("Объём серии (шт.)", volume),
             ]
         )
     )
-    elements.append(sig)
-    elements.append(Spacer(1, 3 * mm))
+    elements.append(Spacer(1, 4 * mm))
+
+    # --- вид операции / отправитель / получатель --------------------------------
+    line_types = {line.warehouse_type for line in req.lines}
+    if scope == "PACKAGING_WAREHOUSE":
+        sender = "Склад упаковочных материалов"
+    elif scope == "SUBSTANCE_WAREHOUSE":
+        sender = "Склад субстанций и вспомогательных материалов"
+    else:
+        senders = []
+        if "SUBSTANCE_WAREHOUSE" in line_types:
+            senders.append("Склад субстанций и вспомогательных материалов")
+        if "PACKAGING_WAREHOUSE" in line_types:
+            senders.append("Склад упаковочных материалов")
+        sender = " / ".join(senders) or "____________"
+    elements.append(
+        _kv_table(
+            [
+                ("Вид операции", "Внутреннее перемещение"),
+                ("Отправитель", sender),
+                ("Получатель", "1 цех"),
+            ]
+        )
+    )
+    elements.append(Spacer(1, 4 * mm))
+
+    # --- таблица материалов (единая, как в бумаге) -------------------------------
+    from app.services.material_types import is_packaging_item_type
+
+    def _lot_series(line) -> str:
+        lots: list[str] = []
+        for alloc in getattr(line, "allocation_lines", None) or []:
+            lot = getattr(alloc, "lot", None)
+            series = (getattr(lot, "supplier_lot", None) or getattr(lot, "internal_lot", None)) if lot else None
+            if series and series not in lots:
+                lots.append(series)
+        return ", ".join(lots)
+
+    entries = []
+    for line in req.lines:
+        material = materials_by_id.get(line.material_id)
+        is_pkg = is_packaging_item_type(material.item_type if material else "")
+        if (is_pkg and not show_pkg) or (not is_pkg and not show_raw):
+            continue
+        entries.append((line, material))
+
+    header_row = [
+        Paragraph("№", cell_b),
+        Paragraph("Наименование материала (включая спецификации/параметры)", cell_b),
+        Paragraph("Серия", cell_b),
+        Paragraph("Ед. изм.", cell_b),
+        Paragraph("Кол-во", cell_b),
+    ]
+    rows = [header_row]
+    for index, (line, material) in enumerate(entries, start=1):
+        name = material.name if material else "—"
+        unit = _unit_ru(line.unit or (material.default_unit if material else ""))
+        rows.append(
+            [
+                Paragraph(str(index), cell),
+                Paragraph(name, cell),
+                Paragraph(_lot_series(line), cell),
+                Paragraph(unit, cell),
+                Paragraph(_fmt_qty(line.requested_quantity), cell),
+            ]
+        )
+    for _ in range(max(0, 3 - len(entries))):
+        rows.append([Paragraph("", cell)] * 5)
+
+    mat_table = Table(rows, colWidths=[10 * mm, 92 * mm, 40 * mm, 16 * mm, 24 * mm], repeatRows=1)
+    mat_table.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
+                ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.black),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
+    elements.append(mat_table)
+    elements.append(Spacer(1, 4 * mm))
 
     today = datetime.utcnow().strftime("%d.%m.%Y %H:%M")
     elements.append(
         Paragraph(
-            f"<i>Сформировано: {today} UTC &nbsp;·&nbsp; П-4 Ф-3 (Edition №5)</i>",
+            f"<i>Сформировано: {today} UTC &nbsp;·&nbsp; Форма по П-4 &nbsp;·&nbsp; статус: {req.status}</i>",
             footer,
         )
     )

@@ -130,16 +130,25 @@ def download_pdf(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(get_current_user),
 ) -> Response:
-    """Render «Заявка на внутреннее перемещение» (П-4 Ф-3) for printing or preview."""
+    """Render «ЗАЯВКА/ТРЕБОВАНИЕ» (форма по П-4) for printing or preview."""
     req = get_requisition(db, user, requisition_id)
     material_ids = {line.material_id for line in req.lines}
     materials = db.query(Material).filter(Material.id.in_(material_ids)).all() if material_ids else []
     materials_by_id = {m.id: m for m in materials}
+    # Реквизиты серии (срок годности, объём) и ФИО заявителя — для формы П-4.
+    from app.models.inventory import ProductionBatch
+    from app.models.identity import User as UserModel
+    batch = db.get(ProductionBatch, req.production_batch_id) if req.production_batch_id else None
+    submitter = db.get(UserModel, req.submitted_by) if req.submitted_by else None
+    requested_by_name = submitter.full_name if submitter else None
     # КР-код (QR) накладной: подписанный payload для сканирования/прослеживаемости (Ф4).
     from app.services.document_qr import make_document_qr_payload
     state_hash = hashlib.sha256(f"{req.requisition_no}|{req.status}|{len(req.lines)}".encode("utf-8")).hexdigest()
     qr_payload = make_document_qr_payload("requisition", req.id, state_hash)
-    pdf_bytes = render_internal_transfer_pdf(req, materials_by_id, qr_payload=qr_payload, scope=view_scope_for(user))
+    pdf_bytes = render_internal_transfer_pdf(
+        req, materials_by_id, qr_payload=qr_payload, scope=view_scope_for(user),
+        batch=batch, requested_by_name=requested_by_name,
+    )
 
     filename = f"requisition-{req.requisition_no}.pdf"
     # RFC 5987 for non-ASCII filenames (Cyrillic safe).
