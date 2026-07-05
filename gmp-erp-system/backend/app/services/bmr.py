@@ -1144,7 +1144,18 @@ def _has_user_room_stage(instance: BmrInstance, user: CurrentUser) -> bool:
 def _visible_sections(instance: BmrInstance, user: CurrentUser) -> list[BmrInstanceSection]:
     if not _has_user_room_stage(instance, user):
         return []
-    return [section for section in instance.sections if _section_visible_for_user(section, user)]
+    sections = [section for section in instance.sections if _section_visible_for_user(section, user)]
+    # Ужесточение доступа: неназначенному оператору (не-надзор) этапы не
+    # показываем вовсе — только те, куда его назначил начальник цеха/технолог.
+    # Надзор (MANAGE_PRODUCTION/QA_DECISION) видит все стадии.
+    if not _is_bmr_supervisor(user):
+        assignments = instance.assignments or {}
+        uid = str(user.id)
+        sections = [
+            s for s in sections
+            if uid in {str(a) for a in (assignments.get(_section_stage(s)) or [])}
+        ]
+    return sections
 
 
 def _ensure_section_access(section: BmrInstanceSection, user: CurrentUser) -> None:
@@ -1535,17 +1546,32 @@ def set_assignments(db: Session, user: CurrentUser, instance_id: UUID, mapping: 
         codes = {p.code for p in u.role.permissions} if u.role else set()
         if "EXECUTE_BMR" in codes:
             eligible_ids.add(str(u.id))
+    # Не глотаем рассинхрон молча: неизвестный этап (список стадий изменился) или
+    # попытка назначить не-оператора — явная 400, чтобы UI/оператор увидел проблему.
+    unknown_stages = [st for st in (mapping or {}) if st not in valid_stages]
+    if unknown_stages:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Неизвестные этапы: {', '.join(unknown_stages)}. Обновите форму — список этапов изменился.",
+        )
     cleaned: dict[str, list[str]] = {}
+    bad_users: set[str] = set()
     for stage, user_ids in (mapping or {}).items():
-        if stage not in valid_stages:
-            continue
         seen: set[str] = set()
         cleaned[stage] = []
         for uid in (user_ids or []):
             uid_s = str(uid)
-            if uid_s in eligible_ids and uid_s not in seen:
+            if uid_s not in eligible_ids:
+                bad_users.add(uid_s)
+                continue
+            if uid_s not in seen:
                 cleaned[stage].append(uid_s)
                 seen.add(uid_s)
+    if bad_users:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя назначить: часть выбранных пользователей не являются операторами ДП (нет права EXECUTE_BMR)",
+        )
     inst.assignments = cleaned
     write_audit(
         db, user, object_type="bmr_instance", object_id=str(inst.id),
