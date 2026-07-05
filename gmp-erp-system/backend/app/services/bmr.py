@@ -1173,7 +1173,19 @@ def _assigned_operator_ids(instance: BmrInstance, section: BmrInstanceSection) -
     return {str(uid) for uid in assigned if str(uid).strip()}
 
 
-def _ensure_assigned_operator(instance: BmrInstance, section: BmrInstanceSection, user_id: UUID) -> None:
+def _ensure_assigned_operator(
+    instance: BmrInstance,
+    section: BmrInstanceSection,
+    user_id: UUID,
+    *,
+    supervisor: bool = False,
+) -> None:
+    # Надзор производства (MANAGE_PRODUCTION — начальник цеха / сменный мастер /
+    # начальник производства) сам назначает операторов и отвечает за цех: гейт
+    # назначения на него не распространяется (может заполнить/подписать ДП без
+    # само-назначения). Операторов (ДП) ограничиваем строго по назначению.
+    if supervisor:
+        return
     assigned = _assigned_operator_ids(instance, section)
     if not assigned:
         raise HTTPException(
@@ -1285,7 +1297,7 @@ def save_entries(db: Session, user: CurrentUser, instance_id: UUID, payload: Bmr
         if not section:
             continue
         _ensure_section_access(section, user)
-        _ensure_assigned_operator(inst, section, user.id)
+        _ensure_assigned_operator(inst, section, user.id, supervisor="MANAGE_PRODUCTION" in user.permissions)
         _ensure_weighing_gate(db, inst, section)
         fields = _section_fields(section)
         if item.field_index < 0 or item.field_index >= len(fields):
@@ -1354,9 +1366,13 @@ def sign_field(db: Session, user: CurrentUser, instance_id: UUID, payload: BmrSi
         db, user, payload, "SIGN_BMR_FIELD", "bmr_instance", str(inst.id), required,
     )
     # Назначение по этапам: если начальник цеха назначил операторов на этот этап,
-    # ячейку ДП может подписать только назначенный оператор (контролёров не ограничиваем).
+    # ячейку ДП может подписать только назначенный оператор (контролёров не
+    # ограничиваем). Надзор производства (MANAGE_PRODUCTION) — исключение.
     if role == "operator":
-        _ensure_assigned_operator(inst, section, signer.id)
+        signer_codes = {p.code for p in signer.role.permissions} if signer.role else set()
+        _ensure_assigned_operator(
+            inst, section, signer.id, supervisor="MANAGE_PRODUCTION" in signer_codes,
+        )
     entry = (
         db.query(BmrEntry)
         .filter(BmrEntry.section_id == payload.section_id, BmrEntry.field_index == payload.field_index)
