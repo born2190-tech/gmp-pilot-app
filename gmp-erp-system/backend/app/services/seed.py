@@ -5,6 +5,7 @@ from app.models.identity import Department, Permission, Role, User
 from app.models.inventory import Product
 from app.models.master_data import InventoryAccount, Location, Manufacturer, Material, Supplier, Warehouse
 from app.models.quality import MaterialSpecification, SpecificationParameter
+from app.services.material_groups import assign_default_material_groups, group_for_material_code
 from app.services.products_catalog import MARKET_PRODUCT_VARIANTS, PRODUCTS
 from app.services.reagents import seed_reagents
 
@@ -279,6 +280,7 @@ def seed_foundation_data(db: Session) -> None:
 
     from app.services.seed_bmr import seed_bmr_etalon
     seed_bmr_etalon(db)
+    assign_default_material_groups(db)
     from app.services.material_matching import ensure_default_material_aliases
     ensure_default_material_aliases(db)
     db.commit()
@@ -351,14 +353,7 @@ INVENTORY_ACCOUNTS: list[tuple[str, str, str, str]] = [
 
 
 def group_for_code(code: str) -> str | None:
-    code = (code or "").upper()
-    if code.startswith(("API", "TIG", "GLZ", "CLP", "ETR", "ESO", "TCG")):
-        return "SUBSTANCE_API"
-    if code.startswith(("EXC", "AUX")):
-        return "EXCIPIENT"
-    if code.startswith(("PACK", "PKG", "IM-", "ИМ")):
-        return "PACKAGING"
-    return None
+    return group_for_material_code(code)
 
 
 def seed_inventory_accounts(db: Session) -> None:
@@ -377,10 +372,7 @@ def seed_inventory_accounts(db: Session) -> None:
     db.flush()
 
     # Проставляем материалам группу (вид) по коду, если ещё не задана.
-    for material in db.query(Material).filter(Material.account_group.is_(None)).all():
-        grp = group_for_code(material.code)
-        if grp:
-            material.account_group = grp
+    assign_default_material_groups(db)
 
 
 # Микробиологический метод-референс (общий для субстанций).

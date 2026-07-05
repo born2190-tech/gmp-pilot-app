@@ -9,6 +9,7 @@ from app.models.inventory import FGShipmentDocument, FGShipmentLine, ImportDecla
 from app.models.master_data import Location, Manufacturer, Material, Supplier, Warehouse
 from app.schemas.inventory import AdjustLotRequest, FGShipmentCreate, InventoryCountCreate, IssueProductionRequest, MaterialCreateInline, ReceiptCreate, ReferenceCreateInline, SignatureRequest, TransferLotRequest
 from app.services.audit import write_audit
+from app.services.material_groups import assign_default_material_group
 from app.services.permissions import require_permission, require_warehouse_type_scope
 from app.services.signature import validate_signature
 
@@ -64,13 +65,16 @@ def get_or_create_material(db: Session, user: CurrentUser, payload: MaterialCrea
     code = normalize_code(payload.code)
     row = db.query(Material).filter(Material.code == code).first()
     if row:
+        assign_default_material_group(row)
         return row
     from app.services.material_matching import ensure_material_alias, find_material_by_code_or_alias
 
     row = find_material_by_code_or_alias(db, code=code, name=payload.name)
     if row:
+        assign_default_material_group(row)
         return row
     row = Material(code=code, name=payload.name.strip(), item_type=payload.item_type.strip(), default_unit=payload.default_unit.strip())
+    assign_default_material_group(row)
     db.add(row)
     db.flush()
     ensure_material_alias(db, row, row.code, "receipt_inline")
@@ -100,6 +104,7 @@ def create_receipt_draft(db: Session, user: CurrentUser, payload: ReceiptCreate)
         material = get_required(db, Material, line.material_id, "Material") if line.material_id else get_or_create_material(db, user, line.material)
         if not material:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Material is required")
+        assign_default_material_group(material)
         supplier = get_required(db, Supplier, line.supplier_id, "Supplier") if line.supplier_id else get_or_create_reference(db, user, Supplier, line.supplier, "supplier")
         manufacturer = get_required(db, Manufacturer, line.manufacturer_id, "Manufacturer") if line.manufacturer_id else get_or_create_reference(db, user, Manufacturer, line.manufacturer, "manufacturer")
         if not manufacturer:

@@ -23,6 +23,7 @@ from app.schemas.master_data import (
     WarehousesResponse,
 )
 from app.services.audit import write_audit
+from app.services.material_groups import assign_default_material_group
 from app.services.material_matching import ensure_material_alias, find_material_by_code_or_alias
 from app.services.permissions import require_permission
 
@@ -181,6 +182,7 @@ def create_material(
         packaging_type = _infer_packaging_type(name)
 
     material = Material(code=code, name=name, item_type=item_type, packaging_type=packaging_type, default_unit=default_unit)
+    assign_default_material_group(material)
     db.add(material)
     db.flush()
     ensure_material_alias(db, material, material.code, "master_data")
