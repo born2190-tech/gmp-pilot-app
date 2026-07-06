@@ -270,6 +270,55 @@ class FGShipmentLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     lot: Mapped[Lot] = relationship()
 
 
+class FGTransferNote(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Накладная на перемещение упакованной продукции на склад ГП.
+
+    СОП-205 Ф-1 (KAR-FP). Выпускается цехом (начальник цеха) на завершённую
+    серию (`ProductionBatch.status == 'completed'`); склад ГП принимает её,
+    создавая партии ГП в зоне карантина (СОП-205 п.6.2). Двусторонний
+    документ: «Отпустил» — цех, «Получил» — зав. складом ГП.
+    """
+
+    __tablename__ = "fg_transfer_notes"
+
+    note_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # issued (выпущена цехом) → received (принята складом) → cancelled
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="issued")
+    production_batch_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("production_batches.id"), nullable=False)
+    # Денормализация из батча — фиксирует, что было отгружено на момент выпуска.
+    product_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    product_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    batch_no: Mapped[str] = mapped_column(String(32), nullable=False)
+    dosage_form: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    production_date: Mapped[date] = mapped_column(Date, nullable=False)
+    expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    from_workshop: Mapped[str] = mapped_column(String(255), nullable=False)
+    issued_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    received_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_warehouse_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("warehouses.id"), nullable=True)
+    cancelled_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class FGTransferNoteLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "fg_transfer_note_lines"
+
+    note_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("fg_transfer_notes.id"), nullable=False)
+    # Наименование строки как в накладной (напр. «Новусита-М, таблетки, №30»).
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(32), nullable=False, default="упак")
+    # Заполняется при приёмке складом — созданная партия ГП.
+    lot_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("lots.id"), nullable=True)
+
+    note: Mapped[FGTransferNote] = relationship()
+    lot: Mapped[Lot | None] = relationship()
+
+
 class InventoryCountDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "inventory_count_documents"
 

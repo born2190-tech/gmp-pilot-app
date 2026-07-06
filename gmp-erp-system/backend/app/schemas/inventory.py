@@ -301,6 +301,78 @@ class FGShipmentsResponse(BaseModel):
     shipments: list[FGShipmentItem]
 
 
+# --- Накладная на перемещение ГП на склад (СОП-205 Ф-1, KAR-FP) -------------
+
+
+class CompletedBatchItem(BaseModel):
+    """Завершённая серия, доступная для выпуска накладной на склад ГП."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    batch_no: str
+    product_code: str
+    product_name: str
+    dosage_form: str | None
+    production_date: date
+    expiry_date: date
+    batch_size: float
+    batch_size_unit: str
+    has_note: bool = False
+
+
+class CompletedBatchesResponse(BaseModel):
+    batches: list[CompletedBatchItem]
+
+
+class FGTransferNoteLineCreate(BaseModel):
+    description: str = Field(min_length=1, max_length=500)
+    quantity: float = Field(gt=0)
+    unit: str = Field(default="упак", max_length=32)
+
+
+class FGTransferNoteCreate(SignatureRequest):
+    production_batch_id: UUID
+    note_no: str | None = Field(default=None, max_length=64)
+    from_workshop: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+    lines: list[FGTransferNoteLineCreate] = Field(min_length=1)
+
+
+class FGTransferNoteLineItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    description: str
+    quantity: float
+    unit: str
+    lot_id: UUID | None
+    internal_lot: str | None = None
+
+
+class FGTransferNoteItem(BaseModel):
+    id: UUID
+    note_no: str
+    status: str
+    production_batch_id: UUID
+    product_code: str
+    product_name: str
+    batch_no: str
+    dosage_form: str | None
+    production_date: date
+    expiry_date: date
+    from_workshop: str
+    issued_at: datetime
+    received_at: datetime | None
+    received_warehouse_id: UUID | None
+    notes: str | None
+    lines: list[FGTransferNoteLineItem]
+
+
+class FGTransferNotesResponse(BaseModel):
+    notes: list[FGTransferNoteItem]
+
+
 class InventoryCountLineCreate(BaseModel):
     lot_id: UUID
     actual_quantity: float = Field(ge=0)

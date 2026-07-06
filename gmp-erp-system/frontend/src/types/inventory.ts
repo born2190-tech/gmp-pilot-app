@@ -567,6 +567,71 @@ export interface FGShipmentsResponse {
   shipments: FGShipmentItem[]
 }
 
+// --- Накладная на перемещение ГП цех → склад (СОП-205 Ф-1, KAR-FP) ---------
+
+export interface CompletedBatchItem {
+  id: string
+  batch_no: string
+  product_code: string
+  product_name: string
+  dosage_form: string | null
+  production_date: string
+  expiry_date: string
+  batch_size: number
+  batch_size_unit: string
+  has_note: boolean
+}
+
+export interface CompletedBatchesResponse {
+  batches: CompletedBatchItem[]
+}
+
+export interface FGTransferNoteLineCreate {
+  description: string
+  quantity: number
+  unit?: string
+}
+
+export interface FGTransferNoteCreate extends SignatureRequest {
+  production_batch_id: string
+  note_no?: string
+  from_workshop?: string
+  notes?: string
+  lines: FGTransferNoteLineCreate[]
+}
+
+export interface FGTransferNoteLineItem {
+  id: string
+  description: string
+  quantity: number
+  unit: string
+  lot_id: string | null
+  internal_lot: string | null
+}
+
+export interface FGTransferNoteItem {
+  id: string
+  note_no: string
+  status: string
+  production_batch_id: string
+  product_code: string
+  product_name: string
+  batch_no: string
+  dosage_form: string | null
+  production_date: string
+  expiry_date: string
+  from_workshop: string
+  issued_at: string
+  received_at: string | null
+  received_warehouse_id: string | null
+  notes: string | null
+  lines: FGTransferNoteLineItem[]
+}
+
+export interface FGTransferNotesResponse {
+  notes: FGTransferNoteItem[]
+}
+
 export interface InventoryCountCreate extends SignatureRequest {
   document_no: string
   count_date: string

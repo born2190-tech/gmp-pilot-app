@@ -13,6 +13,10 @@ import type {
   FGShipmentCreate,
   FGShipmentItem,
   FGShipmentsResponse,
+  CompletedBatchesResponse,
+  FGTransferNoteCreate,
+  FGTransferNoteItem,
+  FGTransferNotesResponse,
   InventoryCountCreate,
   InventoryCountItem,
   InventoryCountsResponse,
@@ -295,6 +299,26 @@ export function createFgShipment(token: string, payload: FGShipmentCreate): Prom
 
 export function listFgShipments(token: string): Promise<FGShipmentsResponse> {
   return request<FGShipmentsResponse>('/api/inventory/fg-shipments', 'GET', { token })
+}
+
+export function listCompletedBatchesForTransfer(token: string): Promise<CompletedBatchesResponse> {
+  return request<CompletedBatchesResponse>('/api/fg-transfer/completed-batches', 'GET', { token })
+}
+
+export function listFgTransferNotes(token: string): Promise<FGTransferNotesResponse> {
+  return request<FGTransferNotesResponse>('/api/fg-transfer', 'GET', { token })
+}
+
+export function createFgTransferNote(token: string, payload: FGTransferNoteCreate): Promise<FGTransferNoteItem> {
+  return request<FGTransferNoteItem>('/api/fg-transfer', 'POST', { token, body: payload })
+}
+
+export function receiveFgTransferNote(token: string, noteId: string, payload: SignatureRequest): Promise<FGTransferNoteItem> {
+  return request<FGTransferNoteItem>(`/api/fg-transfer/${noteId}/receive`, 'POST', { token, body: payload })
+}
+
+export function cancelFgTransferNote(token: string, noteId: string, payload: SignatureRequest): Promise<FGTransferNoteItem> {
+  return request<FGTransferNoteItem>(`/api/fg-transfer/${noteId}/cancel`, 'POST', { token, body: payload })
 }
 
 export function createInventoryCount(token: string, payload: InventoryCountCreate): Promise<InventoryCountItem> {

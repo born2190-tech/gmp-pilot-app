@@ -52,6 +52,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.requisitionsIncoming', section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'requisitions',         icon: ClipboardList, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.inventoryCounts',      section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'inventory-counts',     icon: ListChecks },
   { labelKey: 'nav.qcNotifications',      section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'qc-notifications',     icon: BellRing, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
+  { labelKey: 'nav.fgTransferReceive',    section: 'warehouse', permission: 'RECEIVE_FINISHED_GOODS', route: 'fg-transfer-receive', icon: PackagePlus, warehouseScopes: ['FG_WAREHOUSE'] },
   { labelKey: 'nav.fgShipments',          section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-shipments',         icon: Truck, warehouseScopes: ['FG_WAREHOUSE'] },
 
   // ─── ОКК ──────────────────────────────────────────────────────────────
@@ -72,6 +73,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.requisitions',         section: 'production', permission: 'VIEW_PRODUCTION', route: 'requisitions',         icon: Send },
   { labelKey: 'nav.bmr',                  section: 'production', permission: 'EXECUTE_BMR',     route: 'bmr',                  icon: ClipboardSignature },
   { labelKey: 'nav.weighingCampaigns',    section: 'production', permission: 'MANAGE_PRODUCTION', route: 'weighing-campaigns', icon: Scale },
+  { labelKey: 'nav.fgTransferIssue',      section: 'production', permission: 'MANAGE_PRODUCTION', route: 'fg-transfer-notes',  icon: Send },
 
   // ─── Качество (общесистемное) ─────────────────────────────────────────
   { labelKey: 'nav.audit',                section: 'quality',    permission: 'VIEW_AUDIT',      route: 'audit',                icon: History },
