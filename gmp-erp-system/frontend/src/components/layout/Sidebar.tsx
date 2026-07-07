@@ -8,9 +8,10 @@ interface SidebarProps {
   activeRoute: string
   onRouteChange: (route: string) => void
   user: CurrentUser
+  badges?: Record<string, number>
 }
 
-export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
+export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarProps) {
   const { t } = useI18n()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
@@ -62,6 +63,7 @@ export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
               {group.items.map((item) => {
                 const Icon = item.icon
                 const active = activeRoute === item.route
+                const badge = badges?.[item.route] ?? 0
                 return (
                   <button
                     key={`${item.section}-${item.route}-${item.labelKey}`}
@@ -80,10 +82,20 @@ export function Sidebar({ activeRoute, onRouteChange, user }: SidebarProps) {
                         className="absolute left-0 top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-r bg-cyan-400"
                       />
                     )}
-                    <Icon size={18} strokeWidth={1.6} className="flex-shrink-0" />
+                    <span className="relative flex-shrink-0">
+                      <Icon size={18} strokeWidth={1.6} />
+                      {isCollapsed && badge > 0 && (
+                        <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-[#0B1220]" />
+                      )}
+                    </span>
                     {!isCollapsed && (
                       <span className="truncate text-[13.5px] font-medium leading-tight">
                         {t(item.labelKey)}
+                      </span>
+                    )}
+                    {!isCollapsed && badge > 0 && (
+                      <span className="ml-auto flex-shrink-0 rounded-full bg-amber-400 px-2 py-0.5 text-[11px] font-bold leading-none text-slate-900">
+                        {badge}
                       </span>
                     )}
                   </button>

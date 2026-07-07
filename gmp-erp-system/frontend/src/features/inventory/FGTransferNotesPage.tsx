@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { BellRing } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/table/DataTable'
 import {
@@ -45,6 +46,8 @@ export function FGTransferNotesPage({ token, user }: FGTransferNotesPageProps) {
   const [issueNotes, setIssueNotes] = useState('')
   const [lines, setLines] = useState<FGTransferNoteLineCreate[]>([{ description: '', quantity: 0, unit: 'упак' }])
   const [issuePassword, setIssuePassword] = useState('')
+
+  const pendingCount = notes.filter((note) => note.status === 'issued').length
 
   async function loadData() {
     setIsLoading(true)
@@ -241,6 +244,13 @@ export function FGTransferNotesPage({ token, user }: FGTransferNotesPageProps) {
       </div>
 
       {(error || success) && <div className={error ? 'alert-error' : 'alert-success'}>{error || success}</div>}
+
+      {canReceive && pendingCount > 0 && (
+        <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+          <BellRing size={18} className="flex-shrink-0" />
+          {t('fgTransfer.pendingBanner', { count: pendingCount })}
+        </div>
+      )}
 
       {canIssue && (
         <section className="space-y-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm">

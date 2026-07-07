@@ -26,7 +26,7 @@ import { BmrTemplatesPage } from './features/production/BmrTemplatesPage'
 import { BmrFillPage } from './features/production/BmrFillPage'
 import { WeighingCampaignPage } from './features/production/WeighingCampaignPage'
 import { clearStoredToken, getStoredToken, storeToken } from './lib/auth'
-import { login, logout, me } from './lib/api'
+import { login, logout, me, listFgTransferNotes } from './lib/api'
 import { getVisibleNavItems } from './lib/permissions'
 import type { CurrentUser, LoginRequest } from './types/auth'
 import { useI18n } from './i18n/I18nProvider'
@@ -39,6 +39,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [activeRoute, setActiveRoute] = useState('lots')
+  const [navBadges, setNavBadges] = useState<Record<string, number>>({})
 
   useEffect(() => {
     let ignore = false
@@ -64,6 +65,26 @@ export function App() {
       ignore = true
     }
   }, [token])
+
+  // Бейдж «ожидают приёмки»: число непринятых накладных ГП (СОП-414 Ф-5) для
+  // склада. Обновляется при смене раздела — уведомление, что пришла накладная.
+  useEffect(() => {
+    let ignore = false
+    async function loadBadges() {
+      if (!token || !user || !user.permissions.includes('RECEIVE_FINISHED_GOODS')) return
+      try {
+        const res = await listFgTransferNotes(token)
+        const pending = res.notes.filter((note) => note.status === 'issued').length
+        if (!ignore) setNavBadges((current) => ({ ...current, 'fg-transfer-receive': pending }))
+      } catch {
+        // Бейдж — вспомогательный индикатор, ошибку загрузки игнорируем.
+      }
+    }
+    void loadBadges()
+    return () => {
+      ignore = true
+    }
+  }, [token, user, activeRoute])
 
   async function handleLogin(payload: LoginRequest) {
     setIsLoading(true)
@@ -177,7 +198,7 @@ export function App() {
     )
 
   return (
-    <AppShell activeRoute={route ?? 'lots'} onLogout={handleLogout} onRouteChange={setActiveRoute} user={user}>
+    <AppShell activeRoute={route ?? 'lots'} badges={navBadges} onLogout={handleLogout} onRouteChange={setActiveRoute} user={user}>
       {content}
     </AppShell>
   )

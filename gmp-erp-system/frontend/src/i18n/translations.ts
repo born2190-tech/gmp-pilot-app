@@ -2112,6 +2112,7 @@ export const translations = {
     'fgTransfer.statusIssued': 'Выпущена',
     'fgTransfer.statusReceived': 'Принята',
     'fgTransfer.statusCancelled': 'Отменена',
+    'fgTransfer.pendingBanner': 'Ожидают приёмки на склад ГП: {count} накл. — примите по накладной ниже',
     'fgTransfer.receive': 'Принять на склад',
     'fgTransfer.receiveMeaning': 'Приёмка ГП на склад в зону карантина (СОП-205 п.6.2)',
     'fgTransfer.received': 'Серия принята в карантин склада ГП',
