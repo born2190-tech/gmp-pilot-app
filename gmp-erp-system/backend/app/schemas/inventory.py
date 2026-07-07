@@ -402,6 +402,45 @@ class FGQuarantineLotsResponse(BaseModel):
     lots: list[FGQuarantineLotItem]
 
 
+# --- Machine-API маркировки (DataMatrix-генератор ↔ ERP, СОП-414 п.6.4) -----
+
+
+class MarkingOrderResponse(BaseModel):
+    """Заказ на маркировку серии — генератор подтягивает вместо ручного ввода."""
+
+    production_order_id: str
+    series_number: str
+    gtin: str | None
+    product_code: str
+    product_name: str
+    production_date: date
+    expiry_date: date
+    quantity: float
+
+
+class MarkingSsccInput(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+    capacity: int | None = Field(default=None, ge=0)
+
+
+class MarkingReportRequest(BaseModel):
+    """Генератор сообщает результат нанесения/агрегации по серии."""
+
+    batch_no: str = Field(min_length=1, max_length=32)
+    status: str = Field(default="applied", max_length=32)
+    report_id: str | None = Field(default=None, max_length=128)
+    code_count: int | None = Field(default=None, ge=0)
+    gtin: str | None = Field(default=None, max_length=14)
+    sscc: list[MarkingSsccInput] = Field(default_factory=list)
+
+
+class MarkingReportResponse(BaseModel):
+    batch_no: str
+    status: str
+    sscc_count: int
+    code_count: int | None = None
+
+
 class InventoryCountLineCreate(BaseModel):
     lot_id: UUID
     actual_quantity: float = Field(ge=0)

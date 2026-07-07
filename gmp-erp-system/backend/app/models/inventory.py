@@ -344,6 +344,40 @@ class FGRelease(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     lot: Mapped[Lot] = relationship()
 
 
+class FGMarking(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Маркировка серии ГП (DataMatrix / ASL Belgisi, СОП-414 п.6.4).
+
+    Заполняется DataMatrix-генератором через machine-API (`/api/marking/report`)
+    после нанесения кодов и агрегации в гофрокороба. Ключ связи — № серии
+    (`batch_no`), совпадает с `Lot.internal_lot` партии ГП.
+    """
+
+    __tablename__ = "fg_markings"
+
+    batch_no: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    production_batch_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("production_batches.id"), nullable=True)
+    gtin: Mapped[str | None] = mapped_column(String(14), nullable=True)
+    # ordered | applied (нанесено) | aggregated (агрегировано в короба)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="applied")
+    # reportId отчёта о нанесении (utilisation) из ASL Belgisi.
+    report_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    code_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class FGMarkingSscc(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Агрегированный гофрокороб (SSCC) серии ГП."""
+
+    __tablename__ = "fg_marking_sscc"
+
+    marking_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("fg_markings.id"), nullable=False)
+    sscc: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Кол-во пеналов в коробе (capacity из агрегации).
+    capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    marking: Mapped[FGMarking] = relationship()
+
+
 class InventoryCountDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "inventory_count_documents"
 
@@ -525,6 +559,9 @@ class Product(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     market_name: Mapped[str] = mapped_column(String(64), nullable=False, default="Узбекистан")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     dosage_form: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # GTIN (14 цифр) для маркировки DataMatrix / ASL Belgisi — ключ связи серии
+    # с кодами маркировки в генераторе.
+    gtin: Mapped[str | None] = mapped_column(String(14), nullable=True)
     default_shelf_life_months: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
     # Шаблон номера серии (на будущее); пусто → формат по СОП-409.
     batch_format: Mapped[str | None] = mapped_column(String(64), nullable=True)

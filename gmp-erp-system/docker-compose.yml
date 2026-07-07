@@ -26,6 +26,9 @@ services:
       # Прод: задать сильный GMP_SECRET_KEY в .env (подпись токенов/сессий).
       GMP_SECRET_KEY: ${GMP_SECRET_KEY:-dev-change-me}
       GMP_QC_SCAN_ROOT: /data/qc-scans
+      # Ключ machine-API маркировки (DataMatrix-генератор → ERP). Прод: задать
+      # сильное значение в .env; пусто = эндпоинты /api/marking выключены.
+      GMP_MARKING_API_KEY: ${GMP_MARKING_API_KEY:-dev-marking-key}
     ports:
       - "8002:8000"
     volumes:

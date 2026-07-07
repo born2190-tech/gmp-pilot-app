@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     # Root directory for GMP true-copy scans of signed Ф-14 notifications.
     # Container mounts /data/qc-scans; local dev defaults to ./qc-scans.
     qc_scan_root: str = "./qc-scans"
+    # Общий ключ для машинной интеграции маркировки (DataMatrix-генератор →
+    # ERP). Пусто = интеграция отключена (эндпоинты /api/marking отвечают 503).
+    marking_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="GMP_")
 
