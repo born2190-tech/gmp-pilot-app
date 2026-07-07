@@ -441,6 +441,22 @@ class MarkingReportResponse(BaseModel):
     code_count: int | None = None
 
 
+class FGMarkingItem(BaseModel):
+    """Сводка маркировки серии для отображения в Реестре ГП."""
+
+    batch_no: str
+    status: str
+    gtin: str | None
+    report_id: str | None
+    code_count: int | None
+    sscc_count: int
+    reported_at: datetime | None
+
+
+class FGMarkingsResponse(BaseModel):
+    markings: list[FGMarkingItem]
+
+
 class InventoryCountLineCreate(BaseModel):
     lot_id: UUID
     actual_quantity: float = Field(ge=0)

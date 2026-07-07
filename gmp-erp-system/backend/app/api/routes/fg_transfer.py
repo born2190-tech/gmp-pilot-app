@@ -10,6 +10,7 @@ from app.models.inventory import FGTransferNote, FGTransferNoteLine, Lot, Produc
 from app.schemas.inventory import (
     CompletedBatchesResponse,
     CompletedBatchItem,
+    FGMarkingsResponse,
     FGQuarantineLotsResponse,
     FGReleaseRequest,
     FGTransferNoteCreate,
@@ -18,6 +19,7 @@ from app.schemas.inventory import (
     FGTransferNotesResponse,
     SignatureRequest,
 )
+from app.services.fg_marking import list_fg_markings
 from app.services.fg_warehouse import (
     cancel_fg_transfer_note,
     create_fg_transfer_note,
@@ -183,3 +185,13 @@ def move_to_storage_route(
 ) -> FGQuarantineLotsResponse:
     move_fg_to_storage(db, user, lot_id, payload)
     return FGQuarantineLotsResponse(lots=list_fg_quarantine_lots(db, user))
+
+
+@router.get("/markings", response_model=FGMarkingsResponse)
+def fg_markings_route(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> FGMarkingsResponse:
+    """Сводка маркировки по сериям ГП (для Реестра ГП)."""
+    require_permission(user, "VIEW_WAREHOUSE")
+    return FGMarkingsResponse(markings=list_fg_markings(db))

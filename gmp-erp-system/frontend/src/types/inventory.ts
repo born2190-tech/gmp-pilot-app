@@ -660,6 +660,22 @@ export interface FGQuarantineLotsResponse {
   lots: FGQuarantineLotItem[]
 }
 
+// --- Маркировка серии (DataMatrix/ASL) для Реестра ГП ----------------------
+
+export interface FGMarkingItem {
+  batch_no: string
+  status: string
+  gtin: string | null
+  report_id: string | null
+  code_count: number | null
+  sscc_count: number
+  reported_at: string | null
+}
+
+export interface FGMarkingsResponse {
+  markings: FGMarkingItem[]
+}
+
 export interface InventoryCountCreate extends SignatureRequest {
   document_no: string
   count_date: string

@@ -3,11 +3,11 @@ import { ArrowUpDown, Boxes, MapPin } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/table/DataTable'
 import { StatusBadge } from '../../components/ui/StatusBadge'
-import { listLots, listMovements, moveFgToStorage } from '../../lib/api'
+import { listFgMarkings, listLots, listMovements, moveFgToStorage } from '../../lib/api'
 import { translatedLocation } from '../../lib/display'
 import { useI18n } from '../../i18n/I18nProvider'
 import { MovementTypeBadge, formatShortDateTime } from './_registry/atoms'
-import type { LotItem, MovementItem } from '../../types/inventory'
+import type { FGMarkingItem, LotItem, MovementItem } from '../../types/inventory'
 import type { CurrentUser } from '../../types/auth'
 
 interface FGRegistryPageProps {
@@ -40,6 +40,7 @@ export function FGRegistryPage({ token, user }: FGRegistryPageProps) {
   const [tab, setTab] = useState<Tab>('series')
   const [lots, setLots] = useState<LotItem[]>([])
   const [movements, setMovements] = useState<MovementItem[]>([])
+  const [markings, setMarkings] = useState<Record<string, FGMarkingItem>>({})
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -49,7 +50,11 @@ export function FGRegistryPage({ token, user }: FGRegistryPageProps) {
     setIsLoading(true)
     setError(null)
     try {
-      const [lotsResponse, movementsResponse] = await Promise.all([listLots(token), listMovements(token)])
+      const [lotsResponse, movementsResponse, markingsResponse] = await Promise.all([
+        listLots(token),
+        listMovements(token),
+        listFgMarkings(token),
+      ])
       const fg = lotsResponse.lots
         .filter((lot) => lot.warehouse_type === 'FG_WAREHOUSE')
         .sort((a, b) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime()) // FEFO
@@ -60,6 +65,8 @@ export function FGRegistryPage({ token, user }: FGRegistryPageProps) {
           (m) => fgSerials.has(m.internal_lot) || m.document_type.startsWith('fg_'),
         ),
       )
+      // Маркировка приходит по № серии = internal_lot партии ГП.
+      setMarkings(Object.fromEntries(markingsResponse.markings.map((m) => [m.batch_no, m])))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('fgRegistry.loadFailed'))
     } finally {
@@ -92,15 +99,15 @@ export function FGRegistryPage({ token, user }: FGRegistryPageProps) {
   }
 
   const stats = useMemo(() => {
-    const s = { quarantine: 0, released: 0, rejected: 0, packs: 0 }
+    const s = { quarantine: 0, released: 0, rejected: 0, marked: 0 }
     for (const lot of lots) {
       if (lot.quality_status === 'released') s.released += 1
       else if (lot.quality_status === 'rejected') s.rejected += 1
       else s.quarantine += 1
-      s.packs += lot.quantity
+      if (markings[lot.internal_lot]) s.marked += 1
     }
     return s
-  }, [lots])
+  }, [lots, markings])
 
   const seriesColumns = useMemo<ColumnDef<LotItem>[]>(
     () => [
@@ -117,6 +124,24 @@ export function FGRegistryPage({ token, user }: FGRegistryPageProps) {
       },
       { accessorKey: 'quality_status', header: t('fgRegistry.status'), cell: ({ row }) => <StatusBadge status={row.original.quality_status} /> },
       { accessorKey: 'quantity', header: t('fgRegistry.quantity'), cell: ({ row }) => `${row.original.quantity} ${row.original.unit}` },
+      {
+        id: 'marking',
+        header: t('fgRegistry.marking'),
+        cell: ({ row }) => {
+          const mk = markings[row.original.internal_lot]
+          if (!mk) return <span className="text-slate-400">—</span>
+          return (
+            <div className="flex flex-col gap-0.5" title={mk.report_id ? `reportId: ${mk.report_id}` : undefined}>
+              <span className="inline-flex w-fit items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                {t(`fgRegistry.mk.${mk.status}` as never)}
+              </span>
+              <span className="text-[11px] text-slate-500">
+                {t('fgRegistry.mkCounts', { codes: String(mk.code_count ?? 0), boxes: String(mk.sscc_count) })}
+              </span>
+            </div>
+          )
+        },
+      },
       {
         accessorKey: 'expiry_date',
         header: t('fgRegistry.expiry'),
@@ -153,7 +178,7 @@ export function FGRegistryPage({ token, user }: FGRegistryPageProps) {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [locale, t, canMove],
+    [locale, t, canMove, markings],
   )
 
   const movementsColumns = useMemo<ColumnDef<MovementItem>[]>(
@@ -208,7 +233,7 @@ export function FGRegistryPage({ token, user }: FGRegistryPageProps) {
         <StatTile label={t('fgRegistry.zoneQuarantine')} tone="text-amber-700" value={stats.quarantine} />
         <StatTile label={t('fgRegistry.zoneReleased')} tone="text-emerald-700" value={stats.released} />
         <StatTile label={t('fgRegistry.zoneRejected')} tone="text-rose-700" value={stats.rejected} />
-        <StatTile label={t('fgRegistry.totalPacks')} tone="text-slate-900" value={stats.packs} />
+        <StatTile label={t('fgRegistry.marked')} tone="text-slate-900" value={stats.marked} />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">

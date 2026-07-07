@@ -10,8 +10,11 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from sqlalchemy import func
+
 from app.models.inventory import FGMarking, FGMarkingSscc, ProductionBatch, Product
 from app.schemas.inventory import (
+    FGMarkingItem,
     MarkingOrderResponse,
     MarkingReportRequest,
     MarkingReportResponse,
@@ -45,6 +48,30 @@ def get_marking_order(db: Session, batch_no: str) -> MarkingOrderResponse:
         expiry_date=batch.expiry_date,
         quantity=batch.batch_size,
     )
+
+
+def list_fg_markings(db: Session) -> list[FGMarkingItem]:
+    """Сводка маркировки по всем сериям (для Реестра ГП). Число SSCC — одним
+    агрегатным запросом, чтобы не дёргать БД по каждой серии."""
+    sscc_counts = dict(
+        db.query(FGMarkingSscc.marking_id, func.count(FGMarkingSscc.id))
+        .group_by(FGMarkingSscc.marking_id)
+        .all()
+    )
+    items: list[FGMarkingItem] = []
+    for m in db.query(FGMarking).order_by(FGMarking.reported_at.desc().nullslast()).all():
+        items.append(
+            FGMarkingItem(
+                batch_no=m.batch_no,
+                status=m.status,
+                gtin=m.gtin,
+                report_id=m.report_id,
+                code_count=m.code_count,
+                sscc_count=int(sscc_counts.get(m.id, 0)),
+                reported_at=m.reported_at,
+            )
+        )
+    return items
 
 
 def upsert_marking_report(db: Session, payload: MarkingReportRequest) -> MarkingReportResponse:
