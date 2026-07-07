@@ -333,6 +333,18 @@ def seed_foundation_data(db: Session) -> None:
         departments["WAREHOUSE"],
         "PACKAGING_WAREHOUSE",
     )
+    # Склад готовой продукции — отдельный оператор со своей привязкой к складу
+    # (как субстанций/упаковки): видит только пункты склада ГП, не смешиваясь
+    # с другими складами.
+    get_or_create_user(
+        db,
+        "warehouse_fg",
+        "Warehouse Finished Goods Operator",
+        "whf123",
+        roles["WAREHOUSE_OPERATOR"],
+        departments["WAREHOUSE"],
+        "FG_WAREHOUSE",
+    )
     get_or_create_user(
         db,
         "head_qa",
