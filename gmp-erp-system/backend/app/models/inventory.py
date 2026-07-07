@@ -273,10 +273,12 @@ class FGShipmentLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class FGTransferNote(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Накладная на перемещение упакованной продукции на склад ГП.
 
-    СОП-205 Ф-1 (KAR-FP). Выпускается цехом (начальник цеха) на завершённую
-    серию (`ProductionBatch.status == 'completed'`); склад ГП принимает её,
-    создавая партии ГП в зоне карантина (СОП-205 п.6.2). Двусторонний
-    документ: «Отпустил» — цех, «Получил» — зав. складом ГП.
+    Каноничная форма — СОП-414 Ф-5 «Накладная на перемещение с участка
+    упаковки на склад готовой продукции». Выпускается начальником цеха
+    (СОП-414 п.6.2.20) на завершённую серию (`ProductionBatch.status ==
+    'completed'`); склад ГП принимает её, создавая партии ГП в зоне карантина
+    (СОП-205 п.6.2 / СОП-414 п.6.3.1). Двусторонний документ: «Отпустил» —
+    цех, «Получил» — зав. складом ГП.
     """
 
     __tablename__ = "fg_transfer_notes"
@@ -293,6 +295,9 @@ class FGTransferNote(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     production_date: Mapped[date] = mapped_column(Date, nullable=False)
     expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
     from_workshop: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Кол-во гофрокоробов (СОП-414 Ф-5, блок серии). Пеналы упаковываются в
+    # гофрокороба; их число нужно для агрегации/SSCC и сверки при приёмке.
+    corrugated_boxes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     issued_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     received_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

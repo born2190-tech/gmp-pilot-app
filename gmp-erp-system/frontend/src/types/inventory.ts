@@ -596,6 +596,7 @@ export interface FGTransferNoteCreate extends SignatureRequest {
   production_batch_id: string
   note_no?: string
   from_workshop?: string
+  corrugated_boxes?: number
   notes?: string
   lines: FGTransferNoteLineCreate[]
 }
@@ -621,6 +622,7 @@ export interface FGTransferNoteItem {
   production_date: string
   expiry_date: string
   from_workshop: string
+  corrugated_boxes: number | null
   issued_at: string
   received_at: string | null
   received_warehouse_id: string | null

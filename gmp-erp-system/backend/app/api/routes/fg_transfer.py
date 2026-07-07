@@ -61,6 +61,7 @@ def _note_item(db: Session, note: FGTransferNote) -> FGTransferNoteItem:
         production_date=note.production_date,
         expiry_date=note.expiry_date,
         from_workshop=note.from_workshop,
+        corrugated_boxes=note.corrugated_boxes,
         issued_at=note.issued_at,
         received_at=note.received_at,
         received_warehouse_id=note.received_warehouse_id,

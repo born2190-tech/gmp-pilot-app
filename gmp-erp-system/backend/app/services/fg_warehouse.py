@@ -128,6 +128,7 @@ def create_fg_transfer_note(db: Session, user: CurrentUser, payload: FGTransferN
         production_date=batch.production_date,
         expiry_date=batch.expiry_date,
         from_workshop=(payload.from_workshop or DEFAULT_WORKSHOP).strip(),
+        corrugated_boxes=payload.corrugated_boxes,
         issued_by=user.id,
         issued_at=now_utc(),
         notes=payload.notes,

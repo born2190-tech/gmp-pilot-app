@@ -335,6 +335,7 @@ class FGTransferNoteCreate(SignatureRequest):
     production_batch_id: UUID
     note_no: str | None = Field(default=None, max_length=64)
     from_workshop: str | None = Field(default=None, max_length=255)
+    corrugated_boxes: int | None = Field(default=None, ge=0)
     notes: str | None = None
     lines: list[FGTransferNoteLineCreate] = Field(min_length=1)
 
@@ -362,6 +363,7 @@ class FGTransferNoteItem(BaseModel):
     production_date: date
     expiry_date: date
     from_workshop: str
+    corrugated_boxes: int | None
     issued_at: datetime
     received_at: datetime | None
     received_warehouse_id: UUID | None

@@ -41,6 +41,7 @@ export function FGTransferNotesPage({ token, user }: FGTransferNotesPageProps) {
   const [selectedBatchId, setSelectedBatchId] = useState('')
   const [noteNo, setNoteNo] = useState('')
   const [fromWorkshop, setFromWorkshop] = useState('')
+  const [corrugatedBoxes, setCorrugatedBoxes] = useState('')
   const [issueNotes, setIssueNotes] = useState('')
   const [lines, setLines] = useState<FGTransferNoteLineCreate[]>([{ description: '', quantity: 0, unit: 'упак' }])
   const [issuePassword, setIssuePassword] = useState('')
@@ -109,6 +110,7 @@ export function FGTransferNotesPage({ token, user }: FGTransferNotesPageProps) {
         production_batch_id: selectedBatch.id,
         note_no: noteNo.trim() || undefined,
         from_workshop: fromWorkshop.trim() || undefined,
+        corrugated_boxes: corrugatedBoxes.trim() ? Number(corrugatedBoxes) : undefined,
         notes: issueNotes.trim() || undefined,
         lines: lines.map((line) => ({ description: line.description.trim(), quantity: Number(line.quantity), unit: line.unit || 'упак' })),
         username: user.username,
@@ -119,6 +121,7 @@ export function FGTransferNotesPage({ token, user }: FGTransferNotesPageProps) {
       setSuccess(t('fgTransfer.issued'))
       setNoteNo('')
       setFromWorkshop('')
+      setCorrugatedBoxes('')
       setIssueNotes('')
       setLines([{ description: '', quantity: 0, unit: 'упак' }])
       setIssuePassword('')
@@ -190,6 +193,7 @@ export function FGTransferNotesPage({ token, user }: FGTransferNotesPageProps) {
       { accessorKey: 'batch_no', header: t('fgTransfer.colBatch') },
       { accessorKey: 'expiry_date', header: t('fgTransfer.colExpiry'), cell: ({ row }) => formatDate(row.original.expiry_date, locale) },
       { accessorKey: 'from_workshop', header: t('fgTransfer.colWorkshop') },
+      { accessorKey: 'corrugated_boxes', header: t('fgTransfer.colBoxes'), cell: ({ row }) => row.original.corrugated_boxes ?? '—' },
       { accessorKey: 'issued_at', header: t('fgTransfer.colIssuedAt'), cell: ({ row }) => formatDateTime(row.original.issued_at, locale) },
       {
         id: 'lines',
@@ -261,6 +265,10 @@ export function FGTransferNotesPage({ token, user }: FGTransferNotesPageProps) {
             <label className="label">
               {t('fgTransfer.fromWorkshop')}
               <input autoComplete="off" className="input" onChange={(event) => setFromWorkshop(event.target.value)} value={fromWorkshop} />
+            </label>
+            <label className="label">
+              {t('fgTransfer.corrugatedBoxes')}
+              <input autoComplete="off" className="input" min="0" onChange={(event) => setCorrugatedBoxes(event.target.value)} type="number" value={corrugatedBoxes} />
             </label>
             <label className="label xl:col-span-2">
               {t('fgTransfer.notes')}
