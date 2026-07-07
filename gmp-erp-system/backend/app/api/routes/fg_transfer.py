@@ -10,6 +10,7 @@ from app.models.inventory import FGTransferNote, FGTransferNoteLine, Lot, Produc
 from app.schemas.inventory import (
     CompletedBatchesResponse,
     CompletedBatchItem,
+    FGJournalsResponse,
     FGMarkingsResponse,
     FGQuarantineLotsResponse,
     FGReleaseRequest,
@@ -19,6 +20,7 @@ from app.schemas.inventory import (
     FGTransferNotesResponse,
     SignatureRequest,
 )
+from app.services.fg_journals import fg_journals
 from app.services.fg_marking import list_fg_markings
 from app.services.fg_warehouse import (
     cancel_fg_transfer_note,
@@ -195,3 +197,12 @@ def fg_markings_route(
     """Сводка маркировки по сериям ГП (для Реестра ГП)."""
     require_permission(user, "VIEW_WAREHOUSE")
     return FGMarkingsResponse(markings=list_fg_markings(db))
+
+
+@router.get("/journals", response_model=FGJournalsResponse)
+def fg_journals_route(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> FGJournalsResponse:
+    """Журналы ГП (СОП-209): Ф-9 приход, Ф-6 расход, Ф-5 извещения."""
+    return FGJournalsResponse(**fg_journals(db, user))

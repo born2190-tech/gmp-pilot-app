@@ -676,6 +676,25 @@ export interface FGMarkingsResponse {
   markings: FGMarkingItem[]
 }
 
+// --- Журналы ГП (Ф-9 приход / Ф-6 расход / Ф-5 извещения) -------------------
+
+export interface FGJournalRow {
+  date: string
+  series: string
+  product: string
+  quantity: number
+  unit: string
+  document: string | null
+  counterparty: string | null
+  note: string | null
+}
+
+export interface FGJournalsResponse {
+  incoming: FGJournalRow[]
+  outgoing: FGJournalRow[]
+  notices: FGJournalRow[]
+}
+
 export interface InventoryCountCreate extends SignatureRequest {
   document_no: string
   count_date: string

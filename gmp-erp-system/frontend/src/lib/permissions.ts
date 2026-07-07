@@ -56,6 +56,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.fgTransferReceive',    section: 'warehouse', permission: 'RECEIVE_FINISHED_GOODS', route: 'fg-transfer-receive', icon: PackagePlus, warehouseScopes: ['FG_WAREHOUSE'] },
   { labelKey: 'nav.fgRegistry',           section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-registry',          icon: Boxes, warehouseScopes: ['FG_WAREHOUSE'] },
   { labelKey: 'nav.fgShipments',          section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-shipments',         icon: Truck, warehouseScopes: ['FG_WAREHOUSE'] },
+  { labelKey: 'nav.fgJournals',           section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-journals',          icon: FileText, warehouseScopes: ['FG_WAREHOUSE'] },
 
   // ─── ОКК ──────────────────────────────────────────────────────────────
   { labelKey: 'nav.qcTasks',              section: 'qc',         permission: 'VIEW_QC',         route: 'qc-tasks',             icon: Microscope },

@@ -20,6 +20,7 @@ import type {
   FGQuarantineLotsResponse,
   FGReleaseRequest,
   FGMarkingsResponse,
+  FGJournalsResponse,
   InventoryCountCreate,
   InventoryCountItem,
   InventoryCountsResponse,
@@ -338,6 +339,10 @@ export function moveFgToStorage(token: string, lotId: string, payload: Signature
 
 export function listFgMarkings(token: string): Promise<FGMarkingsResponse> {
   return request<FGMarkingsResponse>('/api/fg-transfer/markings', 'GET', { token })
+}
+
+export function getFgJournals(token: string): Promise<FGJournalsResponse> {
+  return request<FGJournalsResponse>('/api/fg-transfer/journals', 'GET', { token })
 }
 
 export function createInventoryCount(token: string, payload: InventoryCountCreate): Promise<InventoryCountItem> {

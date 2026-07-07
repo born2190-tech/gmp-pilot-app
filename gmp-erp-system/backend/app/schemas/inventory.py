@@ -457,6 +457,26 @@ class FGMarkingsResponse(BaseModel):
     markings: list[FGMarkingItem]
 
 
+# --- Журналы ГП (СОП-209): Ф-9 приход, Ф-6 расход, Ф-5 извещения ------------
+
+
+class FGJournalRow(BaseModel):
+    date: datetime
+    series: str
+    product: str
+    quantity: float
+    unit: str
+    document: str | None = None
+    counterparty: str | None = None
+    note: str | None = None
+
+
+class FGJournalsResponse(BaseModel):
+    incoming: list[FGJournalRow]  # Ф-9 приход
+    outgoing: list[FGJournalRow]  # Ф-6 расход
+    notices: list[FGJournalRow]  # Ф-5 извещения
+
+
 class InventoryCountLineCreate(BaseModel):
     lot_id: UUID
     actual_quantity: float = Field(ge=0)
