@@ -375,6 +375,33 @@ class FGTransferNotesResponse(BaseModel):
     notes: list[FGTransferNoteItem]
 
 
+# --- Допуск ГП карантин→хранение (СОП-205 п.6.3) ---------------------------
+
+
+class FGReleaseRequest(SignatureRequest):
+    analytical_passport_no: str = Field(min_length=1, max_length=128)
+    certificate_no: str | None = Field(default=None, max_length=128)
+
+
+class FGQuarantineLotItem(BaseModel):
+    lot_id: UUID
+    internal_lot: str
+    product_name: str
+    quantity: float
+    unit: str
+    production_date: date | None
+    expiry_date: date
+    quality_status: str
+    location_code: str
+    released: bool
+    analytical_passport_no: str | None = None
+    certificate_no: str | None = None
+
+
+class FGQuarantineLotsResponse(BaseModel):
+    lots: list[FGQuarantineLotItem]
+
+
 class InventoryCountLineCreate(BaseModel):
     lot_id: UUID
     actual_quantity: float = Field(ge=0)

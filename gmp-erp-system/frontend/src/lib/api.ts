@@ -17,6 +17,8 @@ import type {
   FGTransferNoteCreate,
   FGTransferNoteItem,
   FGTransferNotesResponse,
+  FGQuarantineLotsResponse,
+  FGReleaseRequest,
   InventoryCountCreate,
   InventoryCountItem,
   InventoryCountsResponse,
@@ -319,6 +321,18 @@ export function receiveFgTransferNote(token: string, noteId: string, payload: Si
 
 export function cancelFgTransferNote(token: string, noteId: string, payload: SignatureRequest): Promise<FGTransferNoteItem> {
   return request<FGTransferNoteItem>(`/api/fg-transfer/${noteId}/cancel`, 'POST', { token, body: payload })
+}
+
+export function listFgQuarantineLots(token: string): Promise<FGQuarantineLotsResponse> {
+  return request<FGQuarantineLotsResponse>('/api/fg-transfer/quarantine-lots', 'GET', { token })
+}
+
+export function releaseFgLot(token: string, lotId: string, payload: FGReleaseRequest): Promise<FGQuarantineLotsResponse> {
+  return request<FGQuarantineLotsResponse>(`/api/fg-transfer/lots/${lotId}/release`, 'POST', { token, body: payload })
+}
+
+export function moveFgToStorage(token: string, lotId: string, payload: SignatureRequest): Promise<FGQuarantineLotsResponse> {
+  return request<FGQuarantineLotsResponse>(`/api/fg-transfer/lots/${lotId}/move-to-storage`, 'POST', { token, body: payload })
 }
 
 export function createInventoryCount(token: string, payload: InventoryCountCreate): Promise<InventoryCountItem> {

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser
 from app.models.inventory import (
+    FGRelease,
     FGTransferNote,
     FGTransferNoteLine,
     InventoryMovement,
@@ -20,7 +21,12 @@ from app.models.inventory import (
     ProductionBatch,
 )
 from app.models.master_data import Location, Manufacturer, Material, Warehouse
-from app.schemas.inventory import FGTransferNoteCreate, SignatureRequest
+from app.schemas.inventory import (
+    FGQuarantineLotItem,
+    FGReleaseRequest,
+    FGTransferNoteCreate,
+    SignatureRequest,
+)
 from app.services.audit import write_audit
 from app.services.permissions import require_permission
 from app.services.signature import validate_signature
@@ -80,15 +86,19 @@ def _fg_warehouse(db: Session) -> Warehouse:
     return wh
 
 
-def _quarantine_location(db: Session, warehouse: Warehouse) -> Location:
+def _location(db: Session, warehouse: Warehouse, code: str, label: str) -> Location:
     loc = (
         db.query(Location)
-        .filter(Location.warehouse_id == warehouse.id, Location.code == "QUARANTINE")
+        .filter(Location.warehouse_id == warehouse.id, Location.code == code)
         .first()
     )
     if loc is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="На складе ГП нет зоны карантина")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"На складе ГП нет зоны {label}")
     return loc
+
+
+def _quarantine_location(db: Session, warehouse: Warehouse) -> Location:
+    return _location(db, warehouse, "QUARANTINE", "карантина")
 
 
 def create_fg_transfer_note(db: Session, user: CurrentUser, payload: FGTransferNoteCreate) -> FGTransferNote:
@@ -277,3 +287,139 @@ def cancel_fg_transfer_note(db: Session, user: CurrentUser, note_id: UUID, paylo
     db.commit()
     db.refresh(note)
     return note
+
+
+# ---------------------------------------------------------------------------
+# Допуск карантин → зона хранения (СОП-205 п.6.3)
+# ---------------------------------------------------------------------------
+
+
+def _fg_lot(db: Session, lot_id: UUID) -> tuple[Lot, Warehouse]:
+    lot = _get_required(db, Lot, lot_id, "Lot")
+    warehouse = _get_required(db, Warehouse, lot.warehouse_id, "Warehouse")
+    if warehouse.warehouse_type != "FG_WAREHOUSE":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Партия не на складе готовой продукции")
+    return lot, warehouse
+
+
+def list_fg_quarantine_lots(db: Session, user: CurrentUser) -> list[FGQuarantineLotItem]:
+    """Партии ГП, физически находящиеся в зоне карантина (ожидают допуска ДКК/УЛ
+    либо допущены, но ещё не перемещены в хранение). Видят склад и ОКА."""
+    if not ({"VIEW_WAREHOUSE", "QA_DECISION"} & set(user.permissions)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
+    warehouse = _fg_warehouse(db)
+    quarantine = _quarantine_location(db, warehouse)
+    rows = (
+        db.query(Lot)
+        .filter(Lot.warehouse_id == warehouse.id, Lot.location_id == quarantine.id)
+        .order_by(Lot.expiry_date)
+        .all()
+    )
+    items: list[FGQuarantineLotItem] = []
+    for lot in rows:
+        material = db.get(Material, lot.material_id)
+        rel = db.query(FGRelease).filter(FGRelease.lot_id == lot.id).first()
+        items.append(
+            FGQuarantineLotItem(
+                lot_id=lot.id,
+                internal_lot=lot.internal_lot,
+                product_name=material.name if material else "",
+                quantity=lot.quantity,
+                unit=lot.unit,
+                production_date=lot.production_date,
+                expiry_date=lot.expiry_date,
+                quality_status=lot.quality_status,
+                location_code=quarantine.code,
+                released=rel is not None or lot.quality_status == "released",
+                analytical_passport_no=rel.analytical_passport_no if rel else None,
+                certificate_no=rel.certificate_no if rel else None,
+            )
+        )
+    return items
+
+
+def release_fg_lot(db: Session, user: CurrentUser, lot_id: UUID, payload: FGReleaseRequest) -> Lot:
+    """Допуск серии ГП к реализации ДКК/УЛ (Аналит. паспорт + разрешение УЛ)."""
+    require_permission(user, "QA_DECISION")
+    lot, _ = _fg_lot(db, lot_id)
+    if lot.quality_status != "quarantine":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Допуск возможен только для карантинной партии ГП")
+    if db.query(FGRelease).filter(FGRelease.lot_id == lot.id).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Партия уже допущена")
+
+    validate_signature(db, user, payload, "RELEASE_FINISHED_GOODS", "lot", str(lot.id))
+    now = now_utc()
+    lot.quality_status = "released"
+    lot.qa_decision_at = now
+    db.add(
+        FGRelease(
+            lot_id=lot.id,
+            analytical_passport_no=payload.analytical_passport_no.strip(),
+            certificate_no=(payload.certificate_no or None),
+            released_by=user.id,
+            released_at=now,
+            notes=payload.reason,
+        )
+    )
+    write_audit(
+        db,
+        user,
+        object_type="lot",
+        object_id=str(lot.id),
+        action_type="RELEASE_FINISHED_GOODS",
+        old_value={"quality_status": "quarantine"},
+        new_value={"quality_status": "released", "analytical_passport_no": payload.analytical_passport_no},
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(lot)
+    return lot
+
+
+def move_fg_to_storage(db: Session, user: CurrentUser, lot_id: UUID, payload: SignatureRequest) -> Lot:
+    """Склад перемещает допущенную партию из карантина в зону хранения."""
+    require_permission(user, "RECEIVE_FINISHED_GOODS")
+    lot, warehouse = _fg_lot(db, lot_id)
+    if lot.quality_status != "released":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Перемещение в хранение возможно только после допуска ДКК/УЛ",
+        )
+    storage = _location(db, warehouse, "RELEASED", "хранения")
+    if lot.location_id == storage.id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Партия уже в зоне хранения")
+
+    validate_signature(db, user, payload, "MOVE_FG_STORAGE", "lot", str(lot.id))
+    old_location = lot.location_id
+    lot.location_id = storage.id
+    db.add(
+        InventoryMovement(
+            movement_type="TRANSFER",
+            document_type="fg_move_storage",
+            document_id=lot.id,
+            lot_id=lot.id,
+            from_warehouse_id=warehouse.id,
+            from_location_id=old_location,
+            to_warehouse_id=warehouse.id,
+            to_location_id=storage.id,
+            quantity_delta=0,
+            quantity_after=lot.quantity,
+            unit=lot.unit,
+            reason=payload.reason or "Карантин → зона хранения (СОП-205 п.6.3)",
+            user_id=user.id,
+            workstation_id=user.workstation_id,
+        )
+    )
+    write_audit(
+        db,
+        user,
+        object_type="lot",
+        object_id=str(lot.id),
+        action_type="MOVE_FG_STORAGE",
+        old_value={"location_id": str(old_location)},
+        new_value={"location_id": str(storage.id)},
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(lot)
+    return lot

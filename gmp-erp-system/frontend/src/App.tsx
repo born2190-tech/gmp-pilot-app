@@ -9,6 +9,7 @@ import { InventoryAccountsAdminPage } from './features/inventory/InventoryAccoun
 import { FGShipmentsPage } from './features/inventory/FGShipmentsPage'
 import { FGTransferNotesPage } from './features/inventory/FGTransferNotesPage'
 import { FGRegistryPage } from './features/inventory/FGRegistryPage'
+import { FGQuarantinePage } from './features/inventory/FGQuarantinePage'
 import { InventoryCountPage } from './features/inventory/InventoryCountPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
 import { QCNotificationsPage } from './features/inventory/QCNotificationsPage'
@@ -172,6 +173,8 @@ export function App() {
       <FGTransferNotesPage token={token} user={user} />
     ) : route === 'fg-registry' ? (
       <FGRegistryPage token={token} />
+    ) : route === 'fg-quarantine' || route === 'fg-quarantine-qa' ? (
+      <FGQuarantinePage token={token} user={user} />
     ) : route === 'inventory-counts' ? (
       <InventoryCountPage token={token} user={user} />
     ) : route === 'qc-notifications' ? (

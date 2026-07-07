@@ -10,6 +10,8 @@ from app.models.inventory import FGTransferNote, FGTransferNoteLine, Lot, Produc
 from app.schemas.inventory import (
     CompletedBatchesResponse,
     CompletedBatchItem,
+    FGQuarantineLotsResponse,
+    FGReleaseRequest,
     FGTransferNoteCreate,
     FGTransferNoteItem,
     FGTransferNoteLineItem,
@@ -19,7 +21,10 @@ from app.schemas.inventory import (
 from app.services.fg_warehouse import (
     cancel_fg_transfer_note,
     create_fg_transfer_note,
+    list_fg_quarantine_lots,
+    move_fg_to_storage,
     receive_fg_transfer_note,
+    release_fg_lot,
 )
 from app.services.permissions import require_permission
 
@@ -145,3 +150,36 @@ def cancel_note_route(
 ) -> FGTransferNoteItem:
     note = cancel_fg_transfer_note(db, user, note_id, payload)
     return _note_item(db, note)
+
+
+# --- Допуск карантин → зона хранения (СОП-205 п.6.3) -----------------------
+
+
+@router.get("/quarantine-lots", response_model=FGQuarantineLotsResponse)
+def quarantine_lots_route(
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> FGQuarantineLotsResponse:
+    return FGQuarantineLotsResponse(lots=list_fg_quarantine_lots(db, user))
+
+
+@router.post("/lots/{lot_id}/release", response_model=FGQuarantineLotsResponse)
+def release_lot_route(
+    lot_id: UUID,
+    payload: FGReleaseRequest,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> FGQuarantineLotsResponse:
+    release_fg_lot(db, user, lot_id, payload)
+    return FGQuarantineLotsResponse(lots=list_fg_quarantine_lots(db, user))
+
+
+@router.post("/lots/{lot_id}/move-to-storage", response_model=FGQuarantineLotsResponse)
+def move_to_storage_route(
+    lot_id: UUID,
+    payload: SignatureRequest,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> FGQuarantineLotsResponse:
+    move_fg_to_storage(db, user, lot_id, payload)
+    return FGQuarantineLotsResponse(lots=list_fg_quarantine_lots(db, user))

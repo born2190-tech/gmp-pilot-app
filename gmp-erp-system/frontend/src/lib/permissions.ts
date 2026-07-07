@@ -54,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.inventoryCounts',      section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'inventory-counts',     icon: ListChecks },
   { labelKey: 'nav.qcNotifications',      section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'qc-notifications',     icon: BellRing, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.fgTransferReceive',    section: 'warehouse', permission: 'RECEIVE_FINISHED_GOODS', route: 'fg-transfer-receive', icon: PackagePlus, warehouseScopes: ['FG_WAREHOUSE'] },
+  { labelKey: 'nav.fgQuarantine',         section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-quarantine',        icon: ShieldCheck, warehouseScopes: ['FG_WAREHOUSE'] },
   { labelKey: 'nav.fgRegistry',           section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-registry',          icon: Boxes, warehouseScopes: ['FG_WAREHOUSE'] },
   { labelKey: 'nav.fgShipments',          section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-shipments',         icon: Truck, warehouseScopes: ['FG_WAREHOUSE'] },
 
@@ -67,6 +68,7 @@ const NAV_ITEMS: NavItem[] = [
   // ─── ОКА ──────────────────────────────────────────────────────────────
   { labelKey: 'nav.qaDecisions',          section: 'qa',         permission: 'VIEW_QA',         route: 'qa-decisions',         icon: ShieldCheck },
   { labelKey: 'nav.bmrIssue',             section: 'qa',         permission: 'QA_DECISION',     route: 'qa-bmr-issue',         icon: FileSignature },
+  { labelKey: 'nav.fgReleaseQa',          section: 'qa',         permission: 'QA_DECISION',     route: 'fg-quarantine-qa',     icon: ShieldCheck },
   { labelKey: 'nav.qaScanVerification',   section: 'qa',         permission: 'VERIFY_QC_SCAN',  route: 'qa-scan-verification', icon: ScanLine },
 
   // ─── Производство ─────────────────────────────────────────────────────

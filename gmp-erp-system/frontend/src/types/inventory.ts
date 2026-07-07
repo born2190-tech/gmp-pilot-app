@@ -634,6 +634,32 @@ export interface FGTransferNotesResponse {
   notes: FGTransferNoteItem[]
 }
 
+// --- Допуск ГП карантин→хранение (СОП-205 п.6.3) ---------------------------
+
+export interface FGReleaseRequest extends SignatureRequest {
+  analytical_passport_no: string
+  certificate_no?: string
+}
+
+export interface FGQuarantineLotItem {
+  lot_id: string
+  internal_lot: string
+  product_name: string
+  quantity: number
+  unit: string
+  production_date: string | null
+  expiry_date: string
+  quality_status: string
+  location_code: string
+  released: boolean
+  analytical_passport_no: string | null
+  certificate_no: string | null
+}
+
+export interface FGQuarantineLotsResponse {
+  lots: FGQuarantineLotItem[]
+}
+
 export interface InventoryCountCreate extends SignatureRequest {
   document_no: string
   count_date: string

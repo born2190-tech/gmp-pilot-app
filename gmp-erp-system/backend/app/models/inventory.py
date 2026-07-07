@@ -324,6 +324,26 @@ class FGTransferNoteLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     lot: Mapped[Lot | None] = relationship()
 
 
+class FGRelease(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Допуск серии ГП к реализации (СОП-205 п.6.3 / п.6.4.5).
+
+    Основание перевода партии ГП из карантина в зону хранения — Аналитический
+    паспорт ДКК и/или сертификат соответствия + разрешение УЛ. Один допуск на
+    партию; после него склад физически перемещает лот карантин→хранение.
+    """
+
+    __tablename__ = "fg_releases"
+
+    lot_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lots.id"), nullable=False, unique=True)
+    analytical_passport_no: Mapped[str] = mapped_column(String(128), nullable=False)
+    certificate_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    released_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    released_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    lot: Mapped[Lot] = relationship()
+
+
 class InventoryCountDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "inventory_count_documents"
 
