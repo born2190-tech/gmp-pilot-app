@@ -9,6 +9,7 @@ import {
   listFgTransferNotes,
   receiveFgTransferNote,
 } from '../../lib/api'
+import { isOutsideBarrier } from '../../lib/timeBarrier'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { CompletedBatchItem, FGTransferNoteItem, FGTransferNoteLineCreate } from '../../types/inventory'
 import type { CurrentUser } from '../../types/auth'
@@ -244,6 +245,12 @@ export function FGTransferNotesPage({ token, user }: FGTransferNotesPageProps) {
       </div>
 
       {(error || success) && <div className={error ? 'alert-error' : 'alert-success'}>{error || success}</div>}
+
+      {canReceive && isOutsideBarrier('receive') && (
+        <div className="rounded-md border border-amber-200 bg-amber-50/70 px-4 py-2 text-[13px] text-amber-800">
+          {t('fgBarrier.receive')}
+        </div>
+      )}
 
       {canReceive && pendingCount > 0 && (
         <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">

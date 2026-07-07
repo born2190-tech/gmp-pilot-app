@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/table/DataTable'
 import { createFgShipment, listFgShipments, listLots } from '../../lib/api'
+import { isOutsideBarrier } from '../../lib/timeBarrier'
 import { useI18n } from '../../i18n/I18nProvider'
 import type { FGShipmentItem, LotItem } from '../../types/inventory'
 import type { CurrentUser } from '../../types/auth'
@@ -138,6 +139,12 @@ export function FGShipmentsPage({ token, user }: FGShipmentsPageProps) {
       {!isLoading && lots.length === 0 && (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {t('fgShipments.noLots')}
+        </div>
+      )}
+
+      {isOutsideBarrier('ship') && (
+        <div className="rounded-md border border-amber-200 bg-amber-50/70 px-4 py-2 text-[13px] text-amber-800">
+          {t('fgBarrier.ship')}
         </div>
       )}
 
