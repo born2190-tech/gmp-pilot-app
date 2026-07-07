@@ -255,6 +255,10 @@ class FGShipmentDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     waybill_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
     posted_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     posted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Didox ЭДО: id документа ЭСФ и его статус (draft/sent/...). Заполняются при
+    # выпуске ЭСФ через Didox (СОП отгрузки, машинная интеграция).
+    didox_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    didox_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class FGShipmentLine(UUIDPrimaryKeyMixin, TimestampMixin, Base):

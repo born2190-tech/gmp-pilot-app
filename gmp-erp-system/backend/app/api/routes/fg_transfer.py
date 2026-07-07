@@ -10,6 +10,8 @@ from app.models.inventory import FGTransferNote, FGTransferNoteLine, Lot, Produc
 from app.schemas.inventory import (
     CompletedBatchesResponse,
     CompletedBatchItem,
+    DidoxEsfResponse,
+    DidoxStatusResponse,
     FGJournalsResponse,
     FGMarkingsResponse,
     FGQuarantineLotsResponse,
@@ -20,6 +22,7 @@ from app.schemas.inventory import (
     FGTransferNotesResponse,
     SignatureRequest,
 )
+from app.services.didox_client import didox_enabled, issue_esf
 from app.services.fg_journals import fg_journals
 from app.services.fg_marking import list_fg_markings
 from app.services.fg_warehouse import (
@@ -206,3 +209,21 @@ def fg_journals_route(
 ) -> FGJournalsResponse:
     """Журналы ГП (СОП-209): Ф-9 приход, Ф-6 расход, Ф-5 извещения."""
     return FGJournalsResponse(**fg_journals(db, user))
+
+
+@router.get("/didox/status", response_model=DidoxStatusResponse)
+def didox_status_route(user: CurrentUser = Depends(get_current_user)) -> DidoxStatusResponse:
+    require_permission(user, "VIEW_WAREHOUSE")
+    return DidoxStatusResponse(enabled=didox_enabled())
+
+
+@router.post("/shipments/{shipment_id}/issue-esf", response_model=DidoxEsfResponse)
+def issue_esf_route(
+    shipment_id: UUID,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> DidoxEsfResponse:
+    """Выпустить ЭСФ по отгрузке через Didox (503, если интеграция не настроена)."""
+    require_permission(user, "POST_RECEIPT")
+    sh = issue_esf(db, shipment_id)
+    return DidoxEsfResponse(shipment_id=sh.id, didox_id=sh.didox_id, didox_status=sh.didox_status)

@@ -477,6 +477,19 @@ class FGJournalsResponse(BaseModel):
     notices: list[FGJournalRow]  # Ф-5 извещения
 
 
+# --- Didox (ЭСФ) ------------------------------------------------------------
+
+
+class DidoxStatusResponse(BaseModel):
+    enabled: bool
+
+
+class DidoxEsfResponse(BaseModel):
+    shipment_id: UUID
+    didox_id: str | None
+    didox_status: str | None
+
+
 class InventoryCountLineCreate(BaseModel):
     lot_id: UUID
     actual_quantity: float = Field(ge=0)

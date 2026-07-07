@@ -12,6 +12,19 @@ class Settings(BaseSettings):
     # ERP). Пусто = интеграция отключена (эндпоинты /api/marking отвечают 503).
     marking_api_key: str = ""
 
+    # --- Didox (ЭДО/ЭСФ, api-partners.didox.uz) ---
+    # Всё пусто = интеграция выключена (эндпоинт выпуска ЭСФ отвечает 503).
+    # partner_token выдаёт Didox под ИНН компании; login taxid+password — сессия.
+    didox_base_url: str = "https://api-partners.didox.uz"
+    didox_partner_token: str = ""
+    didox_tax_id: str = ""
+    didox_password: str = ""
+    didox_environment: str = "development"
+    # Реквизиты продавца для ЭСФ (наши).
+    didox_seller_name: str = ""
+    didox_seller_account: str = ""
+    didox_seller_bank_id: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="GMP_")
 
 
