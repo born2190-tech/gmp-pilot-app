@@ -47,14 +47,13 @@ export interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   // ─── Склад ────────────────────────────────────────────────────────────
   { labelKey: 'nav.receiptDocuments',     section: 'warehouse', permission: 'CREATE_RECEIPT',  route: 'receipt-documents',    icon: PackagePlus },
-  { labelKey: 'nav.lots',                 section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'lots',                 icon: BookMarked },
+  { labelKey: 'nav.lots',                 section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'lots',                 icon: BookMarked, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.warehouseAccounts',    section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'warehouse-accounts',   icon: Coins },
   { labelKey: 'nav.warehouseOperations',  section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'warehouse-operations', icon: ArrowLeftRight },
   { labelKey: 'nav.requisitionsIncoming', section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'requisitions',         icon: ClipboardList, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.inventoryCounts',      section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'inventory-counts',     icon: ListChecks },
   { labelKey: 'nav.qcNotifications',      section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'qc-notifications',     icon: BellRing, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.fgTransferReceive',    section: 'warehouse', permission: 'RECEIVE_FINISHED_GOODS', route: 'fg-transfer-receive', icon: PackagePlus, warehouseScopes: ['FG_WAREHOUSE'] },
-  { labelKey: 'nav.fgQuarantine',         section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-quarantine',        icon: ShieldCheck, warehouseScopes: ['FG_WAREHOUSE'] },
   { labelKey: 'nav.fgRegistry',           section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-registry',          icon: Boxes, warehouseScopes: ['FG_WAREHOUSE'] },
   { labelKey: 'nav.fgShipments',          section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-shipments',         icon: Truck, warehouseScopes: ['FG_WAREHOUSE'] },
 

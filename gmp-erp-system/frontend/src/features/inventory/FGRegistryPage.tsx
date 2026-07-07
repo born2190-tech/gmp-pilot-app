@@ -1,13 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ArrowUpDown, Boxes, MapPin } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '../../components/table/DataTable'
-import { listLots } from '../../lib/api'
+import { StatusBadge } from '../../components/ui/StatusBadge'
+import { listLots, listMovements, moveFgToStorage } from '../../lib/api'
+import { translatedLocation } from '../../lib/display'
 import { useI18n } from '../../i18n/I18nProvider'
-import type { TranslationKey } from '../../i18n/translations'
-import type { LotItem } from '../../types/inventory'
+import { MovementTypeBadge, formatShortDateTime } from './_registry/atoms'
+import type { LotItem, MovementItem } from '../../types/inventory'
+import type { CurrentUser } from '../../types/auth'
 
 interface FGRegistryPageProps {
   token: string
+  user: CurrentUser
+}
+
+type Tab = 'series' | 'movements'
+
+const LOCATION_PILL: Record<string, string> = {
+  RECEIVING: 'bg-slate-100 text-slate-700 ring-slate-200',
+  QUARANTINE: 'bg-amber-50 text-amber-800 ring-amber-200',
+  RELEASED: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+  REJECTED: 'bg-rose-50 text-rose-800 ring-rose-200',
 }
 
 function formatDate(value: string | null, locale: string) {
@@ -15,36 +29,37 @@ function formatDate(value: string | null, locale: string) {
   return new Intl.DateTimeFormat(locale).format(new Date(value))
 }
 
-/** Дней до истечения срока годности (может быть отрицательным). */
 function daysToExpiry(expiry: string): number {
-  const ms = new Date(expiry).getTime() - Date.now()
-  return Math.floor(ms / 86_400_000)
+  return Math.floor((new Date(expiry).getTime() - Date.now()) / 86_400_000)
 }
 
-function zoneMeta(status: string): { key: TranslationKey; tone: string } {
-  if (status === 'released') return { key: 'fgRegistry.zoneReleased', tone: 'bg-emerald-50 text-emerald-700' }
-  if (status === 'rejected') return { key: 'fgRegistry.zoneRejected', tone: 'bg-rose-50 text-rose-700' }
-  return { key: 'fgRegistry.zoneQuarantine', tone: 'bg-amber-50 text-amber-700' }
-}
-
-export function FGRegistryPage({ token }: FGRegistryPageProps) {
+export function FGRegistryPage({ token, user }: FGRegistryPageProps) {
   const { locale, t } = useI18n()
+  const canMove = user.permissions.includes('RECEIVE_FINISHED_GOODS')
+
+  const [tab, setTab] = useState<Tab>('series')
   const [lots, setLots] = useState<LotItem[]>([])
+  const [movements, setMovements] = useState<MovementItem[]>([])
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   async function loadData() {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await listLots(token)
-      // Реестр только по складу готовой продукции — своя витрина, отдельно
-      // от сырьевого реестра.
-      const fg = response.lots
+      const [lotsResponse, movementsResponse] = await Promise.all([listLots(token), listMovements(token)])
+      const fg = lotsResponse.lots
         .filter((lot) => lot.warehouse_type === 'FG_WAREHOUSE')
         .sort((a, b) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime()) // FEFO
       setLots(fg)
+      const fgSerials = new Set(fg.map((lot) => lot.internal_lot))
+      setMovements(
+        movementsResponse.movements.filter(
+          (m) => fgSerials.has(m.internal_lot) || m.document_type.startsWith('fg_'),
+        ),
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : t('fgRegistry.loadFailed'))
     } finally {
@@ -57,6 +72,25 @@ export function FGRegistryPage({ token }: FGRegistryPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
+  async function handleMove(lot: LotItem) {
+    const password = window.prompt(t('fgRegistry.passwordPrompt'))
+    if (!password) return
+    setError(null)
+    setSuccess(null)
+    try {
+      await moveFgToStorage(token, lot.id, {
+        username: user.username,
+        password,
+        meaning: t('fgRegistry.moveMeaning'),
+        reason: t('fgRegistry.moveMeaning'),
+      })
+      setSuccess(t('fgRegistry.moved'))
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('fgRegistry.actionFailed'))
+    }
+  }
+
   const stats = useMemo(() => {
     const s = { quarantine: 0, released: 0, rejected: 0, packs: 0 }
     for (const lot of lots) {
@@ -68,23 +102,21 @@ export function FGRegistryPage({ token }: FGRegistryPageProps) {
     return s
   }, [lots])
 
-  const columns = useMemo<ColumnDef<LotItem>[]>(
+  const seriesColumns = useMemo<ColumnDef<LotItem>[]>(
     () => [
-      { accessorKey: 'material_name', header: t('fgRegistry.product') },
       { accessorKey: 'internal_lot', header: t('fgRegistry.batch') },
+      { accessorKey: 'material_name', header: t('fgRegistry.product') },
       {
-        accessorKey: 'quality_status',
+        accessorKey: 'location_code',
         header: t('fgRegistry.zone'),
-        cell: ({ row }) => {
-          const meta = zoneMeta(row.original.quality_status)
-          return <span className={`rounded-full px-2 py-0.5 text-[12px] font-semibold ${meta.tone}`}>{t(meta.key)}</span>
-        },
+        cell: ({ row }) => (
+          <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${LOCATION_PILL[row.original.location_code] ?? LOCATION_PILL.RECEIVING}`}>
+            <MapPin size={11} /> {translatedLocation(row.original.location_code, t)}
+          </span>
+        ),
       },
-      {
-        accessorKey: 'quantity',
-        header: t('fgRegistry.quantity'),
-        cell: ({ row }) => `${row.original.quantity} ${row.original.unit}`,
-      },
+      { accessorKey: 'quality_status', header: t('fgRegistry.status'), cell: ({ row }) => <StatusBadge status={row.original.quality_status} /> },
+      { accessorKey: 'quantity', header: t('fgRegistry.quantity'), cell: ({ row }) => `${row.original.quantity} ${row.original.unit}` },
       {
         accessorKey: 'expiry_date',
         header: t('fgRegistry.expiry'),
@@ -100,10 +132,59 @@ export function FGRegistryPage({ token }: FGRegistryPageProps) {
         cell: ({ row }) => {
           const l = row.original
           const parts = [l.rack_no, l.sector_no, l.tier_no, l.place_no, l.pallet_no].filter(Boolean)
-          return parts.length ? parts.join(' / ') : l.location_code
+          return parts.length ? parts.join(' / ') : '—'
         },
       },
-      { accessorKey: 'production_date', header: t('fgRegistry.productionDate'), cell: ({ row }) => formatDate(row.original.production_date, locale) },
+      {
+        id: 'actions',
+        header: t('fgRegistry.actions'),
+        cell: ({ row }) => {
+          const lot = row.original
+          // Допущенная партия ещё в зоне карантина → склад перемещает в хранение.
+          if (canMove && lot.quality_status === 'released' && lot.location_code === 'QUARANTINE') {
+            return (
+              <button className="btn-primary px-2 py-1 text-[12px]" onClick={() => handleMove(lot)} type="button">
+                {t('fgRegistry.move')}
+              </button>
+            )
+          }
+          return <span className="text-slate-400">—</span>
+        },
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [locale, t, canMove],
+  )
+
+  const movementsColumns = useMemo<ColumnDef<MovementItem>[]>(
+    () => [
+      { accessorKey: 'created_at', header: t('fgRegistry.mvDate'), cell: ({ row }) => formatShortDateTime(row.original.created_at, locale) },
+      {
+        accessorKey: 'movement_type',
+        header: t('fgRegistry.mvType'),
+        cell: ({ row }) => {
+          const translated = t(`movementType.${row.original.movement_type.toUpperCase()}` as never)
+          const label = translated.startsWith('movementType.') ? row.original.movement_type : translated
+          return <MovementTypeBadge rawType={row.original.movement_type} label={label} />
+        },
+      },
+      { accessorKey: 'document_type', header: t('fgRegistry.mvDoc') },
+      {
+        id: 'series',
+        header: t('fgRegistry.mvSeries'),
+        cell: ({ row }) => `${row.original.material_name} · ${row.original.internal_lot}`,
+      },
+      {
+        accessorKey: 'quantity_delta',
+        header: t('fgRegistry.mvDelta'),
+        cell: ({ row }) => {
+          const d = row.original.quantity_delta
+          const tone = d < 0 ? 'text-rose-700' : d > 0 ? 'text-emerald-700' : 'text-slate-500'
+          return <span className={`font-mono font-semibold ${tone}`}>{d > 0 ? '+' : ''}{d} {row.original.unit}</span>
+        },
+      },
+      { accessorKey: 'quantity_after', header: t('fgRegistry.mvAfter'), cell: ({ row }) => `${row.original.quantity_after} ${row.original.unit}` },
+      { accessorKey: 'reason', header: t('fgRegistry.mvReason'), cell: ({ row }) => row.original.reason || '—' },
     ],
     [locale, t],
   )
@@ -121,7 +202,7 @@ export function FGRegistryPage({ token }: FGRegistryPageProps) {
         </button>
       </div>
 
-      {error && <div className="alert-error">{error}</div>}
+      {(error || success) && <div className={error ? 'alert-error' : 'alert-success'}>{error || success}</div>}
 
       <div className="grid gap-3 sm:grid-cols-4">
         <StatTile label={t('fgRegistry.zoneQuarantine')} tone="text-amber-700" value={stats.quarantine} />
@@ -130,11 +211,35 @@ export function FGRegistryPage({ token }: FGRegistryPageProps) {
         <StatTile label={t('fgRegistry.totalPacks')} tone="text-slate-900" value={stats.packs} />
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 shadow-sm">
+          <TabButton active={tab === 'series'} icon={<Boxes size={14} />} label={t('fgRegistry.tabSeries')} onClick={() => setTab('series')} />
+          <TabButton active={tab === 'movements'} icon={<ArrowUpDown size={14} />} label={t('fgRegistry.tabMovements')} onClick={() => setTab('movements')} />
+        </div>
         <input autoComplete="off" className="input w-80" onChange={(event) => setFilter(event.target.value)} placeholder={t('movements.search')} value={filter} />
       </div>
-      <DataTable columns={columns} data={lots} emptyLabel={t('fgRegistry.empty')} globalFilter={filter} isLoading={isLoading} />
+
+      {tab === 'series' ? (
+        <DataTable columns={seriesColumns} data={lots} emptyLabel={t('fgRegistry.empty')} globalFilter={filter} isLoading={isLoading} />
+      ) : (
+        <DataTable columns={movementsColumns} data={movements} emptyLabel={t('fgRegistry.movementsEmpty')} globalFilter={filter} isLoading={isLoading} />
+      )}
     </div>
+  )
+}
+
+function TabButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-[13px] font-medium transition ${
+        active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   )
 }
 

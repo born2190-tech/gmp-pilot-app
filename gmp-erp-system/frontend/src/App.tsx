@@ -172,8 +172,8 @@ export function App() {
     ) : route === 'fg-transfer-notes' || route === 'fg-transfer-receive' ? (
       <FGTransferNotesPage token={token} user={user} />
     ) : route === 'fg-registry' ? (
-      <FGRegistryPage token={token} />
-    ) : route === 'fg-quarantine' || route === 'fg-quarantine-qa' ? (
+      <FGRegistryPage token={token} user={user} />
+    ) : route === 'fg-quarantine-qa' ? (
       <FGQuarantinePage token={token} user={user} />
     ) : route === 'inventory-counts' ? (
       <InventoryCountPage token={token} user={user} />
