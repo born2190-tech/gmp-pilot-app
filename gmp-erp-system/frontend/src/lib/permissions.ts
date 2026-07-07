@@ -46,7 +46,7 @@ export interface NavItem {
  */
 const NAV_ITEMS: NavItem[] = [
   // ─── Склад ────────────────────────────────────────────────────────────
-  { labelKey: 'nav.receiptDocuments',     section: 'warehouse', permission: 'CREATE_RECEIPT',  route: 'receipt-documents',    icon: PackagePlus },
+  { labelKey: 'nav.receiptDocuments',     section: 'warehouse', permission: 'CREATE_RECEIPT',  route: 'receipt-documents',    icon: PackagePlus, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.lots',                 section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'lots',                 icon: BookMarked, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.warehouseAccounts',    section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'warehouse-accounts',   icon: Coins },
   { labelKey: 'nav.warehouseOperations',  section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'warehouse-operations', icon: ArrowLeftRight },

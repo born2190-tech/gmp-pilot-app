@@ -50,7 +50,7 @@ export function FGShipmentsPage({ token, user }: FGShipmentsPageProps) {
       const fgLots = lotsResponse.lots.filter((lot) => lot.warehouse_type === 'FG_WAREHOUSE' && lot.quality_status === 'released' && lot.quantity > 0)
       setShipments(shipmentsResponse.shipments)
       setLots(fgLots)
-      setSelectedLotId((current) => current || fgLots[0]?.id || '')
+      setSelectedLotId((current) => (fgLots.some((lot) => lot.id === current) ? current : fgLots[0]?.id || ''))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('fgShipments.loadFailed'))
     } finally {
@@ -63,6 +63,18 @@ export function FGShipmentsPage({ token, user }: FGShipmentsPageProps) {
   }, [token])
 
   const selectedLot = lots.find((lot) => lot.id === selectedLotId)
+  const shipmentDisabledReason = !selectedLot
+    ? t('fgShipments.noLots')
+    : !form.customer_name.trim()
+      ? t('fgShipments.customerRequired')
+      : form.quantity <= 0
+        ? t('fgShipments.quantityRequired')
+        : form.quantity > selectedLot.quantity
+          ? t('fgShipments.quantityExceedsStock')
+          : !form.password
+            ? t('fgShipments.passwordRequired')
+            : ''
+  const shipmentReady = shipmentDisabledReason === ''
 
   const columns = useMemo<ColumnDef<FGShipmentItem>[]>(
     () => [
@@ -123,6 +135,12 @@ export function FGShipmentsPage({ token, user }: FGShipmentsPageProps) {
 
       {(error || success) && <div className={error ? 'alert-error' : 'alert-success'}>{error || success}</div>}
 
+      {!isLoading && lots.length === 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {t('fgShipments.noLots')}
+        </div>
+      )}
+
       <section className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm xl:grid-cols-4">
         <label className="label">
           {t('fgShipments.documentNo')}
@@ -164,20 +182,21 @@ export function FGShipmentsPage({ token, user }: FGShipmentsPageProps) {
         </label>
         <label className="label">
           {t('fgShipments.quantity')}
-          <input autoComplete="off" className="input" max={selectedLot?.quantity} min="0" onChange={(event) => setForm({ ...form, quantity: Number(event.target.value) })} type="number" value={form.quantity} />
+          <input autoComplete="off" inputMode="decimal" name="fg-shipment-quantity" className="input" max={selectedLot?.quantity} min="0" onChange={(event) => setForm({ ...form, quantity: Number(event.target.value) })} type="number" value={form.quantity} />
         </label>
         <label className="label">
           {t('common.password')}
-          <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" value={form.password} />
+          <input autoComplete="one-time-code" name="fg-shipment-signature-pin" className="input" onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" value={form.password} />
         </label>
         <label className="label xl:col-span-2">
           {t('common.reason')}
           <input autoComplete="off" className="input" onChange={(event) => setForm({ ...form, reason: event.target.value })} value={form.reason} />
         </label>
-        <div className="flex items-end">
-          <button className="btn-primary w-full" disabled={!selectedLot || form.quantity <= 0 || form.quantity > (selectedLot?.quantity ?? 0)} onClick={submitShipment} type="button">
+        <div className="flex flex-col justify-end gap-1">
+          <button className="btn-primary w-full" disabled={!shipmentReady} onClick={submitShipment} type="button">
             {t('fgShipments.create')}
           </button>
+          {shipmentDisabledReason && <p className="text-[12px] leading-snug text-slate-500">{shipmentDisabledReason}</p>}
         </div>
       </section>
 
