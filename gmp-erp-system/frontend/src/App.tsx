@@ -8,6 +8,7 @@ import { WarehouseAccountsPage } from './features/inventory/WarehouseAccountsPag
 import { InventoryAccountsAdminPage } from './features/inventory/InventoryAccountsAdminPage'
 import { FGShipmentsPage } from './features/inventory/FGShipmentsPage'
 import { FGTransferNotesPage } from './features/inventory/FGTransferNotesPage'
+import { FGRegistryPage } from './features/inventory/FGRegistryPage'
 import { InventoryCountPage } from './features/inventory/InventoryCountPage'
 import { MovementsPage } from './features/inventory/MovementsPage'
 import { QCNotificationsPage } from './features/inventory/QCNotificationsPage'
@@ -169,6 +170,8 @@ export function App() {
       <FGShipmentsPage token={token} user={user} />
     ) : route === 'fg-transfer-notes' || route === 'fg-transfer-receive' ? (
       <FGTransferNotesPage token={token} user={user} />
+    ) : route === 'fg-registry' ? (
+      <FGRegistryPage token={token} />
     ) : route === 'inventory-counts' ? (
       <InventoryCountPage token={token} user={user} />
     ) : route === 'qc-notifications' ? (

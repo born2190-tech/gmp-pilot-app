@@ -3,6 +3,7 @@ import {
   Beaker,
   BellRing,
   BookMarked,
+  Boxes,
   ClipboardList,
   ClipboardSignature,
   Scale,
@@ -53,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'nav.inventoryCounts',      section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'inventory-counts',     icon: ListChecks },
   { labelKey: 'nav.qcNotifications',      section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'qc-notifications',     icon: BellRing, warehouseScopes: ['SUBSTANCE_WAREHOUSE', 'PACKAGING_WAREHOUSE'] },
   { labelKey: 'nav.fgTransferReceive',    section: 'warehouse', permission: 'RECEIVE_FINISHED_GOODS', route: 'fg-transfer-receive', icon: PackagePlus, warehouseScopes: ['FG_WAREHOUSE'] },
+  { labelKey: 'nav.fgRegistry',           section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-registry',          icon: Boxes, warehouseScopes: ['FG_WAREHOUSE'] },
   { labelKey: 'nav.fgShipments',          section: 'warehouse', permission: 'VIEW_WAREHOUSE',  route: 'fg-shipments',         icon: Truck, warehouseScopes: ['FG_WAREHOUSE'] },
 
   // ─── ОКК ──────────────────────────────────────────────────────────────
