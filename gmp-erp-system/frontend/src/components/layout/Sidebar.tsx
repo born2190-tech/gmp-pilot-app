@@ -30,13 +30,13 @@ export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarPro
       } sticky top-0 flex h-screen flex-col overflow-x-hidden bg-[#0B1220] transition-all duration-300`}
     >
       {/* ── Brand block ─────────────────────────────────────── */}
-      <div className="flex h-16 items-center border-b border-slate-800 px-4">
+      <div className="flex h-16 items-center border-b border-[#1e293b] px-4">
         {!isCollapsed ? (
           <div className="flex items-center gap-3">
             <B21LogoMark />
             <div>
-              <div className="text-xl font-bold leading-none tracking-tight text-slate-50">B21</div>
-              <div className="mt-0.5 text-[11px] uppercase tracking-wide text-slate-400">
+              <div className="text-xl font-bold leading-none tracking-tight text-[#f8fafc]">B21</div>
+              <div className="mt-0.5 text-[11px] uppercase tracking-wide text-[#94a3b8]">
                 {t('app.console')}
               </div>
             </div>
@@ -54,15 +54,15 @@ export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarPro
           <div key={group.section} className={idx > 0 ? 'mt-7' : ''}>
             {!isCollapsed && (
               <>
-                {idx > 0 && <div className="mb-3 h-px bg-slate-800" />}
+                {idx > 0 && <div className="mb-3 h-px bg-[#1e293b]" />}
                 <div className="mb-2 px-3">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#f8fafc]0">
                     {t(SECTION_LABEL_KEYS[group.section])}
                   </span>
                 </div>
               </>
             )}
-            {isCollapsed && idx > 0 && <div className="mx-2 my-3 h-px bg-slate-800" />}
+            {isCollapsed && idx > 0 && <div className="mx-2 my-3 h-px bg-[#1e293b]" />}
 
             <div className="space-y-1">
               {group.items.map((item) => {
@@ -77,10 +77,10 @@ export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarPro
                     title={isCollapsed ? t(item.labelKey) : undefined}
                     className={`relative flex w-full rounded-lg text-left transition-colors ${
                       active
-                        ? 'bg-slate-700 text-white'
+                        ? 'bg-[#334155] text-white'
                         : // Высокий контраст: на планшете экран бликует, и слабые
                           // серые тона на тёмном фоне становятся нечитаемыми.
-                          'text-slate-100 hover:bg-slate-800/50 hover:text-white'
+                          'text-[#f1f5f9] hover:bg-[#1e293b]/60 hover:text-white'
                     } ${
                       // Свёрнутый режим (планшет): иконка + короткая подпись
                       // столбиком — видно, куда тапаешь, но узко.
@@ -92,17 +92,17 @@ export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarPro
                     {active && (
                       <span
                         aria-hidden
-                        className="absolute left-0 top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-r bg-cyan-400"
+                        className="absolute left-0 top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-r bg-[#22d3ee]"
                       />
                     )}
                     <span className="relative flex-shrink-0">
                       <Icon size={isCollapsed ? 22 : 18} strokeWidth={isCollapsed ? 2.1 : 1.6} />
                       {isCollapsed && badge > 0 && (
-                        <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-[#0B1220]" />
+                        <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[#fbbf24] ring-2 ring-[#0B1220]" />
                       )}
                     </span>
                     {isCollapsed ? (
-                      <span className={`line-clamp-2 w-full px-0.5 text-center text-[11px] font-semibold leading-[1.2] ${active ? 'text-white' : 'text-slate-100'}`}>
+                      <span className={`line-clamp-2 w-full px-0.5 text-center text-[11px] font-semibold leading-[1.2] ${active ? 'text-white' : 'text-[#f1f5f9]'}`}>
                         {t(item.labelKey)}
                       </span>
                     ) : (
@@ -111,7 +111,7 @@ export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarPro
                       </span>
                     )}
                     {!isCollapsed && badge > 0 && (
-                      <span className="ml-auto flex-shrink-0 rounded-full bg-amber-400 px-2 py-0.5 text-[11px] font-bold leading-none text-slate-900">
+                      <span className="ml-auto flex-shrink-0 rounded-full bg-[#fbbf24] px-2 py-0.5 text-[11px] font-bold leading-none text-[#0f172a]">
                         {badge}
                       </span>
                     )}
@@ -124,16 +124,16 @@ export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarPro
       </nav>
 
       {/* ── Footer ─────────────────────────────────────────── */}
-      <div className="border-t border-slate-800 p-3">
+      <div className="border-t border-[#1e293b] p-3">
         {!isCollapsed && (
-          <div className="mb-2 text-center text-[10.5px] tracking-wide text-slate-600">
+          <div className="mb-2 text-center text-[10.5px] tracking-wide text-[#94a3b8]">
             B21 · v0.4 · pilot
           </div>
         )}
         <button
           type="button"
           onClick={() => setIsCollapsed((c) => !c)}
-          className="flex w-full items-center justify-center rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200"
+          className="flex w-full items-center justify-center rounded-md p-1.5 text-[#f8fafc]0 transition-colors hover:bg-[#1e293b] hover:text-[#f1f5f9]"
           title={isCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
         >
           {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
