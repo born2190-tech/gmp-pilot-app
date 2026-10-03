@@ -517,12 +517,12 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   return (
     <div className={`min-h-screen bg-[#eef1f5] ${keyboardOpen ? 'pb-2' : 'pb-28'}`}>
       {/* OS strip */}
-      <div className="flex items-center justify-between bg-slate-900 px-4 py-1 text-[11px] text-slate-300">
+      <div className={`items-center justify-between bg-slate-900 px-4 py-1 text-[11px] text-slate-300 ${keyboardOpen ? 'hidden' : 'flex'}`}>
         <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-1.5 py-0.5 font-semibold text-white"><DoorOpen size={12} /> {myRoom || t('bmrFill.workstation')}</span>
         <span className="inline-flex items-center gap-1.5 text-emerald-300"><Wifi size={13} /> {t('bmrFill.online')}</span>
       </div>
       {/* batch bar */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
+      <div className={`flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2 ${keyboardOpen ? 'hidden' : 'flex'}`}>
         <button onClick={onBack} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50"><ArrowRight size={14} className="rotate-180" /> {backText}</button>
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-[10px] font-bold text-white">B21</span>
         <div className="min-w-0">
@@ -548,13 +548,13 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
       </div>
       {assignOpen && <BmrAssignDialog token={token} instance={inst} onClose={() => setAssignOpen(false)} onSaved={(u) => setInst(u)} />}
 
-      {!isSupervisor && (
+      {!isSupervisor && !keyboardOpen && (
         <div className="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2 text-[12px] text-blue-700">
           <Eye size={14} /> {t('bmrFill.scopeNotice', { room: myRoom || user?.workstation_id || t('bmrFill.undefined') })}
         </div>
       )}
 
-      {!overview && route.length > 0 && <HandoffRibbon route={route} currentStage={currentStageCode} />}
+      {!overview && !keyboardOpen && route.length > 0 && <HandoffRibbon route={route} currentStage={currentStageCode} />}
 
       {overview ? (
         <SeriesOverview route={route} initialStage={currentStageCode} onOpenStage={openStage} />
@@ -573,7 +573,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
           />
           <main className="min-w-0 space-y-3">
             {/* Надзор: одна стадия за раз — переключатель (операторы видят только свою). */}
-            {multiStage && (
+            {multiStage && !keyboardOpen && (
               <div className="flex gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
                 {stageGroups.map((g, gi) => {
                   const active = g.code === activeStage

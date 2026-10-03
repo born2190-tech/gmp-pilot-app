@@ -3,13 +3,10 @@ import { useEffect, useState } from 'react'
 /**
  * true, когда на планшете/телефоне открыта экранная клавиатура.
  *
- * Нужно для BMR: клавиатура съедает до 60% экрана, и закреплённые внизу
- * панели (Сохранить/PDF, «Следующее поле») отнимают последние пиксели —
- * заполняемое поле становится не видно. При открытой клавиатуре такие
- * панели прячем.
- *
- * Определяем через visualViewport: при появлении клавиатуры видимая часть
- * окна становится заметно ниже layout-окна.
+ * Сравниваем visualViewport (видимая область) с layout-вьюпортом
+ * (documentElement.clientHeight): клавиатура уменьшает только первый, а
+ * изменение размера окна — оба. Поэтому ресайз окна на десктопе не даёт
+ * ложного срабатывания.
  */
 export function useVirtualKeyboardOpen(): boolean {
   const [open, setOpen] = useState(false)
@@ -17,10 +14,19 @@ export function useVirtualKeyboardOpen(): boolean {
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
-    const sync = () => setOpen(window.innerHeight - vv.height > 150)
+
+    const sync = () => {
+      const layoutHeight = document.documentElement.clientHeight
+      setOpen(layoutHeight - vv.height > 150)
+    }
+
     sync()
     vv.addEventListener('resize', sync)
-    return () => vv.removeEventListener('resize', sync)
+    vv.addEventListener('scroll', sync)
+    return () => {
+      vv.removeEventListener('resize', sync)
+      vv.removeEventListener('scroll', sync)
+    }
   }, [])
 
   return open
