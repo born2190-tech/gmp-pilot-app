@@ -11,6 +11,7 @@ import {
   acquireBmrStageLock, releaseBmrStageLock,
 } from '../../lib/api'
 import { useI18n } from '../../i18n/I18nProvider'
+import { useVirtualKeyboardOpen } from '../../lib/useVirtualKeyboard'
 import type { CurrentUser } from '../../types/auth'
 import type { BmrInstanceItem, BmrEntryItem, BmrSectionItem, BmrParticipantItem, BmrRouteStageItem, BmrSignatureLogItem, BmrStepTable } from '../../types/inventory'
 
@@ -237,6 +238,9 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   const backText = backLabel ?? t('bmrFill.orders')
   const [inst, setInst] = useState<BmrInstanceItem | null>(null)
   const [draft, setDraft] = useState<Record<string, string>>({})
+  // На планшете клавиатура занимает до 60% экрана — закреплённые внизу панели
+  // прячем, иначе заполняемое поле не видно.
+  const keyboardOpen = useVirtualKeyboardOpen()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
@@ -511,7 +515,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
   }
 
   return (
-    <div className="min-h-screen bg-[#eef1f5] pb-28">
+    <div className={`min-h-screen bg-[#eef1f5] ${keyboardOpen ? 'pb-2' : 'pb-28'}`}>
       {/* OS strip */}
       <div className="flex items-center justify-between bg-slate-900 px-4 py-1 text-[11px] text-slate-300">
         <span className="inline-flex items-center gap-1.5 rounded bg-white/10 px-1.5 py-0.5 font-semibold text-white"><DoorOpen size={12} /> {myRoom || t('bmrFill.workstation')}</span>
@@ -614,8 +618,8 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
         </div>
       )}
 
-      {/* footer action bar */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+      {/* footer action bar — скрыт, пока открыта экранная клавиатура */}
+      <div className={`fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur ${keyboardOpen ? 'hidden' : ''}`}>
         <div className="mx-auto flex max-w-[1680px] items-center gap-2">
           {!closed && <button disabled={busy} onClick={() => void saveAll()} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Save size={16} /> {t('common.save')}</button>}
           {!closed && canComplete && (inst.status === 'in_progress' || inst.status === 'issued') && <button disabled={busy} onClick={() => { setAction('complete'); setPwd('') }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Check size={16} /> {t('bmrFill.completeDp')}</button>}
@@ -627,7 +631,7 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
 
       {/* Плавающая кнопка «Следующее поле»: прыжок к единственному полю, что
           нужно заполнить/подписать сейчас (строгий порядок). */}
-      {!closed && !lockedByOther && !dock && !action && nextTarget && (
+      {!closed && !lockedByOther && !dock && !action && nextTarget && !keyboardOpen && (
         <button type="button" onClick={goNext}
           className="fixed bottom-6 right-6 z-30 inline-flex h-14 items-center gap-2.5 rounded-full bg-blue-600 px-5 text-[14px] font-semibold text-white shadow-xl ring-1 ring-blue-700/40 hover:bg-blue-700 active:scale-[0.98]">
           <ArrowRight size={18} />
@@ -1167,6 +1171,12 @@ function FieldInput({ anchorId, value, itype, unit, disabled, onCommit }: {
   return (
     <div id={anchorId} className="inline-flex items-center gap-1.5">
       <input disabled={disabled} type={itype} value={local} onChange={(e) => onChange(e.target.value)} onBlur={flush}
+        onFocus={(e) => {
+          // Планшет: после появления клавиатуры поднимаем поле в центр видимой
+          // области, иначе оно остаётся под клавиатурой и не видно, что вводишь.
+          const el = e.currentTarget
+          window.setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 350)
+        }}
         className="h-11 w-full min-w-[7rem] rounded-md border border-slate-300 bg-white px-2.5 text-[15px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500 2xl:h-10 2xl:text-[13px]" />
       {unit && <span className="text-[10px] text-slate-400">{unit}</span>}
     </div>
