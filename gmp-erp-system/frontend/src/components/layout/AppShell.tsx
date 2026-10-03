@@ -17,7 +17,7 @@ export function AppShell({ activeRoute, badges, children, onLogout, onRouteChang
       <Sidebar activeRoute={activeRoute} badges={badges} onRouteChange={onRouteChange} user={user} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onLogout={onLogout} user={user} />
-        <main className="flex-1 p-5">{children}</main>
+        <main className="flex-1 p-2 sm:p-3 xl:p-5">{children}</main>
       </div>
     </div>
   )

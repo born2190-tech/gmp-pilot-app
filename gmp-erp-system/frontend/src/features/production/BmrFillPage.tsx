@@ -555,7 +555,9 @@ export function FillView({ token, user, instanceId, onBack, readOnly = false, ba
       {overview ? (
         <SeriesOverview route={route} initialStage={currentStageCode} onOpenStage={openStage} />
       ) : (
-        <div className="mx-auto grid max-w-[1680px] grid-cols-1 gap-3 p-3 xl:grid-cols-[280px_minmax(0,1fr)]">
+        // На планшете (<1536px) боковая панель маршрута уходит под контент,
+        // чтобы полям и таблицам этапа досталась вся ширина экрана.
+        <div className="mx-auto grid max-w-[1680px] grid-cols-1 gap-3 p-2 sm:p-3 2xl:grid-cols-[280px_minmax(0,1fr)]">
           <StageRail
             sections={renderedSections}
             entries={entries}
@@ -745,7 +747,7 @@ function SeriesOverview({ route, initialStage, onOpenStage }: { route: BmrRouteS
         </div>
       </div>
       {/* split: stage list + detail */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="max-h-[calc(100vh-220px)] overflow-y-auto border-r border-slate-200 bg-white">
           {route.map((s) => {
             const active = s.stage === sel?.stage
@@ -933,8 +935,10 @@ function StageRail({
 }) {
   const { t } = useI18n()
   const percent = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
+  // На планшете маршрут уходит ПОД контент этапа (order-last), чтобы поля для
+  // заполнения были сразу под вкладками, а не за длинным списком секций.
   return (
-    <aside className="self-start rounded-lg border border-slate-200 bg-white shadow-sm xl:sticky xl:top-3">
+    <aside className="order-last self-start rounded-lg border border-slate-200 bg-white shadow-sm 2xl:order-none 2xl:sticky 2xl:top-3">
       <div className="border-b border-slate-200 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -1163,7 +1167,7 @@ function FieldInput({ anchorId, value, itype, unit, disabled, onCommit }: {
   return (
     <div id={anchorId} className="inline-flex items-center gap-1.5">
       <input disabled={disabled} type={itype} value={local} onChange={(e) => onChange(e.target.value)} onBlur={flush}
-        className="h-10 w-full min-w-[7rem] rounded-md border border-slate-300 bg-white px-2.5 text-[13px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500" />
+        className="h-11 w-full min-w-[7rem] rounded-md border border-slate-300 bg-white px-2.5 text-[15px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-500 2xl:h-10 2xl:text-[13px]" />
       {unit && <span className="text-[10px] text-slate-400">{unit}</span>}
     </div>
   )

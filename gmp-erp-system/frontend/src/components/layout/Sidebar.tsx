@@ -13,7 +13,12 @@ interface SidebarProps {
 
 export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarProps) {
   const { t } = useI18n()
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  // На планшетах (узкий экран) меню стартует свёрнутым: на 1280px развёрнутая
+  // панель съедает 248px, из-за чего таблицы BMR не помещаются и уходят в
+  // горизонтальный скролл. Пользователь может развернуть вручную.
+  const [isCollapsed, setIsCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 1536,
+  )
 
   const navItems = getVisibleNavItems(user)
   const sections = groupNavBySections(navItems)
