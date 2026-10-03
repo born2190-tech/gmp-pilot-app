@@ -77,8 +77,10 @@ export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarPro
                     title={isCollapsed ? t(item.labelKey) : undefined}
                     className={`relative flex w-full rounded-lg text-left transition-colors ${
                       active
-                        ? 'bg-slate-800 text-slate-50'
-                        : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-50'
+                        ? 'bg-slate-700 text-white'
+                        : // Высокий контраст: на планшете экран бликует, и слабые
+                          // серые тона на тёмном фоне становятся нечитаемыми.
+                          'text-slate-100 hover:bg-slate-800/50 hover:text-white'
                     } ${
                       // Свёрнутый режим (планшет): иконка + короткая подпись
                       // столбиком — видно, куда тапаешь, но узко.
@@ -94,13 +96,13 @@ export function Sidebar({ activeRoute, badges, onRouteChange, user }: SidebarPro
                       />
                     )}
                     <span className="relative flex-shrink-0">
-                      <Icon size={isCollapsed ? 20 : 18} strokeWidth={1.6} />
+                      <Icon size={isCollapsed ? 22 : 18} strokeWidth={isCollapsed ? 2.1 : 1.6} />
                       {isCollapsed && badge > 0 && (
                         <span aria-hidden className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-[#0B1220]" />
                       )}
                     </span>
                     {isCollapsed ? (
-                      <span className={`line-clamp-2 w-full px-0.5 text-center text-[10px] font-medium leading-[1.15] ${active ? 'text-slate-100' : 'text-slate-400'}`}>
+                      <span className={`line-clamp-2 w-full px-0.5 text-center text-[11px] font-semibold leading-[1.2] ${active ? 'text-white' : 'text-slate-100'}`}>
                         {t(item.labelKey)}
                       </span>
                     ) : (
